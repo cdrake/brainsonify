@@ -68,13 +68,15 @@ export class Readout {
   private norm = el("rNorm");
   private freq = el("rFreq");
   private mm = el("rMM");
+  private src = el("rSrc");
   private bar = el<HTMLElement>("barFill");
 
-  show(raw: number, norm: number, freq: number, mm?: string): void {
+  show(raw: number, norm: number, freq: number, mm?: string, source?: string): void {
     this.value.textContent = raw.toFixed(1);
     this.norm.textContent = norm.toFixed(3);
     this.freq.textContent = `${Math.round(freq)} Hz`;
     if (mm !== undefined) this.mm.textContent = mm;
+    this.src.textContent = source ?? "2D slice";
     this.bar.style.width = `${norm * 100}%`;
   }
 
@@ -82,6 +84,7 @@ export class Readout {
     this.value.textContent = "—";
     this.norm.textContent = "—";
     this.freq.textContent = "—";
+    this.src.textContent = "—";
     this.bar.style.width = "0%";
   }
 

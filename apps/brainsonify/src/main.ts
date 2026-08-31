@@ -51,7 +51,7 @@ function onSample(sample: Sample | null): void {
   const norm = normalise(sample.raw, range);
   const freq = frequency(norm, c.lowHz, c.octaves);
 
-  readout.show(sample.raw, norm, freq, sample.mm);
+  readout.show(sample.raw, norm, freq, sample.mm, sample.source);
   sonifier.update(freq, norm > c.gate, c);
 }
 

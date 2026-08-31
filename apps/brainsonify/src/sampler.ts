@@ -11,6 +11,9 @@ type Frac = Parameters<Niivue["frac2vox"]>[0];
 interface NiivueInternals {
   uiData: { dpr?: number; mouseDepthPicker: boolean };
   mousePos: number[];
+  /** Set by depthPicker to the alpha of the pixel it read; VOLUME_ID (254) means a real volume hit. */
+  selectedObjectId: number;
+  VOLUME_ID: number;
   inRenderTile(x: number, y: number): number;
   drawScene(): void;
   calculateRayDirection(azimuth: number, elevation: number): ArrayLike<number>;
@@ -21,6 +24,8 @@ export interface Sample {
   raw: number;
   /** World coordinate of the voxel that produced `raw`, formatted "x, y, z" in millimetres. */
   mm: string;
+  /** Which pick branch produced this, for diagnosing the 3D path. */
+  source?: string;
 }
 
 /**
@@ -102,6 +107,17 @@ export class VoxelSampler {
       this.nvi.mousePos = [x, y];
       this.nvi.uiData.mouseDepthPicker = true;
 
+      // NiiVue draws the 3D crosshair into the framebuffer *after* the picking
+      // shader and *before* readPixels. Since the crosshair is drawn wherever
+      // crosshairPos is, it parks under the pointer and the pick reads its
+      // colour instead of the encoded position: the alpha is no longer
+      // VOLUME_ID, so NiiVue takes the mesh branch, decodes that colour as a
+      // depth and unprojects it to a point inside the head. Worse, it feeds
+      // itself — once the crosshair follows the pointer it shadows every later
+      // pick. Hide it for the pick draw, then restore and redraw for display.
+      const showCrosshair = this.nv.opts.show3Dcrosshair;
+      this.nv.opts.show3Dcrosshair = false;
+
       // On a hit NiiVue assigns a fresh crosshairPos; on a miss it leaves the
       // property untouched. Comparing the reference across the draw is therefore
       // an exact hit test — without it a miss re-reports the previous voxel.
@@ -109,7 +125,17 @@ export class VoxelSampler {
       this.nvi.drawScene();
       const after = this.nv.scene.crosshairPos;
 
-      onSample(after === before ? null : this.readSurface(after, surfaceDepth));
+      this.nv.opts.show3Dcrosshair = showCrosshair;
+      if (showCrosshair) this.nvi.drawScene();
+
+      if (after === before) return onSample(null);
+
+      const sample = this.readSurface(after, surfaceDepth);
+      const id = this.nvi.selectedObjectId;
+      if (sample) {
+        sample.source = id === this.nvi.VOLUME_ID ? `volume (${id})` : `id ${id}`;
+      }
+      onSample(sample);
     });
   }
 

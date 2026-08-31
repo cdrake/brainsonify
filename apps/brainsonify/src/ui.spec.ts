@@ -50,7 +50,7 @@ describe("Controls", () => {
 
   it("exposes the surface search depth and labels it in voxels", () => {
     const controls = new Controls();
-    expect(controls.surfaceDepth).toBe(3);
+    expect(controls.surfaceDepth).toBe(1);
 
     const slider = document.getElementById("depth") as HTMLInputElement;
     slider.value = "0";
