@@ -15,9 +15,18 @@ export class Controls {
   private volume = el<HTMLInputElement>("vol");
   private glide = el<HTMLInputElement>("glide");
   private render3d = el<HTMLInputElement>("render3d");
+  private depth = el<HTMLInputElement>("depth");
 
   constructor() {
-    const inputs = [this.mode, this.lowHz, this.octaves, this.gate, this.volume, this.glide];
+    const inputs = [
+      this.mode,
+      this.lowHz,
+      this.octaves,
+      this.gate,
+      this.volume,
+      this.glide,
+      this.depth,
+    ];
     for (const input of inputs) input.addEventListener("input", () => this.syncLabels());
     this.syncLabels();
   }
@@ -37,6 +46,11 @@ export class Controls {
     return this.render3d.checked;
   }
 
+  /** How many voxels the 3D render hit is searched inward. See VoxelSampler. */
+  get surfaceDepth(): number {
+    return Number(this.depth.value);
+  }
+
   private syncLabels(): void {
     const v = this.values;
     el("fLoV").textContent = `${v.lowHz} Hz`;
@@ -44,6 +58,7 @@ export class Controls {
     el("gateV").textContent = v.gate.toFixed(2);
     el("volV").textContent = v.volume.toFixed(2);
     el("glideV").textContent = `${Math.round(v.glide * 1000)} ms`;
+    el("depthV").textContent = `${this.surfaceDepth} vox`;
   }
 }
 

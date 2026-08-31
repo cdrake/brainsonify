@@ -69,6 +69,20 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
   buffer during that draw and updates `scene.crosshairPos`, which is then
   sampled. Throttled to one pick per animation frame, since each pick costs a
   full redraw.
+- **Why the render needs a surface search.** The picking shader marches in steps
+  of ~1.9 voxels and stops at the first sample whose colormap alpha exceeds
+  0.01, then encodes that position into 8 bits per axis. The point it hands back
+  is therefore the faint outer rim where tissue merely becomes *visible*, plus a
+  voxel or two of quantisation — hover a bright gyral crown and you can easily
+  read the air in front of it. `Surface` searches that many voxels along the view
+  ray and keeps the strongest value. The search is one-dimensional on purpose:
+  widening it into a box would blur across the sulci, which are the features this
+  whole thing exists to make audible. 2D tiles never do this — they are an exact
+  single-voxel read.
+- **Missed picks.** On a miss NiiVue leaves `scene.crosshairPos` untouched rather
+  than signalling failure, so the app compares the object reference across the
+  draw. Without that check, hovering off the head keeps sounding the last voxel
+  that was hit.
 - **Audio.** A Web Audio oscillator (or band-passed pink noise) whose frequency
   is set from the normalised intensity, with a configurable glide and a gate that
   silences background voxels. Both sources run continuously and the gate rides
@@ -82,6 +96,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | Low | Frequency at intensity 0 |
 | Octaves | How much pitch range the intensity span covers |
 | Gate | Normalised intensity below which output is silenced |
+| Surface | Voxels searched inward from a 3D render hit; 0 reads the picked voxel raw |
 | Volume | Master output level |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |

@@ -47,6 +47,18 @@ describe("Controls", () => {
   it("exposes the 3D toggle, which ships enabled", () => {
     expect(new Controls().sonify3d).toBe(true);
   });
+
+  it("exposes the surface search depth and labels it in voxels", () => {
+    const controls = new Controls();
+    expect(controls.surfaceDepth).toBe(3);
+
+    const slider = document.getElementById("depth") as HTMLInputElement;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+
+    expect(controls.surfaceDepth).toBe(0);
+    expect(document.getElementById("depthV")?.textContent).toBe("0 vox");
+  });
 });
 
 describe("Readout", () => {

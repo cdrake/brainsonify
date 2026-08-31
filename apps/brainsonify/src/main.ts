@@ -57,7 +57,7 @@ function onSample(sample: Sample | null): void {
 
 const canvas = el<HTMLCanvasElement>("gl");
 const track = (e: PointerEvent) =>
-  sampler.sample(e.offsetX, e.offsetY, controls.sonify3d, onSample);
+  sampler.sample(e.offsetX, e.offsetY, controls.sonify3d, controls.surfaceDepth, onSample);
 
 canvas.addEventListener("pointermove", track);
 canvas.addEventListener("pointerenter", track);

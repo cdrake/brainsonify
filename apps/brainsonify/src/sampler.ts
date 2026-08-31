@@ -13,13 +13,37 @@ interface NiivueInternals {
   mousePos: number[];
   inRenderTile(x: number, y: number): number;
   drawScene(): void;
+  calculateRayDirection(azimuth: number, elevation: number): ArrayLike<number>;
 }
 
 export interface Sample {
   /** Raw voxel intensity under the pointer. */
   raw: number;
-  /** World coordinate, formatted "x, y, z" in millimetres. */
+  /** World coordinate of the voxel that produced `raw`, formatted "x, y, z" in millimetres. */
   mm: string;
+}
+
+/**
+ * Converts a ray direction expressed in fractional volume coordinates into a
+ * unit step in voxel coordinates.
+ *
+ * A fractional step is not a voxel step: the axes have different voxel counts,
+ * so an equal fractional move covers more voxels along the longest axis. Scaling
+ * by the dimensions first, then normalising, gives a direction whose length is
+ * one voxel regardless of which way it points.
+ */
+export function rayToVoxelStep(
+  rayFrac: ArrayLike<number>,
+  dims: readonly [number, number, number],
+): [number, number, number] {
+  const scaled: [number, number, number] = [
+    rayFrac[0] * dims[0],
+    rayFrac[1] * dims[1],
+    rayFrac[2] * dims[2],
+  ];
+  const length = Math.hypot(...scaled);
+  if (!(length > 0)) return [0, 0, 0];
+  return [scaled[0] / length, scaled[1] / length, scaled[2] / length];
 }
 
 /**
@@ -38,10 +62,18 @@ export class VoxelSampler {
   }
 
   /**
+   * @param surfaceDepth how many voxels to search inward from a 3D render hit.
+   *   Ignored on 2D tiles, which are always an exact single-voxel read.
    * @param onSample called with the voxel under the pointer, or null when the
    *   pointer is off every tile. The 3D path reports asynchronously.
    */
-  sample(offsetX: number, offsetY: number, allow3d: boolean, onSample: (s: Sample | null) => void): void {
+  sample(
+    offsetX: number,
+    offsetY: number,
+    allow3d: boolean,
+    surfaceDepth: number,
+    onSample: (s: Sample | null) => void,
+  ): void {
     if (!this.nv.volumes.length) return onSample(null);
 
     const dpr = this.nvi.uiData.dpr ?? window.devicePixelRatio ?? 1;
@@ -53,10 +85,15 @@ export class VoxelSampler {
     if (frac[0] >= 0) return onSample(this.read(frac));
 
     if (!allow3d || this.nvi.inRenderTile(x, y) < 0) return onSample(null);
-    this.pickDepth(x, y, onSample);
+    this.pickDepth(x, y, surfaceDepth, onSample);
   }
 
-  private pickDepth(x: number, y: number, onSample: (s: Sample | null) => void): void {
+  private pickDepth(
+    x: number,
+    y: number,
+    surfaceDepth: number,
+    onSample: (s: Sample | null) => void,
+  ): void {
     if (this.pickQueued) return;
     this.pickQueued = true;
 
@@ -64,19 +101,72 @@ export class VoxelSampler {
       this.pickQueued = false;
       this.nvi.mousePos = [x, y];
       this.nvi.uiData.mouseDepthPicker = true;
-      this.nvi.drawScene();
 
-      const pos = this.nv.scene.crosshairPos;
-      if (pos && pos[0] >= 0) onSample(this.read(pos));
+      // On a hit NiiVue assigns a fresh crosshairPos; on a miss it leaves the
+      // property untouched. Comparing the reference across the draw is therefore
+      // an exact hit test — without it a miss re-reports the previous voxel.
+      const before = this.nv.scene.crosshairPos;
+      this.nvi.drawScene();
+      const after = this.nv.scene.crosshairPos;
+
+      onSample(after === before ? null : this.readSurface(after, surfaceDepth));
     });
   }
 
+  /** Exact read at a fractional coordinate, used for the 2D slice tiles. */
   private read(frac: Frac): Sample | null {
     const vox = this.nv.frac2vox(frac);
-    const raw = this.nv.volumes[0].getValue(vox[0], vox[1], vox[2]);
+    return this.at(vox[0], vox[1], vox[2]);
+  }
+
+  /**
+   * Read for the 3D render tile, which needs a short inward search.
+   *
+   * The picking shader marches in steps of ~1.9 voxels and stops at the first
+   * sample whose colormap alpha exceeds 0.01, then encodes that position into
+   * 8 bits per axis. So the reported point is the faint outer rim where the
+   * tissue merely becomes visible, give or take a voxel or two of quantisation
+   * — hover a bright gyral crown and you can easily read the air in front of it.
+   *
+   * Searching a few voxels along the view ray and keeping the strongest value
+   * recovers the tissue actually being displayed. The search is one-dimensional
+   * on purpose: widening it into a box would blur across the sulci, which are
+   * the features this whole thing exists to make audible.
+   */
+  private readSurface(frac: Frac, surfaceDepth: number): Sample | null {
+    const vox = this.nv.frac2vox(frac);
+    const surface = this.at(vox[0], vox[1], vox[2]);
+    if (surfaceDepth < 1 || !surface) return surface;
+
+    const step = this.voxelRay();
+    let best = surface;
+
+    for (let t = 1; t <= surfaceDepth; t++) {
+      const deeper = this.at(
+        Math.round(vox[0] + step[0] * t),
+        Math.round(vox[1] + step[1] * t),
+        Math.round(vox[2] + step[2] * t),
+      );
+      if (deeper && deeper.raw > best.raw) best = deeper;
+    }
+    return best;
+  }
+
+  /** The current near-to-far view direction, as a one-voxel step. */
+  private voxelRay(): [number, number, number] {
+    const { renderAzimuth, renderElevation } = this.nv.scene;
+    const dir = this.nvi.calculateRayDirection(renderAzimuth, renderElevation);
+    const dims = this.nv.volumes[0].hdr?.dims;
+    if (!dims) return [0, 0, 0];
+    return rayToVoxelStep(dir, [dims[1], dims[2], dims[3]]);
+  }
+
+  /** Intensity and world position of one voxel. */
+  private at(i: number, j: number, k: number): Sample | null {
+    const raw = this.nv.volumes[0].getValue(i, j, k);
     if (raw === null || raw === undefined || Number.isNaN(raw)) return null;
 
-    const mm = this.nv.frac2mm(frac);
+    const mm = this.nv.frac2mm(this.nv.vox2frac([i, j, k]));
     return { raw, mm: [mm[0], mm[1], mm[2]].map((n) => n.toFixed(0)).join(", ") };
   }
 }
