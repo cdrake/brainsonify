@@ -28,6 +28,14 @@ nv.attachTo("gl");
 const sampler = new VoxelSampler(nv);
 let range: IntensityRange = DEFAULT_RANGE;
 
+// Dev-only handle so the picking path can be poked from a console:
+// `nv.selectedObjectId` should read 254 (VOLUME_ID) after hovering tissue on
+// the render, and flipping `nv.opts.show3Dcrosshair` reproduces the shadowed
+// pick the sampler works around.
+if (import.meta.env.DEV) {
+  (window as unknown as { nv: Niivue }).nv = nv;
+}
+
 /* ---------------- audio toggle ---------------- */
 
 const audioBtn = el<HTMLButtonElement>("audioBtn");
