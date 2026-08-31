@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.nx/
+.vite/
+vite.config.*.timestamp*
+.DS_Store
+*.log

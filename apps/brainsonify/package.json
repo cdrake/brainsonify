@@ -1,0 +1,10 @@
+{
+  "name": "@brainsonify/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@brainsonify/sonification": "workspace:*",
+    "@niivue/niivue": "^0.69.0"
+  }
+}

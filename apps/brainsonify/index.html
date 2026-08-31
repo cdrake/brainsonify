@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>brainsonify — hear an MRI</title>
+  <meta name="description" content="Non-visual exploration of volumetric medical images: move the pointer over an MRI and hear the tissue underneath.">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div id="drop">Drop a NIfTI file</div>
+  </div>
+
+  <aside>
+    <h1>Brain sonification spike</h1>
+    <p class="sub">Move the mouse over the image. Pitch follows voxel intensity.</p>
+
+    <button id="audioBtn" class="primary">Enable sound</button>
+
+    <h2>Volume</h2>
+    <div class="row"><input type="file" id="file" accept=".nii,.nii.gz,.gz"></div>
+    <div class="row"><button id="demo">Load MNI152 demo</button></div>
+
+    <h2>Mapping</h2>
+    <div class="row">
+      <select id="mode">
+        <option value="tone">Pure tone (pitch = intensity)</option>
+        <option value="noise">Filtered noise (texture)</option>
+      </select>
+    </div>
+    <div class="row">
+      <label class="row--wide">
+        <input type="checkbox" id="render3d" checked>Sonify the 3D render (depth pick)
+      </label>
+    </div>
+    <div class="row">
+      <label for="fLo">Low</label>
+      <input type="range" id="fLo" min="60" max="600" value="110">
+      <span class="val" id="fLoV">110 Hz</span>
+    </div>
+    <div class="row">
+      <label for="oct">Octaves</label>
+      <input type="range" id="oct" min="1" max="6" step="0.5" value="4">
+      <span class="val" id="octV">4</span>
+    </div>
+    <div class="row">
+      <label for="gate">Gate</label>
+      <input type="range" id="gate" min="0" max="0.5" step="0.01" value="0.04">
+      <span class="val" id="gateV">0.04</span>
+    </div>
+    <div class="row">
+      <label for="vol">Volume</label>
+      <input type="range" id="vol" min="0" max="1" step="0.01" value="0.25">
+      <span class="val" id="volV">0.25</span>
+    </div>
+    <div class="row">
+      <label for="glide">Glide</label>
+      <input type="range" id="glide" min="0" max="0.2" step="0.005" value="0.02">
+      <span class="val" id="glideV">20 ms</span>
+    </div>
+
+    <h2>Readout</h2>
+    <div class="readout">
+      <div><span>intensity</span><span id="rVal">&mdash;</span></div>
+      <div><span>normalised</span><span id="rNorm">&mdash;</span></div>
+      <div><span>frequency</span><span id="rFreq">&mdash;</span></div>
+      <div><span>mm</span><span id="rMM">&mdash;</span></div>
+      <div id="bar"><i id="barFill"></i></div>
+    </div>
+
+    <p class="note">
+      Just hover. Sound follows the voxel under the pointer, no clicking needed.
+      Click still moves the crosshair if you want to change slice.<br><br>
+      On a T1, sulci are CSF-dark and gyral crowns are grey matter, so sweeping
+      laterally across the cortical ribbon should produce a repeating dip as you
+      cross each sulcus.<br><br>
+      Wear the bone-conduction headset. Try <code>Filtered noise</code> if the pure
+      tone feels too abstract.
+    </p>
+  </aside>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

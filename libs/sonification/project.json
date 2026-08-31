@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "sonification",
+  "projectType": "library",
+  "sourceRoot": "libs/sonification/src",
+  "tags": ["scope:shared", "type:core"],
+  "targets": {
+    "typecheck": {
+      "command": "tsc --noEmit -p tsconfig.json",
+      "options": { "cwd": "{projectRoot}" },
+      "cache": true
+    }
+  }
+}

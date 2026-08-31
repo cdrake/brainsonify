@@ -1,0 +1,31 @@
+{
+  "name": "@brainsonify/source",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Non-visual exploration of volumetric medical images: hover an MRI, hear the tissue underneath.",
+  "license": "BSD-2-Clause",
+  "workspaces": ["apps/*", "libs/*"],
+  "scripts": {
+    "dev": "nx dev brainsonify",
+    "build": "nx build brainsonify",
+    "preview": "nx preview brainsonify",
+    "test": "nx run-many -t test",
+    "typecheck": "nx run-many -t typecheck",
+    "graph": "nx graph"
+  },
+  "devDependencies": {
+    "@nx/js": "23.1.2",
+    "@nx/vite": "23.1.2",
+    "@nx/vitest": "23.1.2",
+    "@types/node": "^22.10.0",
+    "jsdom": "^25.0.1",
+    "nx": "23.1.2",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  }
+}
