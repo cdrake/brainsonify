@@ -16,6 +16,7 @@ export class Controls {
   private glide = el<HTMLInputElement>("glide");
   private render3d = el<HTMLInputElement>("render3d");
   private depth = el<HTMLInputElement>("depth");
+  private width = el<HTMLInputElement>("width");
 
   constructor() {
     const inputs = [
@@ -26,6 +27,7 @@ export class Controls {
       this.volume,
       this.glide,
       this.depth,
+      this.width,
     ];
     for (const input of inputs) input.addEventListener("input", () => this.syncLabels());
     this.syncLabels();
@@ -39,6 +41,7 @@ export class Controls {
       gate: Number(this.gate.value),
       volume: Number(this.volume.value),
       glide: Number(this.glide.value),
+      width: Number(this.width.value),
     };
   }
 
@@ -59,6 +62,7 @@ export class Controls {
     el("volV").textContent = v.volume.toFixed(2);
     el("glideV").textContent = `${Math.round(v.glide * 1000)} ms`;
     el("depthV").textContent = `${this.surfaceDepth} vox`;
+    el("widthV").textContent = v.width === 0 ? "mono" : v.width.toFixed(2);
   }
 }
 
@@ -68,14 +72,23 @@ export class Readout {
   private norm = el("rNorm");
   private freq = el("rFreq");
   private mm = el("rMM");
+  private stereo = el("rPan");
   private src = el("rSrc");
   private bar = el<HTMLElement>("barFill");
 
-  show(raw: number, norm: number, freq: number, mm?: string, source?: string): void {
+  show(
+    raw: number,
+    norm: number,
+    freq: number,
+    mm?: readonly number[],
+    pan?: number,
+    source?: string,
+  ): void {
     this.value.textContent = raw.toFixed(1);
     this.norm.textContent = norm.toFixed(3);
     this.freq.textContent = `${Math.round(freq)} Hz`;
-    if (mm !== undefined) this.mm.textContent = mm;
+    if (mm !== undefined) this.mm.textContent = mm.map((n) => n.toFixed(0)).join(", ");
+    this.stereo.textContent = formatPan(pan ?? 0);
     this.src.textContent = source ?? "2D slice";
     this.bar.style.width = `${norm * 100}%`;
   }
@@ -84,6 +97,7 @@ export class Readout {
     this.value.textContent = "—";
     this.norm.textContent = "—";
     this.freq.textContent = "—";
+    this.stereo.textContent = "—";
     this.src.textContent = "—";
     this.bar.style.width = "0%";
   }
@@ -91,6 +105,13 @@ export class Readout {
   status(text: string): void {
     this.value.textContent = text;
   }
+}
+
+/** Renders a -1..1 stereo position the way a listener hears it. */
+export function formatPan(pan: number): string {
+  const magnitude = Math.round(Math.abs(pan) * 100);
+  if (magnitude === 0) return "centre";
+  return `${pan < 0 ? "L" : "R"} ${magnitude}%`;
 }
 
 export { el };

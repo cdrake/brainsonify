@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Controls, Readout } from "./ui";
+import { Controls, Readout, formatPan } from "./ui";
 
 /**
  * The control panel lives in index.html and is reached by id from TypeScript.
@@ -30,6 +30,7 @@ describe("Controls", () => {
       gate: 0.04,
       volume: 0.25,
       glide: 0.02,
+      width: 0.85,
     });
   });
 
@@ -64,12 +65,14 @@ describe("Controls", () => {
 describe("Readout", () => {
   it("renders a sample and drives the intensity bar", () => {
     const readout = new Readout();
-    readout.show(137.4, 0.5, 440, "10, -20, 30");
+    readout.show(137.4, 0.5, 440, [10, -20, 30], -0.62, "volume (254)");
 
     expect(document.getElementById("rVal")?.textContent).toBe("137.4");
     expect(document.getElementById("rNorm")?.textContent).toBe("0.500");
     expect(document.getElementById("rFreq")?.textContent).toBe("440 Hz");
     expect(document.getElementById("rMM")?.textContent).toBe("10, -20, 30");
+    expect(document.getElementById("rPan")?.textContent).toBe("L 62%");
+    expect(document.getElementById("rSrc")?.textContent).toBe("volume (254)");
     expect((document.getElementById("barFill") as HTMLElement).style.width).toBe("50%");
   });
 
@@ -80,5 +83,17 @@ describe("Readout", () => {
 
     expect(document.getElementById("rVal")?.textContent).toBe("—");
     expect((document.getElementById("barFill") as HTMLElement).style.width).toBe("0%");
+  });
+});
+
+describe("formatPan", () => {
+  it("names the side a listener will hear it on", () => {
+    expect(formatPan(-1)).toBe("L 100%");
+    expect(formatPan(0.4)).toBe("R 40%");
+  });
+
+  it("calls dead centre centre rather than a zero-width side", () => {
+    expect(formatPan(0)).toBe("centre");
+    expect(formatPan(-0.001)).toBe("centre");
   });
 });

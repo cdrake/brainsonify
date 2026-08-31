@@ -1,10 +1,14 @@
 import { Niivue } from "@niivue/niivue";
 
 import {
+  DEFAULT_BOUNDS,
   DEFAULT_RANGE,
   Sonifier,
+  boundsFromFrac,
   frequency,
   normalise,
+  pan,
+  type Bounds,
   type IntensityRange,
 } from "@brainsonify/sonification";
 
@@ -27,6 +31,7 @@ nv.attachTo("gl");
 
 const sampler = new VoxelSampler(nv);
 let range: IntensityRange = DEFAULT_RANGE;
+let bounds: Bounds = DEFAULT_BOUNDS;
 
 // Dev-only handle so the picking path can be poked from a console:
 // `nv.selectedObjectId` should read 254 (VOLUME_ID) after hovering tissue on
@@ -58,9 +63,10 @@ function onSample(sample: Sample | null): void {
   const c = controls.values;
   const norm = normalise(sample.raw, range);
   const freq = frequency(norm, c.lowHz, c.octaves);
+  const position = pan(sample.mm[0], bounds.x, c.width);
 
-  readout.show(sample.raw, norm, freq, sample.mm, sample.source);
-  sonifier.update(freq, norm > c.gate, c);
+  readout.show(sample.raw, norm, freq, sample.mm, position, sample.source);
+  sonifier.update(freq, position, norm > c.gate, c);
 }
 
 const canvas = el<HTMLCanvasElement>("gl");
@@ -85,6 +91,7 @@ function refreshRange(): void {
     hi = vol.global_max ?? NaN;
   }
   range = hi > lo ? { lo, hi } : DEFAULT_RANGE;
+  bounds = boundsFromFrac((frac) => nv.frac2mm(frac));
   readout.status("ready");
 }
 
