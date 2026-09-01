@@ -3,7 +3,8 @@ import { join } from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Controls, Readout, formatPan } from "./ui";
+import { EXPERIMENTS, experimentHref } from "./experiments";
+import { Controls, ExperimentNav, Readout, applyChannels, formatPan } from "./ui";
 
 /**
  * The control panel lives in index.html and is reached by id from TypeScript.
@@ -95,5 +96,64 @@ describe("formatPan", () => {
   it("calls dead centre centre rather than a zero-width side", () => {
     expect(formatPan(0)).toBe("centre");
     expect(formatPan(-0.001)).toBe("centre");
+  });
+});
+
+describe("ExperimentNav", () => {
+  const nav = () => new ExperimentNav(EXPERIMENTS, experimentHref, () => {});
+  const links = () =>
+    [...document.querySelectorAll<HTMLAnchorElement>("#experiments a")];
+
+  it("offers every condition as a real link", () => {
+    nav();
+
+    expect(links().map((a) => a.dataset.experiment)).toEqual(
+      EXPERIMENTS.map((experiment) => experiment.id),
+    );
+    for (const link of links()) expect(link.getAttribute("href")).toMatch(/^\.\/\?experiment=/);
+  });
+
+  it("marks the condition a visitor is in, and only that one", () => {
+    const [first, second] = EXPERIMENTS;
+    const switcher = nav();
+
+    switcher.show(second);
+    expect(links().filter((a) => a.hasAttribute("aria-current")).map((a) => a.dataset.experiment))
+      .toEqual([second.id]);
+
+    switcher.show(first);
+    expect(links().filter((a) => a.hasAttribute("aria-current")).map((a) => a.dataset.experiment))
+      .toEqual([first.id]);
+  });
+
+  it("announces the condition, since the listener cannot see the panel change", () => {
+    const switcher = nav();
+    switcher.show(EXPERIMENTS[0]);
+
+    const announcement = document.getElementById("expAnnounce");
+    expect(announcement?.getAttribute("role")).toBe("status");
+    expect(announcement?.textContent).toContain(EXPERIMENTS[0].name);
+    expect(document.getElementById("expSummary")?.textContent).toBe(EXPERIMENTS[0].summary);
+  });
+});
+
+describe("applyChannels", () => {
+  const stereoRows = () => [...document.querySelectorAll<HTMLElement>('[data-requires="stereo"]')];
+
+  it("marks up at least one row per channel, or the flag controls nothing", () => {
+    expect(stereoRows().length).toBeGreaterThan(0);
+  });
+
+  it("hides the rows a condition does not use, and restores them when it does", () => {
+    applyChannels({ stereo: false });
+    expect(stereoRows().every((row) => row.hidden)).toBe(true);
+
+    applyChannels({ stereo: true });
+    expect(stereoRows().some((row) => row.hidden)).toBe(false);
+  });
+
+  it("leaves rows belonging to no channel alone", () => {
+    applyChannels({ stereo: false });
+    expect(document.getElementById("rFreq")?.closest("div")?.hidden).toBe(false);
   });
 });

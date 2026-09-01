@@ -1,5 +1,7 @@
 import type { Mode } from "@brainsonify/sonification";
 
+import type { Channels, Experiment } from "./experiments";
+
 function el<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`missing element #${id}`);
@@ -105,6 +107,75 @@ export class Readout {
   status(text: string): void {
     this.value.textContent = text;
   }
+}
+
+/**
+ * The experiment switcher: one link per condition, in the order they were run.
+ *
+ * The links are real anchors with real hrefs, so they can be shared, bookmarked
+ * and opened in a new tab. A plain left click is intercepted and the condition
+ * swapped in place instead: a full navigation would refetch the volume and
+ * discard a file the listener had dropped in, which is the wrong thing to do
+ * when the whole point is comparing two mappings of the same scan.
+ */
+export class ExperimentNav {
+  private nav = el("experiments");
+  private summary = el("expSummary");
+  private announcement = el("expAnnounce");
+
+  constructor(
+    experiments: readonly Experiment[],
+    href: (experiment: Experiment) => string,
+    onPick: (experiment: Experiment) => void,
+  ) {
+    for (const experiment of experiments) {
+      const link = document.createElement("a");
+      link.href = href(experiment);
+      link.dataset.experiment = experiment.id;
+      link.title = experiment.summary;
+      link.append(tag("b", experiment.number), tag("span", experiment.name));
+
+      link.addEventListener("click", (e) => {
+        // Leave modified clicks alone; they mean "open this somewhere else".
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        onPick(experiment);
+      });
+
+      this.nav.append(link);
+    }
+  }
+
+  show(active: Experiment): void {
+    for (const link of this.nav.querySelectorAll<HTMLAnchorElement>("a")) {
+      if (link.dataset.experiment === active.id) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    }
+
+    this.summary.textContent = active.summary;
+    // The panel changes shape between conditions, and the listener this is
+    // built for cannot see that happen — so say which condition they are in.
+    this.announcement.textContent = `Experiment ${active.number}, ${active.name}. ${active.summary}`;
+  }
+}
+
+/**
+ * Shows only the controls and readout rows the active condition uses.
+ *
+ * Marked up in index.html as `data-requires="<channel>"`, so adding a channel
+ * is an HTML attribute rather than another branch in here.
+ */
+export function applyChannels(channels: Channels, root: ParentNode = document): void {
+  for (const node of root.querySelectorAll<HTMLElement>("[data-requires]")) {
+    const channel = node.dataset.requires as keyof Channels;
+    node.hidden = !channels[channel];
+  }
+}
+
+function tag(name: string, text: string): HTMLElement {
+  const node = document.createElement(name);
+  node.textContent = text;
+  return node;
 }
 
 /** Renders a -1..1 stereo position the way a listener hears it. */

@@ -1,6 +1,21 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 
+/* The UA rule for [hidden] is display:none, which .row's display:flex beats.
+   Experiment switching hides rows via the hidden attribute, so it has to win. */
+[hidden] { display: none !important; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 body {
   margin: 0;
   background: #0d0f12;
@@ -39,7 +54,7 @@ aside {
   padding: 16px;
   overflow-y: auto;
 }
-h1 { font-size: 15px; margin: 0 0 4px; font-weight: 650; }
+h1 { font-size: 15px; margin: 0 0 9px; font-weight: 650; }
 .sub { font-size: 12px; color: #8b94a0; margin: 0 0 16px; }
 h2 {
   font-size: 11px;
@@ -82,6 +97,32 @@ input[type=file] { font-size: 12px; width: 100%; }
   min-width: 46px;
   text-align: right;
 }
+
+/* ---------------- experiment switcher ---------------- */
+
+#experiments { display: flex; gap: 6px; margin-bottom: 9px; }
+
+#experiments a {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 1px solid #2e3644;
+  border-radius: 7px;
+  background: #181d25;
+  color: #8b94a0;
+  text-decoration: none;
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+#experiments a:hover { background: #222936; color: #e6e8ea; }
+#experiments a:focus-visible { outline: 2px solid #6db3f2; outline-offset: 2px; }
+#experiments b { font-size: 9.5px; letter-spacing: .09em; color: #69727f; font-weight: 700; }
+
+#experiments a[aria-current] { background: #17324f; border-color: #1e6fd9; color: #e6e8ea; }
+#experiments a[aria-current] b { color: #6db3f2; }
 
 /* ---------------- readout ---------------- */
 

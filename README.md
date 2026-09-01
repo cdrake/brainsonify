@@ -55,9 +55,30 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 |---|---|
 | `libs/sonification/src/mapping.ts` | Intensity window → normalised value → frequency |
 | `libs/sonification/src/audio.ts` | `Sonifier`: sine or band-passed pink noise, gated |
+| `apps/brainsonify/src/experiments.ts` | The experiment registry: conditions, channels, URL |
 | `apps/brainsonify/src/sampler.ts` | Pointer position → voxel intensity, 2D and 3D |
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
 | `apps/brainsonify/src/main.ts` | Wiring, volume loading, drag and drop |
+
+## Experiments
+
+The app ships every experiment in one build. Visiting it with no experiment in
+the URL gives the most recent condition; the switcher at the top of the panel
+links to the earlier ones, and each has a stable URL:
+
+```
+?experiment=01-pitch     pitch tracks intensity, mono
+?experiment=02-stereo    + stereo carries anatomical left-right   (default)
+```
+
+Switching does not reload: a volume you dropped in survives the change, which is
+the point when you are comparing two mappings of the same scan. Controls and
+readout rows belonging to a channel the condition does not use are hidden rather
+than left dead, and the change is announced for a listener who cannot see it.
+
+[EXPERIMENTS.md](EXPERIMENTS.md) is the log — what each condition maps, what to
+listen for, and what it showed. `apps/brainsonify/src/experiments.ts` is the
+registry that drives the switcher, the default, and the visible controls.
 
 ## How it works
 
@@ -113,8 +134,9 @@ so the bundle works from any subpath without hardcoding the repo name.
 
 ## Status
 
-Spike. The mapping is unvalidated and the interaction has no way to navigate to a
-named structure yet, which is the harder and more interesting problem.
+Spike. The mapping is unvalidated — no condition in [EXPERIMENTS.md](EXPERIMENTS.md)
+has been run with listeners yet — and the interaction still has no way to
+navigate to a named structure, which is the harder and more interesting problem.
 
 ## Credits
 

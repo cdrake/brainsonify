@@ -14,7 +14,9 @@
 
   <aside>
     <h1>Brain sonification spike</h1>
-    <p class="sub">Move the mouse over the image. Pitch follows voxel intensity.</p>
+    <nav id="experiments" aria-label="Experiments"></nav>
+    <p class="sub" id="expSummary">Move the mouse over the image.</p>
+    <p class="visually-hidden" id="expAnnounce" role="status"></p>
 
     <button id="audioBtn" class="primary">Enable sound</button>
 
@@ -59,7 +61,7 @@
       <input type="range" id="vol" min="0" max="1" step="0.01" value="0.25">
       <span class="val" id="volV">0.25</span>
     </div>
-    <div class="row">
+    <div class="row" data-requires="stereo">
       <label for="width">Stereo</label>
       <input type="range" id="width" min="0" max="1" step="0.05" value="0.85">
       <span class="val" id="widthV">0.85</span>
@@ -76,7 +78,7 @@
       <div><span>normalised</span><span id="rNorm">&mdash;</span></div>
       <div><span>frequency</span><span id="rFreq">&mdash;</span></div>
       <div><span>mm</span><span id="rMM">&mdash;</span></div>
-      <div><span>stereo</span><span id="rPan">&mdash;</span></div>
+      <div data-requires="stereo"><span>stereo</span><span id="rPan">&mdash;</span></div>
       <div><span>pick</span><span id="rSrc">&mdash;</span></div>
       <div id="bar"><i id="barFill"></i></div>
     </div>
@@ -86,12 +88,16 @@
       Click still moves the crosshair if you want to change slice.<br><br>
       On a T1, sulci are CSF-dark and gyral crowns are grey matter, so sweeping
       laterally across the cortical ribbon should produce a repeating dip as you
-      cross each sulcus.<br><br>
+      cross each sulcus.
+    </p>
+    <p class="note" data-requires="stereo">
       Pitch carries intensity, the stereo image carries left&ndash;right position:
       the left hemisphere sounds in your left ear. The axis is anatomical, not
-      screen-relative, so it holds while you rotate the render.<br><br>
-      Wear the bone-conduction headset &mdash; stereo needs both sides. Try
-      <code>Filtered noise</code> if the pure tone feels too abstract.
+      screen-relative, so it holds while you rotate the render.
+    </p>
+    <p class="note">
+      Wear the bone-conduction headset. Try <code>Filtered noise</code> if the
+      pure tone feels too abstract.
     </p>
   </aside>
 

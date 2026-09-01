@@ -13,8 +13,14 @@ import {
 } from "@brainsonify/sonification";
 
 import "./styles.css";
+import {
+  EXPERIMENTS,
+  experimentHref,
+  resolveExperiment,
+  type Experiment,
+} from "./experiments";
 import { VoxelSampler, type Sample } from "./sampler";
-import { Controls, Readout, el } from "./ui";
+import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
 
 const DEMO_VOLUME = "https://niivue.github.io/niivue-demo-images/mni152.nii.gz";
 
@@ -32,6 +38,7 @@ nv.attachTo("gl");
 const sampler = new VoxelSampler(nv);
 let range: IntensityRange = DEFAULT_RANGE;
 let bounds: Bounds = DEFAULT_BOUNDS;
+let active: Experiment = resolveExperiment(location.search);
 
 // Dev-only handle so the picking path can be poked from a console:
 // `nv.selectedObjectId` should read 254 (VOLUME_ID) after hovering tissue on
@@ -40,6 +47,32 @@ let bounds: Bounds = DEFAULT_BOUNDS;
 if (import.meta.env.DEV) {
   (window as unknown as { nv: Niivue }).nv = nv;
 }
+
+/* ---------------- experiment switching ---------------- */
+
+/**
+ * Enters a condition: repaints the switcher, hides the channels it does not
+ * use, and silences the voice so the previous condition's tone does not run on
+ * across the change.
+ */
+function activate(experiment: Experiment, pushHistory: boolean): void {
+  active = experiment;
+  nav.show(experiment);
+  applyChannels(experiment.channels);
+  sonifier.silence();
+
+  document.title = `brainsonify — ${experiment.number} ${experiment.name}`;
+  if (pushHistory) history.pushState({ id: experiment.id }, "", experimentHref(experiment));
+}
+
+const nav = new ExperimentNav(EXPERIMENTS, experimentHref, (experiment) =>
+  activate(experiment, true),
+);
+
+// Back and forward move between conditions, since the switcher pushed them.
+addEventListener("popstate", () => activate(resolveExperiment(location.search), false));
+
+activate(active, false);
 
 /* ---------------- audio toggle ---------------- */
 
@@ -63,7 +96,7 @@ function onSample(sample: Sample | null): void {
   const c = controls.values;
   const norm = normalise(sample.raw, range);
   const freq = frequency(norm, c.lowHz, c.octaves);
-  const position = pan(sample.mm[0], bounds.x, c.width);
+  const position = active.channels.stereo ? pan(sample.mm[0], bounds.x, c.width) : 0;
 
   readout.show(sample.raw, norm, freq, sample.mm, position, sample.source);
   sonifier.update(freq, position, norm > c.gate, c);
