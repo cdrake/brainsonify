@@ -1,3 +1,5 @@
+import { loudnessGain } from "./loudness";
+
 export type Mode = "tone" | "noise";
 
 export interface AudioSettings {
@@ -43,6 +45,15 @@ const TAP_LENGTH = TAP_ATTACK + TAP_DECAY;
 /** Taps are struck well above the pitch range so the two channels stay apart. */
 const TAP_HZ = 1800;
 const TAP_Q = 3;
+/**
+ * Struck at the loudness a tone of the same perceived level would use.
+ *
+ * 1800 Hz sits near the ear's most sensitive region, so a tap at full scale is
+ * some 13 dB louder than a low tone at full scale — which at fourteen a second
+ * is the difference between a texture and a machine gun. Weighting it the same
+ * way as the voice puts the two layers on equal perceptual footing.
+ */
+const TAP_LEVEL = loudnessGain(TAP_HZ);
 
 /** How far ahead taps are scheduled, and how often the scheduler tops up. */
 const LOOKAHEAD_S = 0.1;
@@ -155,7 +166,10 @@ export class Sonifier {
     this.panner.pan.setTargetAtTime(Math.min(1, Math.max(-1, voice.pan)), t, PAN_TAU);
     this.master.gain.setTargetAtTime(s.volume, t, GATE_TAU);
 
-    const level = voice.open ? (s.mode === "noise" ? NOISE_MAKEUP : 1) : 0;
+    // Compensating here rather than at the oscillator keeps the gate, the mode
+    // makeup and the loudness curve in one gain, so they cannot fight.
+    const makeup = s.mode === "noise" ? NOISE_MAKEUP : 1;
+    const level = voice.open ? makeup * loudnessGain(voice.freq) : 0;
     this.voice.gain.setTargetAtTime(level, t, GATE_TAU);
 
     // The gate governs the taps too: background voxels are silent, not merely
@@ -199,7 +213,7 @@ export class Sonifier {
   private strike(at: number): void {
     const env = this.tapEnv.gain;
     env.setValueAtTime(0, at);
-    env.linearRampToValueAtTime(1, at + TAP_ATTACK);
+    env.linearRampToValueAtTime(TAP_LEVEL, at + TAP_ATTACK);
     // Exponential decay cannot reach zero, so land near it and snap the rest.
     env.exponentialRampToValueAtTime(0.001, at + TAP_LENGTH);
     env.setValueAtTime(0, at + TAP_LENGTH);

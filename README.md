@@ -56,6 +56,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `libs/sonification/src/mapping.ts` | Intensity window → normalised value → frequency |
 | `libs/sonification/src/audio.ts` | `Sonifier`: sine or band-passed pink noise, gated, plus the tap layer |
 | `libs/sonification/src/rhythm.ts` | Colormap alpha → opacity → tap rate |
+| `libs/sonification/src/loudness.ts` | Equal-loudness weighting, so pitch does not double as level |
 | `apps/brainsonify/src/experiments.ts` | The experiment registry: conditions, channels, URL |
 | `apps/brainsonify/src/sampler.ts` | Pointer position → voxel intensity, 2D and 3D |
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
@@ -119,6 +120,16 @@ registry that drives the switcher, the default, and the visible controls.
   is set from the normalised intensity, with a configurable glide and a gate that
   silences background voxels. Both sources run continuously and the gate rides
   the output gain, which avoids clicks.
+- **Equal loudness.** Ear sensitivity rises about 19 dB between 110 Hz and
+  1760 Hz, so a sine at constant amplitude gets louder and harsher as it climbs.
+  That is tiring over a continuous hover, and it makes loudness a second,
+  exaggerated copy of intensity — the listener cannot tell which one they are
+  hearing. `loudnessGain` attenuates towards the sensitive band (never boosts,
+  so it costs no headroom) using 0.7 of the A-weighting curve: applying it whole
+  would equalise for 40-phon listening, which is quieter than anyone actually
+  explores at. The taps get the same treatment, since 1800 Hz sits near the peak
+  of the ear's sensitivity and a tap at full scale was some 13 dB louder than a
+  low tone at full scale.
 
 ## Controls
 

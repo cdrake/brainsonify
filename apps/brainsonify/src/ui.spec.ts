@@ -37,7 +37,7 @@ describe("Controls", () => {
       lowHz: 110,
       octaves: 4,
       gate: 0.04,
-      volume: 0.25,
+      volume: 0.4,
       glide: 0.02,
       width: 0.85,
       taps: 14,

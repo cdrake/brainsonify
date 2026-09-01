@@ -1,5 +1,11 @@
 export { Sonifier, type AudioSettings, type Mode, type VoiceState } from "./audio";
 export {
+  LOUDNESS_COMPENSATION,
+  LOUDNESS_REF_HZ,
+  aWeighting,
+  loudnessGain,
+} from "./loudness";
+export {
   DEFAULT_BOUNDS,
   DEFAULT_RANGE,
   boundsFromFrac,
