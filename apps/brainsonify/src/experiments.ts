@@ -19,6 +19,8 @@
 export interface Channels {
   /** Stereo position from anatomical left-right (world X). */
   stereo: boolean;
+  /** Tap rate from the opacity the colormap gives the voxel. */
+  rhythm: boolean;
 }
 
 export interface Experiment {
@@ -43,7 +45,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Pitch tracks voxel intensity. A single mono voice, with no cue for where in the volume it came from.",
     commit: "55390a3",
-    channels: { stereo: false },
+    channels: { stereo: false, rhythm: false },
   },
   {
     id: "02-stereo",
@@ -52,7 +54,16 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Pitch tracks intensity and the stereo image carries anatomical left-right, so the left hemisphere sounds in your left ear.",
     commit: "9caa560",
-    channels: { stereo: true },
+    channels: { stereo: true, rhythm: false },
+  },
+  {
+    id: "03-rhythm",
+    number: "03",
+    name: "Rhythm",
+    summary:
+      "Adds a tap whose rate follows opacity, so dense tissue rattles and near-transparent tissue ticks.",
+    commit: "unreleased",
+    channels: { stereo: true, rhythm: true },
   },
 ];
 

@@ -1,4 +1,4 @@
-export { Sonifier, type AudioSettings, type Mode } from "./audio";
+export { Sonifier, type AudioSettings, type Mode, type VoiceState } from "./audio";
 export {
   DEFAULT_BOUNDS,
   DEFAULT_RANGE,
@@ -10,3 +10,11 @@ export {
   type Extent,
   type IntensityRange,
 } from "./mapping";
+export {
+  DEFAULT_TAPS,
+  opacityFromLut,
+  peakAlpha,
+  relativeOpacity,
+  tapRate,
+  type TapRange,
+} from "./rhythm";

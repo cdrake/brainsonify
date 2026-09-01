@@ -1,13 +1,18 @@
-import { Niivue } from "@niivue/niivue";
+import { Niivue, cmapper } from "@niivue/niivue";
 
 import {
   DEFAULT_BOUNDS,
   DEFAULT_RANGE,
+  DEFAULT_TAPS,
   Sonifier,
   boundsFromFrac,
   frequency,
   normalise,
+  opacityFromLut,
   pan,
+  peakAlpha,
+  relativeOpacity,
+  tapRate,
   type Bounds,
   type IntensityRange,
 } from "@brainsonify/sonification";
@@ -22,7 +27,17 @@ import {
 import { VoxelSampler, type Sample } from "./sampler";
 import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
 
-const DEMO_VOLUME = "https://niivue.github.io/niivue-demo-images/mni152.nii.gz";
+const DEMOS = "https://niivue.github.io/niivue-demo-images/";
+
+/**
+ * MNI152 is skull-stripped, so its opacity only ever spans brain tissue. The
+ * whole-head T1 keeps scalp, marrow and the signal-void of cortical bone, which
+ * is the range the rhythm channel was built to carry.
+ */
+const DEMO_VOLUMES = {
+  demo: { label: "Load MNI152 demo", url: `${DEMOS}mni152.nii.gz` },
+  demoHead: { label: "Load head + skull T1", url: `${DEMOS}chris_t1.nii.gz` },
+} as const;
 
 const controls = new Controls();
 const readout = new Readout();
@@ -38,14 +53,23 @@ nv.attachTo("gl");
 const sampler = new VoxelSampler(nv);
 let range: IntensityRange = DEFAULT_RANGE;
 let bounds: Bounds = DEFAULT_BOUNDS;
+/**
+ * The active colormap as 256 RGBA quads. Opacity comes off its alpha channel:
+ * no second ray is needed, since the sampler has already resolved which voxel
+ * the pointer is over and how visible that voxel is, is a table lookup.
+ */
+let lut: Uint8ClampedArray = new Uint8ClampedArray();
+/** The most alpha `lut` ever gives, so the taps can span their whole range. */
+let lutPeak = 0;
 let active: Experiment = resolveExperiment(location.search);
 
-// Dev-only handle so the picking path can be poked from a console:
+// Dev-only handles so the picking and audio paths can be poked from a console:
 // `nv.selectedObjectId` should read 254 (VOLUME_ID) after hovering tissue on
 // the render, and flipping `nv.opts.show3Dcrosshair` reproduces the shadowed
-// pick the sampler works around.
+// pick the sampler works around. The tap layer schedules ahead on the audio
+// clock, so `sonifier.rate` is the only way to see it responding to a hover.
 if (import.meta.env.DEV) {
-  (window as unknown as { nv: Niivue }).nv = nv;
+  Object.assign(window, { nv, sonifier });
 }
 
 /* ---------------- experiment switching ---------------- */
@@ -98,8 +122,22 @@ function onSample(sample: Sample | null): void {
   const freq = frequency(norm, c.lowHz, c.octaves);
   const position = active.channels.stereo ? pan(sample.mm[0], bounds.x, c.width) : 0;
 
-  readout.show(sample.raw, norm, freq, sample.mm, position, sample.source);
-  sonifier.update(freq, position, norm > c.gate, c);
+  const opacity = relativeOpacity(opacityFromLut(lut, norm), lutPeak);
+  const taps = active.channels.rhythm
+    ? tapRate(opacity, { slowest: DEFAULT_TAPS.slowest, fastest: c.taps })
+    : 0;
+
+  readout.show({
+    raw: sample.raw,
+    norm,
+    freq,
+    mm: sample.mm,
+    pan: position,
+    opacity,
+    taps,
+    source: sample.source,
+  });
+  sonifier.update({ freq, pan: position, taps, open: norm > c.gate }, c);
 }
 
 const canvas = el<HTMLCanvasElement>("gl");
@@ -125,6 +163,8 @@ function refreshRange(): void {
   }
   range = hi > lo ? { lo, hi } : DEFAULT_RANGE;
   bounds = boundsFromFrac((frac) => nv.frac2mm(frac));
+  lut = cmapper.colormap(vol.colormap, vol.colormapInvert);
+  lutPeak = peakAlpha(lut);
   readout.status("ready");
 }
 
@@ -142,17 +182,26 @@ el<HTMLInputElement>("file").addEventListener("change", (e) => {
   if (file) void loadFile(file);
 });
 
-const demoBtn = el<HTMLButtonElement>("demo");
-demoBtn.addEventListener("click", async () => {
-  demoBtn.textContent = "Loading…";
-  try {
-    await nv.loadVolumes([{ url: DEMO_VOLUME, colormap: "gray" }]);
-    refreshRange();
-    demoBtn.textContent = "Load MNI152 demo";
-  } catch {
-    demoBtn.textContent = "Load failed (offline?)";
-  }
-});
+function wireDemo(id: keyof typeof DEMO_VOLUMES): HTMLButtonElement {
+  const { label, url } = DEMO_VOLUMES[id];
+  const button = el<HTMLButtonElement>(id);
+
+  button.addEventListener("click", async () => {
+    button.textContent = "Loading…";
+    try {
+      await nv.loadVolumes([{ url, colormap: "gray" }]);
+      refreshRange();
+      button.textContent = label;
+    } catch {
+      button.textContent = "Load failed (offline?)";
+    }
+  });
+
+  return button;
+}
+
+const demoBtn = wireDemo("demo");
+wireDemo("demoHead");
 
 /* ---------------- drag and drop ---------------- */
 

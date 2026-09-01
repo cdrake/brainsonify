@@ -19,6 +19,7 @@ export class Controls {
   private render3d = el<HTMLInputElement>("render3d");
   private depth = el<HTMLInputElement>("depth");
   private width = el<HTMLInputElement>("width");
+  private taps = el<HTMLInputElement>("taps");
 
   constructor() {
     const inputs = [
@@ -30,6 +31,7 @@ export class Controls {
       this.glide,
       this.depth,
       this.width,
+      this.taps,
     ];
     for (const input of inputs) input.addEventListener("input", () => this.syncLabels());
     this.syncLabels();
@@ -44,6 +46,7 @@ export class Controls {
       volume: Number(this.volume.value),
       glide: Number(this.glide.value),
       width: Number(this.width.value),
+      taps: Number(this.taps.value),
     };
   }
 
@@ -65,7 +68,25 @@ export class Controls {
     el("glideV").textContent = `${Math.round(v.glide * 1000)} ms`;
     el("depthV").textContent = `${this.surfaceDepth} vox`;
     el("widthV").textContent = v.width === 0 ? "mono" : v.width.toFixed(2);
+    el("tapsV").textContent = `${v.taps} /s`;
   }
+}
+
+/** Everything the panel says about the voxel under the pointer. */
+export interface Reading {
+  raw: number;
+  norm: number;
+  freq: number;
+  /** World coordinate in millimetres. */
+  mm?: readonly number[];
+  /** Stereo position, -1..1. */
+  pan?: number;
+  /** Colormap alpha at this voxel, 0..1. */
+  opacity?: number;
+  /** Tap rate in taps per second. */
+  taps?: number;
+  /** Which pick branch produced the sample. */
+  source?: string;
 }
 
 /** The live numeric panel under the controls. */
@@ -75,32 +96,27 @@ export class Readout {
   private freq = el("rFreq");
   private mm = el("rMM");
   private stereo = el("rPan");
+  private opacity = el("rOpacity");
+  private taps = el("rTaps");
   private src = el("rSrc");
   private bar = el<HTMLElement>("barFill");
 
-  show(
-    raw: number,
-    norm: number,
-    freq: number,
-    mm?: readonly number[],
-    pan?: number,
-    source?: string,
-  ): void {
-    this.value.textContent = raw.toFixed(1);
-    this.norm.textContent = norm.toFixed(3);
-    this.freq.textContent = `${Math.round(freq)} Hz`;
-    if (mm !== undefined) this.mm.textContent = mm.map((n) => n.toFixed(0)).join(", ");
-    this.stereo.textContent = formatPan(pan ?? 0);
-    this.src.textContent = source ?? "2D slice";
-    this.bar.style.width = `${norm * 100}%`;
+  show(r: Reading): void {
+    this.value.textContent = r.raw.toFixed(1);
+    this.norm.textContent = r.norm.toFixed(3);
+    this.freq.textContent = `${Math.round(r.freq)} Hz`;
+    if (r.mm !== undefined) this.mm.textContent = r.mm.map((n) => n.toFixed(0)).join(", ");
+    this.stereo.textContent = formatPan(r.pan ?? 0);
+    this.opacity.textContent = (r.opacity ?? 0).toFixed(2);
+    this.taps.textContent = formatTaps(r.taps ?? 0);
+    this.src.textContent = r.source ?? "2D slice";
+    this.bar.style.width = `${r.norm * 100}%`;
   }
 
   clear(): void {
-    this.value.textContent = "—";
-    this.norm.textContent = "—";
-    this.freq.textContent = "—";
-    this.stereo.textContent = "—";
-    this.src.textContent = "—";
+    for (const node of [this.value, this.norm, this.freq, this.stereo, this.opacity, this.taps, this.src]) {
+      node.textContent = "—";
+    }
     this.bar.style.width = "0%";
   }
 
@@ -176,6 +192,12 @@ function tag(name: string, text: string): HTMLElement {
   const node = document.createElement(name);
   node.textContent = text;
   return node;
+}
+
+/** Renders a tap rate as the listener would count it. */
+export function formatTaps(rate: number): string {
+  if (!(rate > 0)) return "silent";
+  return `${rate.toFixed(1)} /s`;
 }
 
 /** Renders a -1..1 stereo position the way a listener hears it. */

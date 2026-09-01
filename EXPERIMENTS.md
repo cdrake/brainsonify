@@ -9,6 +9,7 @@ panel links to the earlier ones.
 |---|---|---|---|
 | 01 | Pitch only | [`?experiment=01-pitch`](https://cdrake.github.io/brainsonify/?experiment=01-pitch) | pitch ← intensity |
 | 02 | Stereo | [`?experiment=02-stereo`](https://cdrake.github.io/brainsonify/?experiment=02-stereo) | pitch ← intensity, stereo ← anatomical left–right |
+| 03 | Rhythm | [`?experiment=03-rhythm`](https://cdrake.github.io/brainsonify/?experiment=03-rhythm) | + tap rate ← opacity |
 
 The registry that drives all of this is `apps/brainsonify/src/experiments.ts`.
 It is the single source of truth: the switcher links, the default condition, and
@@ -50,7 +51,7 @@ a right-hemisphere one, which makes "go to the structure I named" impossible.
 
 ## 02 — Stereo
 
-`?experiment=02-stereo` · `9caa560` · **default**
+`?experiment=02-stereo` · `9caa560`
 
 Adds stereo panning driven by world X in millimetres, so the left hemisphere
 sounds in the left ear. A `Stereo` slider scales the field from mono to
@@ -66,6 +67,56 @@ once position is competing for attention.
 
 **Open question.** Stereo needs both ears, which is a constraint on the
 bone-conduction transducer the longer-term plan depends on.
+
+**Result.** Not yet evaluated.
+
+## 03 — Rhythm
+
+`?experiment=03-rhythm` · **default**
+
+Adds a tap layer whose rate follows opacity: how much of a voxel the renderer
+actually shows, read off the alpha channel of the active colormap at the voxel
+the sampler already resolved. No second ray is cast — the pick has happened, and
+opacity is a 256-entry table lookup at that intensity.
+
+The rate spans 1.5/s to a `Taps` slider default of 14/s, geometrically, because
+tempo is heard as a ratio. The ceiling stays under the ~20/s where a click train
+fuses into a buzz with a pitch of its own and collides with the channel already
+carrying intensity. The taps are struck at a fixed 1800 Hz for the same reason,
+and are scheduled on the audio clock a tenth of a second ahead, so the rhythm
+does not jitter with the pointer's event rate.
+
+**Opacity is scaled to the colormap's own peak.** NiiVue's `gray` ramps alpha
+only to 128/255, so absolute alpha never exceeds 0.5 and the fast half of the
+range would be unreachable — the most opaque thing in the volume would rattle at
+a third of the rate the scale was built for. `relativeOpacity` divides by the
+LUT's peak, which preserves the *shape* of the alpha ramp, its plateaus and its
+threshold, while spending the whole range on whatever is loaded. Under a plain
+linear colormap this makes opacity numerically equal to normalised intensity;
+the two only separate once a display window or a non-linear alpha ramp is in
+play, which is exactly the case the channel exists for.
+
+**What to listen for.** Whether tap rate and pitch stay separable when they
+mostly agree, and whether they are still separable when they disagree — narrow
+the display window and the taps saturate while the pitch is still climbing.
+
+**Bone is the wrong intuition on T1.** This condition was specified as "faster
+tapping on more opaque surfaces (like bone)", and the mapping does that, but on
+a T1 MRI cortical bone is a signal void: it is the *darkest*, most transparent
+thing in the head. Probing down the midline of `chris_t1` bears this out —
+scalp fat taps fastest at 13.3/s, and the skull itself is the slowest thing in
+the profile at the 1.5/s floor:
+
+```
+scalp fat      134  opacity 0.98   13.3 /s
+diploë          88  opacity 0.61    5.9 /s
+cortical bone   12  opacity 0.00    1.5 /s   ← slowest, not fastest
+white matter   125  opacity 0.91   11.4 /s
+```
+
+Bone rattling would need CT, where density is what the intensity means. On MRI
+the channel reports what the renderer shows, which is the honest thing for it to
+report and not what the phrase "like bone" leads you to expect.
 
 **Result.** Not yet evaluated.
 

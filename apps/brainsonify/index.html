@@ -23,6 +23,7 @@
     <h2>Volume</h2>
     <div class="row"><input type="file" id="file" accept=".nii,.nii.gz,.gz"></div>
     <div class="row"><button id="demo">Load MNI152 demo</button></div>
+    <div class="row"><button id="demoHead">Load head + skull T1</button></div>
 
     <h2>Mapping</h2>
     <div class="row">
@@ -66,6 +67,11 @@
       <input type="range" id="width" min="0" max="1" step="0.05" value="0.85">
       <span class="val" id="widthV">0.85</span>
     </div>
+    <div class="row" data-requires="rhythm">
+      <label for="taps">Taps</label>
+      <input type="range" id="taps" min="4" max="18" step="0.5" value="14">
+      <span class="val" id="tapsV">14 /s</span>
+    </div>
     <div class="row">
       <label for="glide">Glide</label>
       <input type="range" id="glide" min="0" max="0.2" step="0.005" value="0.02">
@@ -79,6 +85,8 @@
       <div><span>frequency</span><span id="rFreq">&mdash;</span></div>
       <div><span>mm</span><span id="rMM">&mdash;</span></div>
       <div data-requires="stereo"><span>stereo</span><span id="rPan">&mdash;</span></div>
+      <div data-requires="rhythm"><span>opacity</span><span id="rOpacity">&mdash;</span></div>
+      <div data-requires="rhythm"><span>tapping</span><span id="rTaps">&mdash;</span></div>
       <div><span>pick</span><span id="rSrc">&mdash;</span></div>
       <div id="bar"><i id="barFill"></i></div>
     </div>
@@ -94,6 +102,12 @@
       Pitch carries intensity, the stereo image carries left&ndash;right position:
       the left hemisphere sounds in your left ear. The axis is anatomical, not
       screen-relative, so it holds while you rotate the render.
+    </p>
+    <p class="note" data-requires="rhythm">
+      The tapping follows opacity &mdash; how much of a voxel the renderer
+      actually shows &mdash; so dense tissue rattles and near-transparent tissue
+      ticks. Narrow the display window and the taps saturate where the pitch is
+      still climbing, which is the point: they are not the same signal.
     </p>
     <p class="note">
       Wear the bone-conduction headset. Try <code>Filtered noise</code> if the

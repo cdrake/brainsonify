@@ -54,7 +54,8 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | Module | Responsibility |
 |---|---|
 | `libs/sonification/src/mapping.ts` | Intensity window → normalised value → frequency |
-| `libs/sonification/src/audio.ts` | `Sonifier`: sine or band-passed pink noise, gated |
+| `libs/sonification/src/audio.ts` | `Sonifier`: sine or band-passed pink noise, gated, plus the tap layer |
+| `libs/sonification/src/rhythm.ts` | Colormap alpha → opacity → tap rate |
 | `apps/brainsonify/src/experiments.ts` | The experiment registry: conditions, channels, URL |
 | `apps/brainsonify/src/sampler.ts` | Pointer position → voxel intensity, 2D and 3D |
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
@@ -68,7 +69,8 @@ links to the earlier ones, and each has a stable URL:
 
 ```
 ?experiment=01-pitch     pitch tracks intensity, mono
-?experiment=02-stereo    + stereo carries anatomical left-right   (default)
+?experiment=02-stereo    + stereo carries anatomical left-right
+?experiment=03-rhythm    + tap rate follows opacity               (default)
 ```
 
 Switching does not reload: a volume you dropped in survives the change, which is
@@ -119,12 +121,16 @@ registry that drives the switcher, the default, and the visible controls.
 | Gate | Normalised intensity below which output is silenced |
 | Surface | Voxels searched inward from a 3D render hit; 0 reads the picked voxel raw |
 | Volume | Master output level |
+| Stereo | Width of the anatomical left–right field, mono to hard-panned |
+| Taps | Fastest tap rate, at full opacity; the floor is fixed at 1.5/s |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
 
-Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. The
-MNI152 demo volume is fetched from `niivue.github.io` at runtime and is not
-stored in this repo.
+Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
+demo volumes are fetched from `niivue.github.io` at runtime and are not stored
+in this repo: MNI152, which is skull-stripped, and a whole-head T1 that keeps
+scalp, marrow and the skull's signal void — the wider opacity range the rhythm
+channel is meant to carry.
 
 ## Deployment
 
