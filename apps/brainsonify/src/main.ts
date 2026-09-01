@@ -27,6 +27,16 @@ import {
 import { VoxelSampler, type Sample } from "./sampler";
 import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
 
+/**
+ * Clip depth is a signed distance from the centre of the volume: NiiVue treats
+ * anything past ~1.73 as "no plane", and smaller values cut deeper. These bound
+ * the slider onto the useful span — just grazing the surface, through to well
+ * past the midline.
+ */
+const CLIP_OFF = 2;
+const CLIP_GRAZE = 0.85;
+const CLIP_DEEPEST = -0.45;
+
 const DEMOS = "https://niivue.github.io/niivue-demo-images/";
 
 /**
@@ -147,6 +157,39 @@ const track = (e: PointerEvent) =>
 canvas.addEventListener("pointermove", track);
 canvas.addEventListener("pointerenter", track);
 canvas.addEventListener("pointerleave", () => onSample(null));
+
+/* ---------------- clip plane ---------------- */
+
+/**
+ * Cuts the near side off the render so the pointer can reach inside the head.
+ *
+ * On a whole-head scan the scalp and skull wrap everything, and the depth
+ * picker stops at the first voxel the renderer shows — so hovering the render
+ * can only ever sound the outside. The picking shader honours clip planes
+ * (`clipSampleRange` skips clipped samples), so cutting the near half away puts
+ * brain under the pointer instead. Nothing about the sonification changes: the
+ * rhythm channel keeps reading opacity off whatever voxel the cut exposes.
+ *
+ * The plane tracks the camera rather than sitting in volume space, so the
+ * opening stays facing the viewer instead of rotating out of sight.
+ */
+function applyClip(): void {
+  const cut = controls.clip;
+  if (!(cut > 0)) {
+    nv.setClipPlane([CLIP_OFF, 0, 0]);
+    return;
+  }
+  const depth = CLIP_GRAZE + cut * (CLIP_DEEPEST - CLIP_GRAZE);
+  // The plane's normal points *away* from the camera at the camera's own
+  // angles, which cuts the far side and leaves the near surface — the part in
+  // the way — untouched. Flipping the normal opens the head towards the viewer.
+  nv.setClipPlane([depth, nv.scene.renderAzimuth + 180, -nv.scene.renderElevation]);
+}
+
+el<HTMLInputElement>("clip").addEventListener("input", applyClip);
+nv.onAzimuthElevationChange = () => {
+  if (controls.clip > 0) applyClip();
+};
 
 /* ---------------- volume loading ---------------- */
 

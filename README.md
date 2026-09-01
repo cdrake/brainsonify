@@ -102,6 +102,15 @@ registry that drives the switcher, the default, and the visible controls.
   widening it into a box would blur across the sulci, which are the features this
   whole thing exists to make audible. 2D tiles never do this — they are an exact
   single-voxel read.
+- **Clipping to get inside.** On a whole-head scan the scalp and skull wrap
+  everything, so the depth picker can only ever land on the outside — the render
+  is a face, not a brain. `Clip` cuts the near side away, and because the picking
+  shader honours clip planes (`clipSampleRange` skips clipped samples) the pick
+  then lands on whatever the cut exposes. The plane's normal is the camera's own
+  angles flipped, so the opening faces the viewer and keeps facing them through a
+  rotation instead of swinging round to the far side. A ray that passes only
+  through cut-away space reports id 253 rather than a volume hit, so hovering the
+  opened cavity is correctly silent.
 - **Missed picks.** On a miss NiiVue leaves `scene.crosshairPos` untouched rather
   than signalling failure, so the app compares the object reference across the
   draw. Without that check, hovering off the head keeps sounding the last voxel
@@ -120,6 +129,7 @@ registry that drives the switcher, the default, and the visible controls.
 | Octaves | How much pitch range the intensity span covers |
 | Gate | Normalised intensity below which output is silenced |
 | Surface | Voxels searched inward from a 3D render hit; 0 reads the picked voxel raw |
+| Clip | Cuts the near side off the render so the pointer can reach inside the head |
 | Volume | Master output level |
 | Stereo | Width of the anatomical left–right field, mono to hard-panned |
 | Taps | Fastest tap rate, at full opacity; the floor is fixed at 1.5/s |

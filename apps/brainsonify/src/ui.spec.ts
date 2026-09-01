@@ -9,6 +9,7 @@ import {
   ExperimentNav,
   Readout,
   applyChannels,
+  formatClip,
   formatPan,
   formatTaps,
 } from "./ui";
@@ -68,6 +69,34 @@ describe("Controls", () => {
 
     expect(controls.surfaceDepth).toBe(0);
     expect(document.getElementById("depthV")?.textContent).toBe("0 vox");
+  });
+});
+
+describe("clip control", () => {
+  it("ships with no clipping, so a volume loads whole", () => {
+    expect(new Controls().clip).toBe(0);
+  });
+
+  it("tracks the slider and labels it as a share of the volume", () => {
+    const controls = new Controls();
+    const slider = document.getElementById("clip") as HTMLInputElement;
+
+    slider.value = "0.55";
+    slider.dispatchEvent(new Event("input"));
+
+    expect(controls.clip).toBe(0.55);
+    expect(document.getElementById("clipV")?.textContent).toBe("55%");
+  });
+});
+
+describe("formatClip", () => {
+  it("names the unclipped state rather than printing a zero", () => {
+    expect(formatClip(0)).toBe("off");
+  });
+
+  it("reports the cut as a percentage", () => {
+    expect(formatClip(0.5)).toBe("50%");
+    expect(formatClip(1)).toBe("100%");
   });
 });
 

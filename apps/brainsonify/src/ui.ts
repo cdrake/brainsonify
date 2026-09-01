@@ -18,6 +18,7 @@ export class Controls {
   private glide = el<HTMLInputElement>("glide");
   private render3d = el<HTMLInputElement>("render3d");
   private depth = el<HTMLInputElement>("depth");
+  private clipDepth = el<HTMLInputElement>("clip");
   private width = el<HTMLInputElement>("width");
   private taps = el<HTMLInputElement>("taps");
 
@@ -30,6 +31,7 @@ export class Controls {
       this.volume,
       this.glide,
       this.depth,
+      this.clipDepth,
       this.width,
       this.taps,
     ];
@@ -59,6 +61,11 @@ export class Controls {
     return Number(this.depth.value);
   }
 
+  /** How much of the near side to cut away, 0 (no clipping) to 1. */
+  get clip(): number {
+    return Number(this.clipDepth.value);
+  }
+
   private syncLabels(): void {
     const v = this.values;
     el("fLoV").textContent = `${v.lowHz} Hz`;
@@ -67,6 +74,7 @@ export class Controls {
     el("volV").textContent = v.volume.toFixed(2);
     el("glideV").textContent = `${Math.round(v.glide * 1000)} ms`;
     el("depthV").textContent = `${this.surfaceDepth} vox`;
+    el("clipV").textContent = formatClip(this.clip);
     el("widthV").textContent = v.width === 0 ? "mono" : v.width.toFixed(2);
     el("tapsV").textContent = `${v.taps} /s`;
   }
@@ -192,6 +200,17 @@ function tag(name: string, text: string): HTMLElement {
   const node = document.createElement(name);
   node.textContent = text;
   return node;
+}
+
+/**
+ * Renders the clip depth as a share of the volume rather than a raw depth.
+ *
+ * The underlying units are a signed distance from the centre of the volume,
+ * which is meaningless to someone deciding how far to cut.
+ */
+export function formatClip(cut: number): string {
+  if (!(cut > 0)) return "off";
+  return `${Math.round(cut * 100)}%`;
 }
 
 /** Renders a tap rate as the listener would count it. */
