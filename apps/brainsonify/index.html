@@ -72,10 +72,30 @@
       <input type="range" id="width" min="0" max="1" step="0.05" value="0.85">
       <span class="val" id="widthV">0.85</span>
     </div>
-    <div class="row" data-requires="rhythm">
+    <div class="row" data-requires="depth">
+      <label for="spread">Depth</label>
+      <input type="range" id="spread" min="0" max="1" step="0.05" value="1">
+      <span class="val" id="spreadV">1.00</span>
+    </div>
+    <div class="row" data-requires="rhythm bone">
       <label for="taps">Taps</label>
-      <input type="range" id="taps" min="4" max="18" step="0.5" value="14">
+      <input type="range" id="taps" min="4" max="26" step="0.5" value="14">
       <span class="val" id="tapsV">14 /s</span>
+    </div>
+    <div class="row" data-requires="bone">
+      <label for="spike">Spike</label>
+      <input type="range" id="spike" min="0" max="14" step="1" value="8">
+      <span class="val" id="spikeV">8 mm</span>
+    </div>
+    <div class="row" data-requires="rhythm bone">
+      <label for="rate">Rate</label>
+      <input type="range" id="rate" min="0.5" max="3" step="0.1" value="1">
+      <span class="val" id="rateV">1.0&times;</span>
+    </div>
+    <div class="row" data-requires="rhythm bone">
+      <label class="row--wide">
+        <input type="checkbox" id="tapsOnly">Taps only (density, no tone)
+      </label>
     </div>
     <div class="row">
       <label for="glide">Glide</label>
@@ -91,7 +111,9 @@
       <div><span>mm</span><span id="rMM">&mdash;</span></div>
       <div data-requires="stereo"><span>stereo</span><span id="rPan">&mdash;</span></div>
       <div data-requires="rhythm"><span>opacity</span><span id="rOpacity">&mdash;</span></div>
-      <div data-requires="rhythm"><span>tapping</span><span id="rTaps">&mdash;</span></div>
+      <div data-requires="bone"><span>boneness</span><span id="rBone">&mdash;</span></div>
+      <div data-requires="depth"><span>front-back</span><span id="rDepth">&mdash;</span></div>
+      <div data-requires="rhythm bone"><span>tapping</span><span id="rTaps">&mdash;</span></div>
       <div><span>pick</span><span id="rSrc">&mdash;</span></div>
       <div id="bar"><i id="barFill"></i></div>
     </div>
@@ -114,11 +136,32 @@
       ticks. Narrow the display window and the taps saturate where the pitch is
       still climbing, which is the point: they are not the same signal.
     </p>
+    <p class="note" data-requires="bone">
+      The tapping follows <em>bone</em>, not opacity. On a T1 the skull is a
+      signal void &mdash; the darkest, most transparent thing in the head &mdash;
+      so opacity gets it exactly backwards. This condition finds it by shape
+      instead: a dark sheet lying parallel to the scalp. <code>Spike</code> is
+      how far the probe reaches: the tapping reports the densest bone within
+      that distance, so resting on the scalp sounds the skull underneath it
+      rather than the scalp itself. At 0 it reads the single voxel under the
+      pointer, which measures honestly and is nearly impossible to hover. The
+      rate is pushed
+      towards its ends rather than spread evenly, because bone is a boundary
+      rather than a quantity: sweep the vault and it should flutter almost too
+      fast to count, sweep the brain and it should barely tick.
+    </p>
     <p class="note">
       On a whole-head scan the scalp and skull wrap everything, so hovering the
       3D render can only ever sound the outside. <code>Clip</code> cuts the near
       side away and puts the interior under the pointer. The cut follows the
       camera, so it keeps facing you as you rotate.
+    </p>
+    <p class="note" data-requires="rhythm bone">
+      <code>Rate</code> speeds the whole rhythm up without changing the ratios
+      in it. Two slow rates take several taps each to tell apart, which is
+      longer than the pointer usually stays still; the same ratio played faster
+      is legible at once. <code>Taps only</code> drops the tone entirely, so
+      nothing competes with the rhythm while you learn what it is saying.
     </p>
     <p class="note">
       Wear the bone-conduction headset. Try <code>Filtered noise</code> if the

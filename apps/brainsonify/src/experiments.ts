@@ -11,6 +11,8 @@
  * visitor gets by default.
  */
 
+import { BONE_TAPS, DEFAULT_TAPS, type TapRange } from "@brainsonify/sonification";
+
 /**
  * Which mappings a condition turns on. A channel that is off is not merely
  * quiet: its controls and its readout row are hidden, so the panel only ever
@@ -21,6 +23,22 @@ export interface Channels {
   stereo: boolean;
   /** Tap rate from the opacity the colormap gives the voxel. */
   rhythm: boolean;
+  /**
+   * Tap rate from how bone-like the voxel is, instead of from opacity.
+   *
+   * Mutually exclusive with `rhythm` in practice: they drive the same tap
+   * layer, and the point of the condition is which signal is behind it.
+   */
+  bone: boolean;
+  /**
+   * Front-back position from world Y, carried as the brightness of the tap.
+   *
+   * Rides whichever signal is already driving the taps rather than replacing
+   * it: the rate still says what the tissue is, and the colour says where it
+   * is. Needs a tap layer to ride, so it is only meaningful alongside `rhythm`
+   * or `bone`.
+   */
+  depth: boolean;
 }
 
 export interface Experiment {
@@ -35,6 +53,16 @@ export interface Experiment {
   /** Commit this condition was last its own HEAD at, for provenance. */
   commit: string;
   channels: Channels;
+  /**
+   * The tap rates this condition spends, if it taps at all.
+   *
+   * A condition owns its own mapping: 03 and 04 drive the same layer from
+   * different signals, and a signal that marks a boundary wants a wider, faster
+   * range than one that reports a quantity. Entering a condition resets the
+   * `Taps` ceiling to this, since carrying the previous condition's ceiling
+   * across would silently change what is being compared.
+   */
+  taps?: TapRange;
 }
 
 export const EXPERIMENTS: readonly Experiment[] = [
@@ -45,7 +73,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Pitch tracks voxel intensity. A single mono voice, with no cue for where in the volume it came from.",
     commit: "55390a3",
-    channels: { stereo: false, rhythm: false },
+    channels: { stereo: false, rhythm: false, bone: false, depth: false },
   },
   {
     id: "02-stereo",
@@ -54,7 +82,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Pitch tracks intensity and the stereo image carries anatomical left-right, so the left hemisphere sounds in your left ear.",
     commit: "9caa560",
-    channels: { stereo: true, rhythm: false },
+    channels: { stereo: true, rhythm: false, bone: false, depth: false },
   },
   {
     id: "03-rhythm",
@@ -62,8 +90,29 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Rhythm",
     summary:
       "Adds a tap whose rate follows opacity, so dense tissue rattles and near-transparent tissue ticks.",
+    commit: "a7fc509",
+    channels: { stereo: true, rhythm: true, bone: false, depth: false },
+    taps: DEFAULT_TAPS,
+  },
+  {
+    id: "04-bone",
+    number: "04",
+    name: "Bone rhythm",
+    summary:
+      "The tap rate follows how bone-like the tissue is rather than how opaque, so the skull flutters where a T1 renders it as a void and soft tissue barely ticks.",
     commit: "unreleased",
-    channels: { stereo: true, rhythm: true },
+    channels: { stereo: true, rhythm: false, bone: true, depth: false },
+    taps: BONE_TAPS,
+  },
+  {
+    id: "05-depth",
+    number: "05",
+    name: "Depth",
+    summary:
+      "Keeps the bone rhythm and gives the tap a front-back position too: an anterior tap is bright and clicky, a posterior one dull, so one strike carries both what the tissue is and where it sits.",
+    commit: "unreleased",
+    channels: { stereo: true, rhythm: false, bone: true, depth: true },
+    taps: BONE_TAPS,
   },
 ];
 

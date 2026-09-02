@@ -22,6 +22,19 @@ export interface TapRange {
  */
 export const DEFAULT_TAPS: TapRange = { slowest: 1.5, fastest: 14 };
 
+/**
+ * The range for a driver that names a boundary rather than a quantity.
+ *
+ * Wider at both ends than `DEFAULT_TAPS`, and deliberately fast enough at the
+ * top to sit at the edge of fusion: around 22/s the taps stop being countable
+ * and turn into a flutter, which makes bone *categorically* different from soft
+ * tissue instead of merely quicker than it. That is the opposite of the choice
+ * 03 makes, and it is safe here for the reason 03 was worried about — a 22 Hz
+ * flutter is more than two octaves below the 110 Hz floor of the pitch channel,
+ * far too low to be confused with the tone or to mask it.
+ */
+export const BONE_TAPS: TapRange = { slowest: 1.2, fastest: 22 };
+
 /** Entries in a NiiVue colormap lookup table: 256 RGBA quads. */
 const LUT_ENTRIES = 256;
 
@@ -71,17 +84,55 @@ export function relativeOpacity(alpha: number, peak: number): number {
 }
 
 /**
+ * Pushes a driver towards its ends, so a boundary is heard as a boundary.
+ *
+ * `tapRate` spends its range evenly, which is right for a quantity that varies
+ * smoothly the way opacity does. A driver that answers a yes-or-no question
+ * does not vary smoothly: a voxel is skull or it is not, and the thin band of
+ * half-answers on either side is the least informative part of the signal.
+ * Spending audible range on it blurs the one edge worth conveying, and leaves
+ * the listener unable to say whether a middling rate means "partly bone" or
+ * "somewhere near bone".
+ *
+ * A logistic centred on `mid`, rescaled so 0 and 1 still land on 0 and 1: a
+ * gradual climb becomes a step with soft shoulders. The shoulders matter —
+ * a hard threshold would chatter between two rates as the pointer wanders
+ * across it.
+ */
+export function contrast(value: number, steepness = 12, mid = 0.45): number {
+  const clamped = Math.min(1, Math.max(0, value));
+  const curve = (t: number) => 1 / (1 + Math.exp(-steepness * (t - mid)));
+
+  const lo = curve(0);
+  const hi = curve(1);
+  if (!(hi > lo)) return clamped;
+
+  return (curve(clamped) - lo) / (hi - lo);
+}
+
+/**
  * Maps opacity onto a tap rate, in taps per second.
  *
  * Geometric rather than linear, for the same reason pitch is: tempo is heard as
  * a ratio. Spacing the rates linearly would spend most of the scale up in the
  * fast end, where one rate is indistinguishable from the next, and crowd every
  * audible difference into the last sliver of the range.
+ *
+ * `coefficient` scales the whole scale without changing the ratios in it, which
+ * sounds like it should not help tell two tissues apart and does. Telling 1.2/s
+ * from 3.9/s means waiting out two or three taps of each — the better part of a
+ * second per reading, by which time the pointer has moved. The same ratio at
+ * 2.4/s against 7.8/s is legible almost immediately. The coefficient buys that
+ * time back, at the cost of pushing the fast end towards a flutter.
  */
-export function tapRate(opacity: number, range: TapRange = DEFAULT_TAPS): number {
+export function tapRate(
+  opacity: number,
+  range: TapRange = DEFAULT_TAPS,
+  coefficient = 1,
+): number {
   const { slowest, fastest } = range;
-  if (!(slowest > 0) || !(fastest > 0)) return 0;
+  if (!(slowest > 0) || !(fastest > 0) || !(coefficient > 0)) return 0;
 
   const clamped = Math.min(1, Math.max(0, opacity));
-  return slowest * Math.pow(fastest / slowest, clamped);
+  return slowest * Math.pow(fastest / slowest, clamped) * coefficient;
 }

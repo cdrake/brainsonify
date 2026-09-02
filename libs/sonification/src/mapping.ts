@@ -44,15 +44,45 @@ export function frequency(norm: number, lowHz: number, octaves: number): number 
  * hemisphere is always in the left ear, on a slice or on a spinning render.
  *
  * `width` scales the field: 0 collapses to mono, 1 sends the extremes hard
- * over. A degenerate extent stays centred rather than pinning hard left.
+ * over.
  */
 export function pan(mm: number, extent: Extent, width: number): number {
+  return signedPosition(mm, extent, width);
+}
+
+/**
+ * Places a world coordinate on the front-back axis, -1 fully posterior to +1
+ * fully anterior.
+ *
+ * The companion to `pan`, and anatomical for the same reason: the occiput
+ * should sound like the occiput from every viewing angle, not swap ends with
+ * the forehead when the render is spun round.
+ *
+ * It is a separate function rather than `pan` called on world Y because the two
+ * are separate channels with separate controls. Collapsing the stereo field to
+ * mono should not also flatten depth, and a condition may want one without the
+ * other. `spread` scales it the way `width` scales the stereo image.
+ */
+export function anteriority(mm: number, extent: Extent, spread: number): number {
+  return signedPosition(mm, extent, spread);
+}
+
+/**
+ * A world coordinate as a signed -1..1 offset across an axis, scaled.
+ *
+ * A degenerate extent stays neutral rather than pinning to one end: a volume
+ * with no thickness on an axis has no position along it to report. A zero
+ * scale returns early for the same reason, and to keep a collapsed field at a
+ * clean 0 — multiplying through would hand back -0 for half the volume, which
+ * compares unequal to 0 and would be a nuisance to anything downstream.
+ */
+function signedPosition(mm: number, extent: Extent, scale: number): number {
   const span = extent.hi - extent.lo;
-  const scale = Math.min(1, Math.max(0, width));
-  if (!(span > 0)) return 0;
+  const width = Math.min(1, Math.max(0, scale));
+  if (!(span > 0) || width === 0) return 0;
 
   const t = (mm - extent.lo) / span;
-  return Math.min(1, Math.max(-1, t * 2 - 1)) * scale;
+  return Math.min(1, Math.max(-1, t * 2 - 1)) * width;
 }
 
 /**

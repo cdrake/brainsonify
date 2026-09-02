@@ -55,9 +55,11 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 |---|---|
 | `libs/sonification/src/mapping.ts` | Intensity window → normalised value → frequency |
 | `libs/sonification/src/audio.ts` | `Sonifier`: sine or band-passed pink noise, gated, plus the tap layer |
-| `libs/sonification/src/rhythm.ts` | Colormap alpha → opacity → tap rate |
+| `libs/sonification/src/rhythm.ts` | Colormap alpha → opacity → tap rate, and the contrast curve |
 | `libs/sonification/src/loudness.ts` | Equal-loudness weighting, so pitch does not double as level |
 | `apps/brainsonify/src/experiments.ts` | The experiment registry: conditions, channels, URL |
+| `apps/brainsonify/src/boneness.ts` | Hessian sheetness + surface alignment → how bone-like a voxel is |
+| `apps/brainsonify/src/boneness.worker.ts` | Runs that map off the main thread, once per volume |
 | `apps/brainsonify/src/sampler.ts` | Pointer position → voxel intensity, 2D and 3D |
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
 | `apps/brainsonify/src/main.ts` | Wiring, volume loading, drag and drop |
@@ -71,7 +73,9 @@ links to the earlier ones, and each has a stable URL:
 ```
 ?experiment=01-pitch     pitch tracks intensity, mono
 ?experiment=02-stereo    + stereo carries anatomical left-right
-?experiment=03-rhythm    + tap rate follows opacity               (default)
+?experiment=03-rhythm    + tap rate follows opacity
+?experiment=04-bone      tap rate follows boneness instead
+?experiment=05-depth     + tap brightness carries front-back        (default)
 ```
 
 Switching does not reload: a volume you dropped in survives the change, which is
@@ -112,6 +116,37 @@ registry that drives the switcher, the default, and the visible controls.
   rotation instead of swinging round to the far side. A ray that passes only
   through cut-away space reports id 253 rather than a volume hit, so hovering the
   opened cavity is correctly silent.
+- **Finding bone without intensity.** Cortical bone is a signal void on a T1 —
+  the darkest thing in the head — so nothing about its intensity identifies it.
+  What is distinctive is its shape: a thin dark sheet lying parallel to the
+  scalp. `boneness.ts` scores plate-likeness from the eigenvalues of the
+  smoothed Hessian, then multiplies by how closely the sheet's normal aligns
+  with the gradient of a distance-from-scalp field. That second term is what
+  separates skull from sulcal CSF, which is also a thin dark sheet but runs
+  inward rather than wrapping the head. The response is mapped through a fixed
+  window rather than each volume's own maximum, so a skull-stripped scan stays
+  quiet instead of rattling at whatever its loudest voxel happens to be.
+- **Front-back cannot be panned.** A source ahead and a source behind give the
+  ears the same arrival-time and level difference — the cone of confusion — so
+  stereo carries left-right and nothing else. What separates front from back in
+  life is the pinna filtering sound arriving from behind, which is a spectral
+  cue, so depth rides the *colour* of the tap rather than its position: anterior
+  taps are struck through a band an octave above centre and read bright and
+  clicky, posterior taps an octave below and read dull. A tap is a broadband
+  burst and carries a spectral cue well; a sine would only change hue. The band
+  is geometric about 1800 Hz, and each strike is weighted by the loudness curve
+  at the band it is actually struck through — a fixed level would make anterior
+  taps audibly louder as well as brighter, which is two cues that can disagree.
+- **A measurement is not a probe.** Read at a point, that map is unusable: the
+  skull is a 4-7mm shell, so 49 of 46,224 sample points land on it, and on the
+  3D render the depth pick lands on the *scalp* with the bone several
+  millimetres beneath — the one view the channel exists for could never sound
+  bone at all. `Spike` sets a reach, and `reach()` widens the map so every voxel
+  reports the strongest bone within that distance, the way pressing on your own
+  head finds the skull under it. At the 8mm default the target grows 53-fold and
+  a third of scalp points sound the vault under them. The cost is real and is
+  the point of making it adjustable: cortex within 8mm of the inner table
+  reports bone too, so the boundary softens as the probe lengthens.
 - **Missed picks.** On a miss NiiVue leaves `scene.crosshairPos` untouched rather
   than signalling failure, so the app compares the object reference across the
   draw. Without that check, hovering off the head keeps sounding the last voxel
@@ -120,6 +155,14 @@ registry that drives the switcher, the default, and the visible controls.
   is set from the normalised intensity, with a configurable glide and a gate that
   silences background voxels. Both sources run continuously and the gate rides
   the output gain, which avoids clicks.
+- **Reading a rhythm takes time.** Two rates are compared by counting, and
+  counting costs taps: telling 1.2/s from 3.9/s means waiting out two or three
+  of each, close to a second, by which time the pointer has usually moved. The
+  `Rate` coefficient multiplies the whole scale and leaves every ratio in it
+  untouched, which buys that time back — the same contrast, legible at a
+  glance. The cost is that the fast end climbs towards a flutter, so the tap
+  envelope shortens as the rate rises (`tapLength`) and keeps a gap of silence
+  between taps at any rate rather than smearing into continuous noise.
 - **Equal loudness.** Ear sensitivity rises about 19 dB between 110 Hz and
   1760 Hz, so a sine at constant amplitude gets louder and harsher as it climbs.
   That is tiring over a continuous hover, and it makes loudness a second,
@@ -143,7 +186,11 @@ registry that drives the switcher, the default, and the visible controls.
 | Clip | Cuts the near side off the render so the pointer can reach inside the head |
 | Volume | Master output level |
 | Stereo | Width of the anatomical left–right field, mono to hard-panned |
-| Taps | Fastest tap rate, at full opacity; the floor is fixed at 1.5/s |
+| Depth | Spread of the front–back field, flat to a full two octaves of tap colour |
+| Taps | Fastest tap rate, at the top of the driver's range; each condition sets its own default |
+| Spike | How far the bone probe reaches; the tapping reports the densest bone within it |
+| Rate | Multiplies the whole rhythm, so the same contrast arrives sooner |
+| Taps only | Mutes the tone and leaves the density channel on its own |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
 
@@ -151,7 +198,8 @@ Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
 demo volumes are fetched from `niivue.github.io` at runtime and are not stored
 in this repo: MNI152, which is skull-stripped, and a whole-head T1 that keeps
 scalp, marrow and the skull's signal void — the wider opacity range the rhythm
-channel is meant to carry.
+channel is meant to carry, and the only one of the two with a skull for the bone
+channel to find.
 
 ## Deployment
 

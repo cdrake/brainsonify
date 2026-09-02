@@ -5,6 +5,8 @@ import {
   DEFAULT_RANGE,
   DEFAULT_TAPS,
   Sonifier,
+  anteriority,
+  contrast,
   boundsFromFrac,
   frequency,
   normalise,
@@ -24,6 +26,8 @@ import {
   resolveExperiment,
   type Experiment,
 } from "./experiments";
+import { bonenessAt, reach, type BoneMap, type Grid } from "./boneness";
+import type { BoneReply, BoneRequest } from "./boneness.worker";
 import { VoxelSampler, type Sample } from "./sampler";
 import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
 
@@ -73,6 +77,27 @@ let lut: Uint8ClampedArray = new Uint8ClampedArray();
 let lutPeak = 0;
 let active: Experiment = resolveExperiment(location.search);
 
+/**
+ * How bone-like every voxel is, or null when there is none for this volume yet.
+ *
+ * Precomputed once per volume rather than per hover: the filter is a second of
+ * dense float work over the whole grid, but reading one voxel out of the
+ * finished map is a table lookup, which is what a pointer move can afford.
+ */
+let boneMap: BoneMap | null = null;
+/**
+ * The filter's own output, before the probe widens it.
+ *
+ * Kept so the `Spike` slider can be dragged freely: widening is three cheap
+ * passes over a half-resolution volume, while the filter behind it is a second
+ * of work that must not be repeated for a slider drag.
+ */
+let boneRaw: BoneMap | null = null;
+let boneWorker: Worker | null = null;
+/** Identifies the volume a reply belongs to, so a superseded one is dropped. */
+let boneToken = 0;
+let bonePending = false;
+
 // Dev-only handles so the picking and audio paths can be poked from a console:
 // `nv.selectedObjectId` should read 254 (VOLUME_ID) after hovering tissue on
 // the render, and flipping `nv.opts.show3Dcrosshair` reproduces the shadowed
@@ -93,8 +118,10 @@ function activate(experiment: Experiment, pushHistory: boolean): void {
   active = experiment;
   nav.show(experiment);
   applyChannels(experiment.channels);
+  if (experiment.taps) controls.setTaps(experiment.taps.fastest);
   sonifier.silence();
 
+  ensureBoneMap();
   document.title = `brainsonify — ${experiment.number} ${experiment.name}`;
   if (pushHistory) history.pushState({ id: experiment.id }, "", experimentHref(experiment));
 }
@@ -131,11 +158,28 @@ function onSample(sample: Sample | null): void {
   const norm = normalise(sample.raw, range);
   const freq = frequency(norm, c.lowHz, c.octaves);
   const position = active.channels.stereo ? pan(sample.mm[0], bounds.x, c.width) : 0;
+  // World Y is the anterior-posterior axis. It rides the tap rather than the
+  // tone: the cue is spectral, and a click carries a spectral cue where a
+  // sustained sine would only change colour.
+  const front = active.channels.depth ? anteriority(sample.mm[1], bounds.y, c.spread) : 0;
 
   const opacity = relativeOpacity(opacityFromLut(lut, norm), lutPeak);
-  const taps = active.channels.rhythm
-    ? tapRate(opacity, { slowest: DEFAULT_TAPS.slowest, fastest: c.taps })
-    : 0;
+  const bone = boneMap ? bonenessAt(boneMap, ...sample.vox) : null;
+
+  // Both conditions drive the same tap layer; which signal is behind it is the
+  // whole difference between them. While the map is still building there is
+  // nothing honest to tap, so the layer stays silent rather than reporting a
+  // zero that would sound like "no bone here".
+  // Boneness answers a yes-or-no question, so its range is pushed to the ends
+  // before it becomes a rate; opacity is a genuine quantity and is left alone.
+  const driver =
+    active.channels.bone ? (bone === null ? null : contrast(bone)) : opacity;
+  const tapping = active.channels.rhythm || active.channels.bone;
+  const slowest = active.taps?.slowest ?? DEFAULT_TAPS.slowest;
+  const taps =
+    tapping && driver !== null
+      ? tapRate(driver, { slowest, fastest: c.taps }, c.rate)
+      : 0;
 
   readout.show({
     raw: sample.raw,
@@ -143,11 +187,19 @@ function onSample(sample: Sample | null): void {
     freq,
     mm: sample.mm,
     pan: position,
+    depth: front,
     opacity,
+    bone,
     taps,
     source: sample.source,
   });
-  sonifier.update({ freq, pan: position, taps, open: norm > c.gate }, c);
+  // Muting the tone only makes sense where there is a tap layer to be left
+  // with; in a condition that does not tap it would just be silence.
+  const mode = tapping && controls.tapsOnly ? "taps" : c.mode;
+  sonifier.update(
+    { freq, pan: position, depth: front, taps, open: norm > c.gate },
+    { ...c, mode },
+  );
 }
 
 const canvas = el<HTMLCanvasElement>("gl");
@@ -157,6 +209,92 @@ const track = (e: PointerEvent) =>
 canvas.addEventListener("pointermove", track);
 canvas.addEventListener("pointerenter", track);
 canvas.addEventListener("pointerleave", () => onSample(null));
+
+/* ---------------- bone map ---------------- */
+
+/**
+ * The volume as the normalised float grid the bone filter expects.
+ *
+ * The filter reasons about air, tissue and the sheets between them, so it needs
+ * intensity on a common 0..1 scale rather than whatever the scanner wrote.
+ */
+function gridFromVolume(vol: (typeof nv.volumes)[0]): Grid | null {
+  const hdr = vol.hdr;
+  const img = vol.img;
+  if (!hdr || !img) return null;
+
+  const dims = [hdr.dims[1], hdr.dims[2], hdr.dims[3]] as const;
+  const count = dims[0] * dims[1] * dims[2];
+  // A 4D series has more voxels than one frame; the first frame is what shows.
+  if (!(count > 0) || img.length < count) return null;
+
+  const lo = vol.global_min ?? 0;
+  const hi = vol.global_max ?? 1;
+  const span = hi > lo ? hi - lo : 1;
+
+  const data = new Float32Array(count);
+  for (let i = 0; i < count; i++) data[i] = (img[i] - lo) / span;
+
+  return {
+    data,
+    dims,
+    zoom: [
+      Math.abs(hdr.pixDims[1]) || 1,
+      Math.abs(hdr.pixDims[2]) || 1,
+      Math.abs(hdr.pixDims[3]) || 1,
+    ],
+  };
+}
+
+/**
+ * Builds the bone map for the loaded volume, if a condition wants one.
+ *
+ * Only the conditions that tap on bone pay for it, and only once per volume:
+ * switching away and back reuses the map, since switching does not reload.
+ */
+function ensureBoneMap(): void {
+  if (!active.channels.bone || boneMap || bonePending) return;
+
+  const vol = nv.volumes[0];
+  if (!vol) return;
+  const grid = gridFromVolume(vol);
+  if (!grid) return;
+
+  boneWorker ??= new Worker(new URL("./boneness.worker.ts", import.meta.url), {
+    type: "module",
+  });
+
+  const token = ++boneToken;
+  bonePending = true;
+  readout.status("finding bone…");
+
+  boneWorker.onmessage = (event: MessageEvent<BoneReply>) => {
+    if (event.data.token !== boneToken) return;
+    boneRaw = event.data.map;
+    applySpike();
+    bonePending = false;
+    readout.status("ready");
+  };
+
+  const request: BoneRequest = { token, grid };
+  boneWorker.postMessage(request, [grid.data.buffer]);
+}
+
+/** Re-widens the map for the current probe reach. */
+function applySpike(): void {
+  boneMap = boneRaw ? reach(boneRaw, controls.spike) : null;
+}
+
+el<HTMLInputElement>("spike").addEventListener("input", applySpike);
+
+/** A new volume invalidates the map, and any reply still in flight for the old one. */
+function resetBoneMap(): void {
+  boneMap = null;
+  boneRaw = null;
+  bonePending = false;
+  boneToken++;
+  ensureBoneMap();
+}
 
 /* ---------------- clip plane ---------------- */
 
@@ -209,6 +347,7 @@ function refreshRange(): void {
   lut = cmapper.colormap(vol.colormap, vol.colormapInvert);
   lutPeak = peakAlpha(lut);
   readout.status("ready");
+  resetBoneMap();
 }
 
 async function loadFile(file: File): Promise<void> {

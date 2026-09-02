@@ -24,6 +24,8 @@ export interface Sample {
   raw: number;
   /** World coordinate of the voxel that produced `raw`, in millimetres. */
   mm: [number, number, number];
+  /** Index of that voxel, for maps computed in voxel space rather than mm. */
+  vox: [number, number, number];
   /** Which pick branch produced this, for diagnosing the 3D path. */
   source?: string;
 }
@@ -193,6 +195,6 @@ export class VoxelSampler {
     if (raw === null || raw === undefined || Number.isNaN(raw)) return null;
 
     const mm = this.nv.frac2mm(this.nv.vox2frac([i, j, k]));
-    return { raw, mm: [mm[0], mm[1], mm[2]] };
+    return { raw, mm: [mm[0], mm[1], mm[2]], vox: [i, j, k] };
   }
 }

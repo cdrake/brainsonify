@@ -10,6 +10,7 @@ import {
   Readout,
   applyChannels,
   formatClip,
+  formatDepth,
   formatPan,
   formatTaps,
 } from "./ui";
@@ -40,7 +41,9 @@ describe("Controls", () => {
       volume: 0.4,
       glide: 0.02,
       width: 0.85,
+      spread: 1,
       taps: 14,
+      rate: 1,
     });
   });
 
@@ -69,6 +72,150 @@ describe("Controls", () => {
 
     expect(controls.surfaceDepth).toBe(0);
     expect(document.getElementById("depthV")?.textContent).toBe("0 vox");
+  });
+});
+
+describe("spike", () => {
+  it("ships reaching far enough to find the vault from the scalp", () => {
+    // The vault sits 5-8mm under the outer scalp on the demo head.
+    expect(new Controls().spike).toBeGreaterThanOrEqual(8);
+  });
+
+  it("tracks the slider and labels it in millimetres", () => {
+    const controls = new Controls();
+    const slider = document.getElementById("spike") as HTMLInputElement;
+
+    slider.value = "12";
+    slider.dispatchEvent(new Event("input"));
+
+    expect(controls.spike).toBe(12);
+    expect(document.getElementById("spikeV")?.textContent).toBe("12 mm");
+  });
+
+  it("names the point read rather than printing a zero distance", () => {
+    const controls = new Controls();
+    const slider = document.getElementById("spike") as HTMLInputElement;
+
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+
+    expect(controls.spike).toBe(0);
+    expect(document.getElementById("spikeV")?.textContent).toBe("point");
+  });
+
+  it("belongs to the bone channel alone", () => {
+    const row = document.getElementById("spike")?.closest("[data-requires]") as HTMLElement;
+    applyChannels({ stereo: true, rhythm: true, bone: false, depth: false });
+    expect(row.hidden).toBe(true);
+
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false });
+    expect(row.hidden).toBe(false);
+  });
+});
+
+describe("taps-only", () => {
+  it("ships off, so a condition sounds complete on arrival", () => {
+    expect(new Controls().tapsOnly).toBe(false);
+  });
+
+  it("tracks the checkbox", () => {
+    const controls = new Controls();
+    const box = document.getElementById("tapsOnly") as HTMLInputElement;
+
+    box.checked = true;
+    box.dispatchEvent(new Event("input"));
+
+    expect(controls.tapsOnly).toBe(true);
+  });
+
+  it("belongs to the tapping conditions, so it hides where there is no rhythm", () => {
+    const row = document.getElementById("tapsOnly")?.closest("[data-requires]") as HTMLElement;
+    expect(row).toBeTruthy();
+
+    applyChannels({ stereo: true, rhythm: false, bone: false, depth: false });
+    expect(row.hidden).toBe(true);
+
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false });
+    expect(row.hidden).toBe(false);
+  });
+});
+
+describe("depth", () => {
+  it("ships at full spread, so the cue is present to be judged", () => {
+    expect(new Controls().values.spread).toBe(1);
+  });
+
+  it("tracks the slider and names a collapsed field", () => {
+    const controls = new Controls();
+    const slider = document.getElementById("spread") as HTMLInputElement;
+
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+
+    expect(controls.values.spread).toBe(0);
+    expect(document.getElementById("spreadV")?.textContent).toBe("flat");
+  });
+
+  it("belongs to the depth channel alone, so earlier conditions never show it", () => {
+    const row = document.getElementById("spread")?.closest("[data-requires]") as HTMLElement;
+
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false });
+    expect(row.hidden).toBe(true);
+
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: true });
+    expect(row.hidden).toBe(false);
+  });
+});
+
+describe("formatDepth", () => {
+  it("names the two ends anatomically", () => {
+    expect(formatDepth(-0.4)).toBe("P 40%");
+    expect(formatDepth(0.4)).toBe("A 40%");
+  });
+
+  it("calls the middle centre rather than a signed zero", () => {
+    expect(formatDepth(0)).toBe("centre");
+    expect(formatDepth(-0.001)).toBe("centre");
+  });
+});
+
+describe("rate coefficient", () => {
+  it("starts at 1x, leaving each condition's own range as specified", () => {
+    expect(new Controls().values.rate).toBe(1);
+  });
+
+  it("tracks the slider and prints it as a multiplier", () => {
+    const controls = new Controls();
+    const slider = document.getElementById("rate") as HTMLInputElement;
+
+    slider.value = "2.5";
+    slider.dispatchEvent(new Event("input"));
+
+    expect(controls.values.rate).toBe(2.5);
+    expect(document.getElementById("rateV")?.textContent).toBe("2.5\u00d7");
+  });
+
+  it("cannot be turned down to silence", () => {
+    const slider = document.getElementById("rate") as HTMLInputElement;
+    expect(Number(slider.min)).toBeGreaterThan(0);
+  });
+});
+
+describe("setTaps", () => {
+  it("moves the ceiling and the label together", () => {
+    const controls = new Controls();
+    controls.setTaps(22);
+
+    expect(controls.values.taps).toBe(22);
+    expect(document.getElementById("tapsV")?.textContent).toBe("22 /s");
+  });
+
+  it("clamps to the slider, so the number never disagrees with the thumb", () => {
+    const controls = new Controls();
+    const slider = document.getElementById("taps") as HTMLInputElement;
+
+    controls.setTaps(1000);
+    expect(controls.values.taps).toBe(Number(slider.max));
   });
 });
 
@@ -149,6 +296,24 @@ describe("formatPan", () => {
   });
 });
 
+describe("experiment tap ranges", () => {
+  it("gives every tapping condition a range, and none to the ones that do not tap", () => {
+    for (const experiment of EXPERIMENTS) {
+      const taps = experiment.channels.rhythm || experiment.channels.bone;
+      expect(Boolean(experiment.taps)).toBe(taps);
+    }
+  });
+
+  it("asks for a ceiling the slider can actually reach", () => {
+    const slider = document.getElementById("taps") as HTMLInputElement;
+    for (const experiment of EXPERIMENTS) {
+      if (!experiment.taps) continue;
+      expect(experiment.taps.fastest).toBeLessThanOrEqual(Number(slider.max));
+      expect(experiment.taps.slowest).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe("ExperimentNav", () => {
   const nav = () => new ExperimentNav(EXPERIMENTS, experimentHref, () => {});
   const links = () =>
@@ -214,6 +379,22 @@ describe("applyChannels", () => {
 
     expect(rowsFor("stereo").every((row) => row.hidden)).toBe(true);
     expect(rowsFor("rhythm").every((row) => row.hidden)).toBe(false);
+  });
+
+  it("shows a row listing several channels when any one of them is on", () => {
+    const shared = [...document.querySelectorAll<HTMLElement>('[data-requires~="rhythm"]')].filter(
+      (row) => (row.dataset.requires ?? "").split(/\s+/).length > 1,
+    );
+    expect(shared.length).toBeGreaterThan(0);
+
+    applyChannels({ ...all(false), rhythm: true });
+    for (const row of shared) expect(row.hidden).toBe(false);
+
+    applyChannels({ ...all(false), bone: true });
+    for (const row of shared) expect(row.hidden).toBe(false);
+
+    applyChannels(all(false));
+    for (const row of shared) expect(row.hidden).toBe(true);
   });
 
   it("leaves rows belonging to no channel alone", () => {

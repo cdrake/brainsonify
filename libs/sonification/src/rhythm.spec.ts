@@ -6,6 +6,8 @@ import {
   peakAlpha,
   relativeOpacity,
   tapRate,
+  BONE_TAPS,
+  contrast,
 } from "./rhythm";
 
 /** A NiiVue colormap LUT: 256 RGBA quads, alpha ramping to `peak`. */
@@ -125,5 +127,84 @@ describe("tapRate", () => {
   it("returns no rhythm rather than NaN for a degenerate range", () => {
     expect(tapRate(1, { slowest: 0, fastest: 0 })).toBe(0);
     expect(tapRate(1, { slowest: -1, fastest: 8 })).toBe(0);
+  });
+});
+
+describe("contrast", () => {
+  it("leaves the ends where they are, so the range is still fully spent", () => {
+    expect(contrast(0)).toBeCloseTo(0, 6);
+    expect(contrast(1)).toBeCloseTo(1, 6);
+  });
+
+  it("stays monotonic, so more bone never taps slower", () => {
+    let previous = -1;
+    for (let v = 0; v <= 1.0001; v += 0.05) {
+      const shaped = contrast(v);
+      expect(shaped).toBeGreaterThanOrEqual(previous);
+      previous = shaped;
+    }
+  });
+
+  it("pushes the half-answers away from the middle, which is the whole point", () => {
+    // A gradual driver would give back roughly what it was handed.
+    expect(contrast(0.25)).toBeLessThan(0.25 / 2);
+    expect(contrast(0.75)).toBeGreaterThan(1 - (1 - 0.75) / 2);
+  });
+
+  it("crosses the middle at the threshold rather than at the midpoint", () => {
+    expect(contrast(0.45)).toBeCloseTo(0.5, 2);
+  });
+
+  it("keeps soft shoulders, so a pointer sitting on the edge does not chatter", () => {
+    // A hard threshold would jump the full range across this step.
+    expect(Math.abs(contrast(0.46) - contrast(0.44))).toBeLessThan(0.1);
+  });
+
+  it("clamps, since boneness outside 0..1 is a bug not a louder answer", () => {
+    expect(contrast(-3)).toBeCloseTo(0, 6);
+    expect(contrast(4)).toBeCloseTo(1, 6);
+  });
+});
+
+describe("BONE_TAPS", () => {
+  it("separates bone from soft tissue far more sharply than the opacity range", () => {
+    const boneSpread = BONE_TAPS.fastest / BONE_TAPS.slowest;
+    const opacitySpread = DEFAULT_TAPS.fastest / DEFAULT_TAPS.slowest;
+    expect(boneSpread).toBeGreaterThan(opacitySpread * 1.5);
+  });
+
+  it("shaped and mapped, brain and vault land at opposite ends", () => {
+    const brain = tapRate(contrast(0), BONE_TAPS);
+    const innerTable = tapRate(contrast(0.4), BONE_TAPS);
+    const vault = tapRate(contrast(0.97), BONE_TAPS);
+
+    expect(brain).toBeCloseTo(BONE_TAPS.slowest, 5);
+    expect(vault).toBeGreaterThan(20);
+    // The partial answer stays clearly on the soft-tissue side of the boundary.
+    expect(innerTable).toBeLessThan(5);
+  });
+});
+
+describe("tapRate coefficient", () => {
+  it("scales the whole range without changing the ratios in it", () => {
+    const slow = tapRate(0.2, DEFAULT_TAPS);
+    const fast = tapRate(0.8, DEFAULT_TAPS);
+
+    expect(tapRate(0.2, DEFAULT_TAPS, 2.5)).toBeCloseTo(slow * 2.5, 6);
+    expect(tapRate(0.8, DEFAULT_TAPS, 2.5)).toBeCloseTo(fast * 2.5, 6);
+    // The point of a coefficient: the same contrast, sooner.
+    expect(tapRate(0.8, DEFAULT_TAPS, 2.5) / tapRate(0.2, DEFAULT_TAPS, 2.5)).toBeCloseTo(
+      fast / slow,
+      6,
+    );
+  });
+
+  it("defaults to leaving the rate alone", () => {
+    expect(tapRate(0.5, DEFAULT_TAPS, 1)).toBeCloseTo(tapRate(0.5, DEFAULT_TAPS), 6);
+  });
+
+  it("treats a non-positive coefficient as silence rather than a negative rate", () => {
+    expect(tapRate(0.5, DEFAULT_TAPS, 0)).toBe(0);
+    expect(tapRate(0.5, DEFAULT_TAPS, -2)).toBe(0);
   });
 });

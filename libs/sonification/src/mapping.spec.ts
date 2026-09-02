@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_RANGE, boundsFromFrac, frequency, normalise, pan } from "./mapping";
+import { DEFAULT_RANGE, anteriority, boundsFromFrac, frequency, normalise, pan } from "./mapping";
 
 describe("normalise", () => {
   const range = { lo: 0, hi: 200 };
@@ -91,5 +91,37 @@ describe("boundsFromFrac", () => {
     const b = boundsFromFrac((f) => [f[0] - f[1], f[0] + f[1], f[2]]);
     expect(b.x).toEqual({ lo: -1, hi: 1 });
     expect(b.y).toEqual({ lo: 0, hi: 2 });
+  });
+});
+
+describe("anteriority", () => {
+  const extent = { lo: -100, hi: 100 };
+
+  it("puts the back of the head negative and the front positive", () => {
+    expect(anteriority(-100, extent, 1)).toBe(-1);
+    expect(anteriority(0, extent, 1)).toBe(0);
+    expect(anteriority(100, extent, 1)).toBe(1);
+  });
+
+  it("scales by spread, so the cue can be turned down without being rewired", () => {
+    expect(anteriority(100, extent, 0.5)).toBe(0.5);
+    expect(anteriority(-100, extent, 0)).toBe(0);
+  });
+
+  it("stays neutral on an axis the volume has no thickness on", () => {
+    expect(anteriority(5, { lo: 3, hi: 3 }, 1)).toBe(0);
+  });
+
+  it("clamps a coordinate outside the box rather than running past the ends", () => {
+    expect(anteriority(500, extent, 1)).toBe(1);
+    expect(anteriority(-500, extent, 1)).toBe(-1);
+  });
+
+  it("is independent of the stereo width, which is a separate channel", () => {
+    // Same coordinate, same extent: collapsing the stereo field to mono must
+    // not take depth with it.
+    expect(anteriority(50, extent, 1)).toBe(pan(50, extent, 1));
+    expect(pan(50, extent, 0)).toBe(0);
+    expect(anteriority(50, extent, 1)).toBe(0.5);
   });
 });

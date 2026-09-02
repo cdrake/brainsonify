@@ -1,6 +1,10 @@
 import { loudnessGain } from "./loudness";
 
-export type Mode = "tone" | "noise";
+/**
+ * What the continuous voice does. `taps` silences it entirely, leaving only the
+ * tap layer — the density channel on its own, with nothing to listen past.
+ */
+export type Mode = "tone" | "noise" | "taps";
 
 export interface AudioSettings {
   mode: Mode;
@@ -16,6 +20,8 @@ export interface VoiceState {
   freq: number;
   /** Stereo position, -1 hard left to +1 hard right, from anatomical position. */
   pan: number;
+  /** Front-back position, -1 fully posterior to +1 fully anterior. 0 is neutral. */
+  depth: number;
   /** Tap rate in taps per second, from opacity. 0 leaves the tap layer silent. */
   taps: number;
   /** False closes the gate but keeps pitch and position tracking. */
@@ -35,25 +41,32 @@ const NOISE_MAKEUP = 1.6;
 
 /**
  * A tap: near-instant attack, short decay, so it reads as a struck surface
- * rather than a pulse of the tone. The whole envelope has to fit inside the
- * shortest gap between taps, which caps the usable rate at ~1/TAP_LENGTH; that
- * is the real reason DEFAULT_TAPS stops where it does.
+ * rather than a pulse of the tone.
+ *
+ * The envelope has to fit inside the gap between taps or each tap lands on the
+ * tail of the one before and the train smears into continuous noise. Rather
+ * than letting that set a hard ceiling on the rate, `strike` shortens the decay
+ * once the taps get close together: the texture gets drier as it accelerates,
+ * which is what a real struck surface does, and stays *countable* far past
+ * where a fixed envelope would have fused it.
  */
 const TAP_ATTACK = 0.001;
 const TAP_DECAY = 0.03;
-const TAP_LENGTH = TAP_ATTACK + TAP_DECAY;
+/** Share of the gap a tap may occupy before it starts masking the next one. */
+const TAP_DUTY = 0.55;
 /** Taps are struck well above the pitch range so the two channels stay apart. */
 const TAP_HZ = 1800;
 const TAP_Q = 3;
 /**
- * Struck at the loudness a tone of the same perceived level would use.
+ * How far either side of `TAP_HZ` the depth cue swings the tap band, in octaves.
  *
- * 1800 Hz sits near the ear's most sensitive region, so a tap at full scale is
- * some 13 dB louder than a low tone at full scale — which at fourteen a second
- * is the difference between a texture and a machine gun. Weighting it the same
- * way as the voice puts the two layers on equal perceptual footing.
+ * An octave each way is a wide enough timbral swing to hear on a single click
+ * and still leaves the whole range up where a struck band belongs. Pushing the
+ * posterior end lower would buy contrast by sinking the taps into the pitch
+ * channel's territory, which is the one thing this layer was built to stay out
+ * of.
  */
-const TAP_LEVEL = loudnessGain(TAP_HZ);
+const TAP_OCTAVES = 1;
 
 /** How far ahead taps are scheduled, and how often the scheduler tops up. */
 const LOOKAHEAD_S = 0.1;
@@ -62,8 +75,9 @@ const PUMP_MS = 25;
 /**
  * A single voice describing the voxel under the pointer.
  *
- * Pitch carries intensity, the stereo image carries anatomical position, and a
- * tap layer carries opacity as a rate. The tone sources run continuously and
+ * Pitch carries intensity, the stereo image carries anatomical left-right, and
+ * a tap layer carries density as a rate and front-back as brightness. The tone
+ * sources run continuously and
  * the gate rides a gain node, which avoids the clicks you get from starting and
  * stopping nodes per sample; the taps are the one thing genuinely scheduled,
  * because a tap is an event and pretending otherwise gives you a tremolo.
@@ -74,11 +88,14 @@ export class Sonifier {
   private filter!: BiquadFilterNode;
   private voice!: GainNode;
   private tapEnv!: GainNode;
+  private tapFilter!: BiquadFilterNode;
   private master!: GainNode;
   private panner!: StereoPannerNode;
 
   /** Taps per second, already gated: 0 means schedule nothing. */
   private rate = 0;
+  /** Where the tap band currently sits, so a strike can be weighted for it. */
+  private tapHz = TAP_HZ;
   /** Context time the next tap is due. */
   private nextTap = 0;
   private pump: ReturnType<typeof setInterval> | null = null;
@@ -119,7 +136,7 @@ export class Sonifier {
     noise.connect(this.filter);
     this.filter.connect(this.voice);
 
-    // ---- taps: the same noise, struck through a fixed band ----
+    // ---- taps: the same noise, struck through a band that moves with depth ----
 
     this.tapEnv = ctx.createGain();
     this.tapEnv.gain.value = 0;
@@ -129,12 +146,12 @@ export class Sonifier {
     tapNoise.buffer = pinkNoiseBuffer(ctx, 2);
     tapNoise.loop = true;
 
-    const tapBand = ctx.createBiquadFilter();
-    tapBand.type = "bandpass";
-    tapBand.Q.value = TAP_Q;
-    tapBand.frequency.value = TAP_HZ;
-    tapNoise.connect(tapBand);
-    tapBand.connect(this.tapEnv);
+    this.tapFilter = ctx.createBiquadFilter();
+    this.tapFilter.type = "bandpass";
+    this.tapFilter.Q.value = TAP_Q;
+    this.tapFilter.frequency.value = TAP_HZ;
+    tapNoise.connect(this.tapFilter);
+    this.tapFilter.connect(this.tapEnv);
 
     this.osc.start();
     noise.start();
@@ -164,12 +181,18 @@ export class Sonifier {
     target.setTargetAtTime(voice.freq, t, tau);
 
     this.panner.pan.setTargetAtTime(Math.min(1, Math.max(-1, voice.pan)), t, PAN_TAU);
+
+    // Front-back rides the tap band. It moves on the same time constant as the
+    // pan because it is the same kind of fact — where the thing is — and should
+    // feel equally attached to the pointer.
+    this.tapHz = tapBand(voice.depth);
+    this.tapFilter.frequency.setTargetAtTime(this.tapHz, t, PAN_TAU);
     this.master.gain.setTargetAtTime(s.volume, t, GATE_TAU);
 
     // Compensating here rather than at the oscillator keeps the gate, the mode
     // makeup and the loudness curve in one gain, so they cannot fight.
     const makeup = s.mode === "noise" ? NOISE_MAKEUP : 1;
-    const level = voice.open ? makeup * loudnessGain(voice.freq) : 0;
+    const level = voice.open && s.mode !== "taps" ? makeup * loudnessGain(voice.freq) : 0;
     this.voice.gain.setTargetAtTime(level, t, GATE_TAU);
 
     // The gate governs the taps too: background voxels are silent, not merely
@@ -206,18 +229,59 @@ export class Sonifier {
 
     const period = 1 / this.rate;
     for (const horizon = now + LOOKAHEAD_S; this.nextTap < horizon; this.nextTap += period) {
-      this.strike(this.nextTap);
+      this.strike(this.nextTap, period);
     }
   }
 
-  private strike(at: number): void {
+  /**
+   * Weighted for the band it is actually struck through, not for `TAP_HZ`.
+   *
+   * The ear is far more sensitive at 3.6 kHz than at 900, so a fixed level
+   * would make an anterior tap markedly louder than a posterior one — and a
+   * depth cue that also moves loudness is two cues that can disagree. Reading
+   * the curve at the current band leaves brightness as the only thing moving.
+   */
+  private strike(at: number, period: number): void {
+    const length = tapLength(period);
     const env = this.tapEnv.gain;
     env.setValueAtTime(0, at);
-    env.linearRampToValueAtTime(TAP_LEVEL, at + TAP_ATTACK);
+    env.linearRampToValueAtTime(loudnessGain(this.tapHz), at + TAP_ATTACK);
     // Exponential decay cannot reach zero, so land near it and snap the rest.
-    env.exponentialRampToValueAtTime(0.001, at + TAP_LENGTH);
-    env.setValueAtTime(0, at + TAP_LENGTH);
+    env.exponentialRampToValueAtTime(0.001, at + length);
+    env.setValueAtTime(0, at + length);
   }
+}
+
+/**
+ * How long one tap may last, given the gap to the next.
+ *
+ * At ordinary rates this is the full envelope. As the rate climbs the tap is
+ * clipped to a share of the period, so there is always silence between taps to
+ * hear the rhythm in; the attack is never sacrificed, since the attack is what
+ * makes it read as a strike at all.
+ */
+export function tapLength(period: number): number {
+  if (!(period > 0)) return TAP_ATTACK + TAP_DECAY;
+  const room = Math.max(0, period * TAP_DUTY - TAP_ATTACK);
+  return TAP_ATTACK + Math.min(TAP_DECAY, room);
+}
+
+/**
+ * The band a tap is struck through, given where it sits front to back.
+ *
+ * Geometric about `TAP_HZ`, for the reason pitch is: a timbral step is heard as
+ * a ratio, so spacing the band linearly would crowd every audible difference
+ * into the anterior half and leave the posterior half sounding uniformly dull.
+ *
+ * Brightness is the cue because front-back is the axis stereo cannot carry —
+ * a source ahead and a source behind give the ears the same time and level
+ * difference, and what separates them in life is the pinna filtering sound
+ * from behind. A tap is a broadband burst, which is the ideal thing to hang a
+ * spectral cue on; a sustained tone would only shift in colour.
+ */
+export function tapBand(anteriority: number, octaves = TAP_OCTAVES): number {
+  const clamped = Math.min(1, Math.max(-1, anteriority));
+  return TAP_HZ * Math.pow(2, clamped * octaves);
 }
 
 /** Voss-McCartney style pink noise, close enough for a texture source. */
