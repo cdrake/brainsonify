@@ -100,7 +100,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Bone rhythm",
     summary:
       "The tap rate follows how bone-like the tissue is rather than how opaque, so the skull flutters where a T1 renders it as a void and soft tissue barely ticks.",
-    commit: "unreleased",
+    commit: "672eb3b",
     channels: { stereo: true, rhythm: false, bone: true, depth: false },
     taps: BONE_TAPS,
   },
@@ -110,7 +110,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Depth",
     summary:
       "Keeps the bone rhythm and gives the tap a front-back position too: an anterior tap is bright and clicky, a posterior one dull, so one strike carries both what the tissue is and where it sits.",
-    commit: "unreleased",
+    commit: "672eb3b",
     channels: { stereo: true, rhythm: false, bone: true, depth: true },
     taps: BONE_TAPS,
   },

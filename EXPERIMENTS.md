@@ -126,7 +126,7 @@ directly.
 
 ## 04 — Bone rhythm
 
-`?experiment=04-bone` · unreleased
+`?experiment=04-bone` · `672eb3b`
 
 Same three channels as 03, with one substitution: the tap rate follows
 *boneness* rather than opacity. Pitch still tracks intensity and stereo still
@@ -281,7 +281,7 @@ your head", and that a listener has no way to check it.
 
 ## 05 — Depth
 
-`?experiment=05-depth` · **default**
+`?experiment=05-depth` · `672eb3b` · **default**
 
 ### What it maps
 
