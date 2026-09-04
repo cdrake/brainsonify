@@ -22,7 +22,7 @@ interface NiivueInternals {
 export interface Sample {
   /** Raw voxel intensity under the pointer. */
   raw: number;
-  /** World coordinate of the voxel that produced `raw`, in millimetres. */
+  /** World coordinate of the voxel that produced `raw`, in millimeters. */
   mm: [number, number, number];
   /** Index of that voxel, for maps computed in voxel space rather than mm. */
   vox: [number, number, number];
@@ -95,6 +95,12 @@ export class VoxelSampler {
     this.pickDepth(x, y, surfaceDepth, onSample);
   }
 
+  /** Reads the voxel at a fractional volume position, used by accessible nudges. */
+  sampleFraction(frac: ArrayLike<number>, onSample: (s: Sample | null) => void): void {
+    if (!this.nv.volumes.length) return onSample(null);
+    onSample(this.read([frac[0], frac[1], frac[2]]));
+  }
+
   private pickDepth(
     x: number,
     y: number,
@@ -112,8 +118,8 @@ export class VoxelSampler {
       // NiiVue draws the 3D crosshair into the framebuffer *after* the picking
       // shader and *before* readPixels. Since the crosshair is drawn wherever
       // crosshairPos is, it parks under the pointer and the pick reads its
-      // colour instead of the encoded position: the alpha is no longer
-      // VOLUME_ID, so NiiVue takes the mesh branch, decodes that colour as a
+      // color instead of the encoded position: the alpha is no longer
+      // VOLUME_ID, so NiiVue takes the mesh branch, decodes that color as a
       // depth and unprojects it to a point inside the head. Worse, it feeds
       // itself — once the crosshair follows the pointer it shadows every later
       // pick. Hide it for the pick draw, then restore and redraw for display.

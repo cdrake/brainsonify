@@ -3,8 +3,10 @@ import { loudnessGain } from "./loudness";
 /**
  * What the continuous voice does. `taps` silences it entirely, leaving only the
  * tap layer — the density channel on its own, with nothing to listen past.
+ * `texture` is unpitched: brightness carries intensity instead of pitch, so
+ * there is no tonal center for the taps to compete with.
  */
-export type Mode = "tone" | "noise" | "taps";
+export type Mode = "tone" | "noise" | "texture" | "taps";
 
 export interface AudioSettings {
   mode: Mode;
@@ -22,6 +24,8 @@ export interface VoiceState {
   pan: number;
   /** Front-back position, -1 fully posterior to +1 fully anterior. 0 is neutral. */
   depth: number;
+  /** Inferior-superior position, -1 low to +1 high, mapped to loudness. */
+  height: number;
   /** Tap rate in taps per second, from opacity. 0 leaves the tap layer silent. */
   taps: number;
   /** False closes the gate but keeps pitch and position tracking. */
@@ -38,6 +42,12 @@ const GATE_TAU = 0.015;
 const PAN_TAU = 0.012;
 /** Noise is perceptually quieter than a sine at the same gain. */
 const NOISE_MAKEUP = 1.6;
+/**
+ * Time constant for the per-source gains that switch which of tone, noise, or
+ * texture is heard. Fast enough that a mode change doesn't leave the old and
+ * new source audibly crossfading, slow enough to avoid a click.
+ */
+const SOURCE_TAU = 0.01;
 
 /**
  * A tap: near-instant attack, short decay, so it reads as a struck surface
@@ -67,6 +77,8 @@ const TAP_Q = 3;
  * of.
  */
 const TAP_OCTAVES = 1;
+/** The height cue attenuates the lower end without exceeding master volume. */
+const HEIGHT_MIN_GAIN = 0.6;
 
 /** How far ahead taps are scheduled, and how often the scheduler tops up. */
 const LOOKAHEAD_S = 0.1;
@@ -85,7 +97,11 @@ const PUMP_MS = 25;
 export class Sonifier {
   private ctx: AudioContext | null = null;
   private osc!: OscillatorNode;
+  private oscGain!: GainNode;
   private filter!: BiquadFilterNode;
+  private noiseGain!: GainNode;
+  private textureFilter!: BiquadFilterNode;
+  private textureGain!: GainNode;
   private voice!: GainNode;
   private tapEnv!: GainNode;
   private tapFilter!: BiquadFilterNode;
@@ -114,16 +130,32 @@ export class Sonifier {
     this.master.gain.value = 0;
     this.master.connect(this.panner);
 
-    // ---- tone: sine, or pink noise band-passed at the mapped frequency ----
+    // ---- the continuous voice: one of three sources, gated by mode ----
+    //
+    // All three stay connected and running for the life of the context —
+    // starting and stopping a node per mode switch is audible as a click —
+    // but each has its own gain ahead of `voice`, and only the active mode's
+    // gain is open. Without that, switching modes would only change which
+    // frequency is being animated; the other source would still be sounding
+    // underneath it, quietly, which defeats the point of `texture` in
+    // particular: a clean, unpitched bed for the taps to read against.
 
     this.voice = ctx.createGain();
     this.voice.gain.value = 0;
     this.voice.connect(this.master);
 
+    this.oscGain = ctx.createGain();
+    this.oscGain.gain.value = 1;
+    this.oscGain.connect(this.voice);
+
     this.osc = ctx.createOscillator();
     this.osc.type = "sine";
     this.osc.frequency.value = 220;
-    this.osc.connect(this.voice);
+    this.osc.connect(this.oscGain);
+
+    this.noiseGain = ctx.createGain();
+    this.noiseGain.gain.value = 0;
+    this.noiseGain.connect(this.voice);
 
     const noise = ctx.createBufferSource();
     noise.buffer = pinkNoiseBuffer(ctx, 2);
@@ -134,9 +166,36 @@ export class Sonifier {
     this.filter.Q.value = 6;
     this.filter.frequency.value = 400;
     noise.connect(this.filter);
-    this.filter.connect(this.voice);
+    this.filter.connect(this.noiseGain);
 
-    // ---- taps: the same noise, struck through a band that moves with depth ----
+    // `texture`: flat white noise through a lowpass whose cutoff carries
+    // intensity as brightness — dull and muffled at the low end, an open hiss
+    // at the top. A lowpass has no resonant center the way the bandpass above
+    // does, which is the actual point: nothing here should read as a pitch.
+    // White rather than the pink noise used above and by the taps, so the
+    // voice and the taps differ in color as well as in rhythm — two cues for
+    // the ear to tell them apart by, not one.
+    //
+    // Loudness is not compensated for the lowpass's own bandwidth: a wider
+    // passband admits more of a flat spectrum, so the raw signal gets louder
+    // as the cutoff opens, on top of whatever `loudnessGain` does below for
+    // ear sensitivity. That is a real, unmeasured gap — see NOTES.md.
+
+    this.textureGain = ctx.createGain();
+    this.textureGain.gain.value = 0;
+    this.textureGain.connect(this.voice);
+
+    const texture = ctx.createBufferSource();
+    texture.buffer = whiteNoiseBuffer(ctx, 2);
+    texture.loop = true;
+
+    this.textureFilter = ctx.createBiquadFilter();
+    this.textureFilter.type = "lowpass";
+    this.textureFilter.frequency.value = 400;
+    texture.connect(this.textureFilter);
+    this.textureFilter.connect(this.textureGain);
+
+    // ---- taps: pink noise, struck through a band that moves with depth ----
 
     this.tapEnv = ctx.createGain();
     this.tapEnv.gain.value = 0;
@@ -155,6 +214,7 @@ export class Sonifier {
 
     this.osc.start();
     noise.start();
+    texture.start();
     tapNoise.start();
 
     this.pump ??= setInterval(() => this.scheduleTaps(), PUMP_MS);
@@ -177,8 +237,21 @@ export class Sonifier {
 
     const t = ctx.currentTime;
     const tau = Math.max(s.glide, 0.001);
-    const target = s.mode === "tone" ? this.osc.frequency : this.filter.frequency;
+    const target =
+      s.mode === "tone"
+        ? this.osc.frequency
+        : s.mode === "texture"
+          ? this.textureFilter.frequency
+          : this.filter.frequency;
     target.setTargetAtTime(voice.freq, t, tau);
+
+    // Only the active mode's source is heard; the other two stay running but
+    // muted at their own gain, ahead of `voice` (see `build()`). This is a
+    // separate switch from the gate below — glide and gate both apply to
+    // whichever source is currently open.
+    this.oscGain.gain.setTargetAtTime(s.mode === "tone" ? 1 : 0, t, SOURCE_TAU);
+    this.noiseGain.gain.setTargetAtTime(s.mode === "noise" ? 1 : 0, t, SOURCE_TAU);
+    this.textureGain.gain.setTargetAtTime(s.mode === "texture" ? 1 : 0, t, SOURCE_TAU);
 
     this.panner.pan.setTargetAtTime(Math.min(1, Math.max(-1, voice.pan)), t, PAN_TAU);
 
@@ -187,7 +260,7 @@ export class Sonifier {
     // feel equally attached to the pointer.
     this.tapHz = tapBand(voice.depth);
     this.tapFilter.frequency.setTargetAtTime(this.tapHz, t, PAN_TAU);
-    this.master.gain.setTargetAtTime(s.volume, t, GATE_TAU);
+    this.master.gain.setTargetAtTime(s.volume * heightGain(voice.height), t, GATE_TAU);
 
     // Compensating here rather than at the oscillator keeps the gate, the mode
     // makeup and the loudness curve in one gain, so they cannot fight.
@@ -277,11 +350,27 @@ export function tapLength(period: number): number {
  * a source ahead and a source behind give the ears the same time and level
  * difference, and what separates them in life is the pinna filtering sound
  * from behind. A tap is a broadband burst, which is the ideal thing to hang a
- * spectral cue on; a sustained tone would only shift in colour.
+ * spectral cue on; a sustained tone would only shift in color.
  */
 export function tapBand(anteriority: number, octaves = TAP_OCTAVES): number {
   const clamped = Math.min(1, Math.max(-1, anteriority));
   return TAP_HZ * Math.pow(2, clamped * octaves);
+}
+
+/** Maps inferior-superior position into a bounded loudness window. */
+export function heightGain(height: number, minimum = HEIGHT_MIN_GAIN): number {
+  const clamped = Math.min(1, Math.max(-1, height));
+  const floor = Math.min(1, Math.max(0, minimum));
+  return floor + ((clamped + 1) / 2) * (1 - floor);
+}
+
+/** Flat white noise: independent random samples, no spectral shaping. */
+function whiteNoiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
+  const length = Math.floor(ctx.sampleRate * seconds);
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+  return buffer;
 }
 
 /** Voss-McCartney style pink noise, close enough for a texture source. */

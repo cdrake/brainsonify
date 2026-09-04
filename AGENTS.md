@@ -52,7 +52,7 @@ Cover whichever of these the session actually produced. Skip the rest.
   approach was abandoned is what stops it being reconsidered from scratch in
   November.
 - **Implementation notes** — only what was surprising or cost real time. API
-  quirks, undocumented behaviour, wrong turns. Not a changelog.
+  quirks, undocumented behavior, wrong turns. Not a changelog.
 - **Open questions**, phrased as questions.
 - **Next.** Concrete actions, not aspirations.
 
@@ -63,7 +63,7 @@ cannot reconstruct why one approach beat another. If a paragraph would still be
 true after reading the diff, it probably belongs in the README instead.
 
 **Never invent technical detail.** Do not supply a number, a parameter, an API
-behaviour, or a measurement that Chris did not state and that is not verifiable in
+behavior, or a measurement that Chris did not state and that is not verifiable in
 the repo. Where a specific is missing, leave an explicit placeholder:
 
 ```markdown

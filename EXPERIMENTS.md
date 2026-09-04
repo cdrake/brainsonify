@@ -12,6 +12,8 @@ panel links to the earlier ones.
 | 03 | Rhythm | [`?experiment=03-rhythm`](https://cdrake.github.io/brainsonify/?experiment=03-rhythm) | + tap rate ← opacity |
 | 04 | Bone rhythm | [`?experiment=04-bone`](https://cdrake.github.io/brainsonify/?experiment=04-bone) | tap rate ← boneness instead of opacity |
 | 05 | Depth | [`?experiment=05-depth`](https://cdrake.github.io/brainsonify/?experiment=05-depth) | + tap brightness ← anterior–posterior |
+| 06 | Height | [`?experiment=06-height`](https://cdrake.github.io/brainsonify/?experiment=06-height) | + loudness window ← inferior–superior |
+| 07 | Texture | [`?experiment=07-texture`](https://cdrake.github.io/brainsonify/?experiment=07-texture) | voice ← white noise, brightness ← intensity (replaces pitch) |
 
 The registry that drives all of this is `apps/brainsonify/src/experiments.ts`.
 It is the single source of truth: the switcher links, the default condition, and
@@ -43,7 +45,7 @@ came from; the listener has only the pointer, which is no help at all to
 someone who cannot see the screen.
 
 **What to listen for.** A lateral sweep across the cortical ribbon should give a
-repeating dip at every sulcus: CSF-dark trough, grey-matter crown.
+repeating dip at every sulcus: CSF-dark trough, gray-matter crown.
 
 **What it cannot do.** Two voxels of equal intensity on opposite sides of the
 head are indistinguishable. There is no way to tell a left-hemisphere sweep from
@@ -55,7 +57,7 @@ a right-hemisphere one, which makes "go to the structure I named" impossible.
 
 `?experiment=02-stereo` · `9caa560`
 
-Adds stereo panning driven by world X in millimetres, so the left hemisphere
+Adds stereo panning driven by world X in millimeters, so the left hemisphere
 sounds in the left ear. A `Stereo` slider scales the field from mono to
 hard-panned, and the readout names the side.
 
@@ -136,7 +138,7 @@ exactly one thing change.
 **Intensity cannot find bone, so this looks at shape.** Cortical bone has no
 signal on a T1 — there is nothing in its intensity to threshold, and 03 showed
 that reading opacity gets the answer backwards. What is distinctive about the
-skull is its *geometry*: a thin dark sheet, a few millimetres under the scalp,
+skull is its *geometry*: a thin dark sheet, a few millimeters under the scalp,
 wrapped around the head. That is a Hessian question. Eigenvalues of the
 smoothed second-derivative matrix, sorted |λ1| ≤ |λ2| ≤ |λ3|, describe the local
 shape; a dark plate is the case where λ3 is large and positive while the other
@@ -250,7 +252,7 @@ the rhythm says before putting pitch back on top of it.
 
 **What to listen for.** Sweeping down through the top of the head should give a
 brief flutter bracketed by slow ticks on either side — scalp outside, brain
-inside. The shell is thin, some four to seven millimetres: a raster of the 2D
+inside. The shell is thin, some four to seven millimeters: a raster of the 2D
 tiles put 52 of 73,616 sample points at boneness ≥ 0.8. Whether that is
 *findable* by ear, rather than merely present once found, is the open question,
 and the flutter is meant to help — a distinctive texture is easier to sweep for
@@ -286,7 +288,7 @@ your head", and that a listener has no way to check it.
 ### What it maps
 
 Everything 04 maps, plus front-back position on the tap itself. The rate still
-says what the tissue is; the *colour* of the strike says where it sits along the
+says what the tissue is; the *color* of the strike says where it sits along the
 anterior-posterior axis. An anterior tap is struck through a band an octave above
 the neutral 1800 Hz and reads bright and clicky; a posterior one an octave below
 and reads dull and woody. `Depth` scales the field the way `Stereo` scales the
@@ -322,7 +324,7 @@ through the app's own sampling path on `chris_t1`:
 world Y     readout      tap band
  -97 mm     P 86%          992 Hz
  -57 mm     P 43%         1336 Hz
- -17 mm     centre        1800 Hz
+ -17 mm     center        1800 Hz
  +23 mm     A 43%         2425 Hz
  +51 mm     A 71%         2944 Hz
 ```
@@ -340,10 +342,131 @@ _Not yet run with listeners._
 ### Still open
 
 - Does brightness survive being heard at the same time as the rate, or does a
-  fast flutter mask its own colour? The two share one strike, which is either
+  fast flutter mask its own color? The two share one strike, which is either
   economical or a collision.
 - Superior-inferior is still unmapped. Pitch is spoken for by intensity and rate
   by density, so the third axis has no free dimension left — and a listener who
   cannot see the crosshair has no other way to get it.
 - Whether front and back are told apart *absolutely* or only relatively. Nothing
   here anchors "bright" to "anterior" except practice.
+
+---
+
+## 07 — Texture
+
+`?experiment=07-texture` · commit: working · **default**
+
+### What it maps
+
+Everything 06 maps, with one substitution: the continuous voice becomes
+unpitched. Instead of a sine (01) or pink noise banded around the mapped
+frequency (the existing `Filtered noise` mode), `Texture` runs flat white
+noise through a lowpass filter whose cutoff tracks normalised intensity —
+dull and muffled at the low end, an open hiss at the top. Stereo, the bone
+rhythm, tap brightness, and the height loudness window are all unchanged from
+06; only what the base voice sounds like has moved.
+
+White noise rather than reusing the pink noise the taps and `Filtered noise`
+already use, so the voice and the taps differ in color as well as in rhythm —
+two cues for telling them apart, not one, since the whole point of the
+condition is to make the tapping legible against the voice rather than fused
+with it.
+
+### Why brightness, not loudness
+
+Loudness is already spoken for: 06 rides it for inferior-superior position.
+Doubling it up for intensity would mean two facts sharing one dimension, which
+is the same collision the front-back channel was built to avoid on the pan
+axis. Brightness — the lowpass cutoff — was open.
+
+### Why this, and not just "quieter tone"
+
+The motivating problem was that the pitched voice in every earlier condition
+has a tonal center, and a listener's attention keeps landing on pitch changes
+even when the rhythm is the thing meant to carry the tissue signal. A lowpass
+has no resonant center the way pitch, or even the existing bandpass `Filtered
+noise` mode, does — there is nothing here that should read as a note. The
+hypothesis is that an unpitched bed leaves more room to hear the taps as a
+foreground event, "in the background" of a texture rather than competing with
+a second pitch.
+
+### What to listen for
+
+Whether the bone rhythm is easier to follow under `Texture` than under `Pure
+tone`, especially at the vault boundary from 04 where the rate itself is doing
+most of the work. Whether the cutoff sweep still carries the sulcal-dip cue
+from 01, now as a change in hiss rather than a change in note.
+
+### Result
+
+_Not yet run with listeners._
+
+### Still open
+
+- Loudness is not compensated for the lowpass's own bandwidth: a wider
+  passband admits more of a flat spectrum, so the raw signal gets louder as
+  the cutoff opens, independently of whatever `loudnessGain` does for ear
+  sensitivity. This is unmeasured — see the equivalent note in
+  `libs/sonification/src/audio.ts`.
+- The lowpass's default cutoff span (110 Hz to the same octave range as the
+  pitch conditions) was carried over from `frequency()` unchanged. Whether
+  that span is the right one for a filter cutoff, as opposed to a pitch, has
+  not been checked by ear.
+- Whether unpitched noise actually reads as "background" the way the
+  hypothesis expects, or whether continuous broadband noise is just as
+  attention-grabbing as a tone, only louder in a different way.
+
+---
+
+## 08 — Regions
+
+Condition 07, with the region under the pointer named out loud when the
+pointer enters it. Everything else is unchanged: texture for intensity, the
+bone rhythm with its front-back brightness, loudness for height.
+
+### What it maps
+
+The world position of the sampled voxel, looked up in the AAL atlas, to a
+spoken name. The atlas is NiiVue's own copy of AAL, in MNI space, fetched at
+runtime and never shown: it is read through its own affine, so the scan's
+grid does not have to match it. Label 0 is unnamed. A name is spoken once the
+pointer has rested in a region for a moment, and a sweep straight across says
+nothing. The name is also written into the `region` readout row.
+
+The lookup is on for the MNI152 demo and for a file dropped in, which is
+assumed to be in MNI space, and off for the whole-head T1, which is not.
+
+### Why a word, and not a sound
+
+Every earlier channel carries a quantity or a position, and each found a
+dimension of sound to carry it. A region name is neither: it is one of a
+hundred-odd categories, and there is no dimension of sound with that many
+distinguishable steps that a listener could learn in a session. Speech is the
+one channel that already has the vocabulary. The cost is that it competes
+with the rest for attention, which is why it is said once on entry and not
+repeated.
+
+### What to listen for
+
+Whether a name over the texture and the taps is heard as a label for what
+the ear is already following, or whether it stops the listening while it is
+said. Whether the dwell is short enough to feel like a response and long
+enough that a sweep stays quiet. Whether "left" and "right" in the name agree
+with which ear the tone is in.
+
+### Result
+
+_Not yet run with listeners._
+
+### Still open
+
+- The dwell before a name is spoken was chosen, not measured. The right
+  value is whatever separates "passing through" from "stopped here", and only
+  listening will say what that is.
+- The spoken name keeps AAL's word order after the side, so it says "frontal
+  superior" where an anatomist would say "superior frontal gyrus". Whether
+  that reads, or whether the names need a hand-written table, is untested.
+- The sound key has no step for the atlas, since the atlas explains itself
+  the first time it speaks. Whether it should still be announced is open.
+- A dropped-in file is assumed to be in MNI space. There is no check, and a
+  scan that is not will be labelled with confidence.

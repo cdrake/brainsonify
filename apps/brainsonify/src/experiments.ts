@@ -11,7 +11,7 @@
  * visitor gets by default.
  */
 
-import { BONE_TAPS, DEFAULT_TAPS, type TapRange } from "@brainsonify/sonification";
+import { BONE_TAPS, DEFAULT_TAPS, type Mode, type TapRange } from "@brainsonify/sonification";
 
 /**
  * Which mappings a condition turns on. A channel that is off is not merely
@@ -34,11 +34,20 @@ export interface Channels {
    * Front-back position from world Y, carried as the brightness of the tap.
    *
    * Rides whichever signal is already driving the taps rather than replacing
-   * it: the rate still says what the tissue is, and the colour says where it
+   * it: the rate still says what the tissue is, and the color says where it
    * is. Needs a tap layer to ride, so it is only meaningful alongside `rhythm`
    * or `bone`.
    */
   depth: boolean;
+  /** Inferior-superior position from world Z, carried by loudness. */
+  height: boolean;
+  /**
+   * The name of the atlas region under the pointer, spoken on entry.
+   *
+   * Not a sound but a word, over whatever the other channels are doing. The
+   * atlas is in MNI space, so this only means anything on a scan that is too.
+   */
+  atlas: boolean;
 }
 
 export interface Experiment {
@@ -53,6 +62,12 @@ export interface Experiment {
   /** Commit this condition was last its own HEAD at, for provenance. */
   commit: string;
   channels: Channels;
+  /**
+   * Which continuous-voice mode this condition opens with, if it needs one
+   * other than the default. A visitor can still switch the `Mapping` control
+   * themselves; this only sets where it starts.
+   */
+  mode?: Mode;
   /**
    * The tap rates this condition spends, if it taps at all.
    *
@@ -73,7 +88,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Pitch tracks voxel intensity. A single mono voice, with no cue for where in the volume it came from.",
     commit: "55390a3",
-    channels: { stereo: false, rhythm: false, bone: false, depth: false },
+    channels: { stereo: false, rhythm: false, bone: false, depth: false, height: false, atlas: false },
   },
   {
     id: "02-stereo",
@@ -82,7 +97,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Pitch tracks intensity and the stereo image carries anatomical left-right, so the left hemisphere sounds in your left ear.",
     commit: "9caa560",
-    channels: { stereo: true, rhythm: false, bone: false, depth: false },
+    channels: { stereo: true, rhythm: false, bone: false, depth: false, height: false, atlas: false },
   },
   {
     id: "03-rhythm",
@@ -91,7 +106,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Adds a tap whose rate follows opacity, so dense tissue rattles and near-transparent tissue ticks.",
     commit: "a7fc509",
-    channels: { stereo: true, rhythm: true, bone: false, depth: false },
+    channels: { stereo: true, rhythm: true, bone: false, depth: false, height: false, atlas: false },
     taps: DEFAULT_TAPS,
   },
   {
@@ -101,7 +116,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "The tap rate follows how bone-like the tissue is rather than how opaque, so the skull flutters where a T1 renders it as a void and soft tissue barely ticks.",
     commit: "672eb3b",
-    channels: { stereo: true, rhythm: false, bone: true, depth: false },
+    channels: { stereo: true, rhythm: false, bone: true, depth: false, height: false, atlas: false },
     taps: BONE_TAPS,
   },
   {
@@ -111,8 +126,40 @@ export const EXPERIMENTS: readonly Experiment[] = [
     summary:
       "Keeps the bone rhythm and gives the tap a front-back position too: an anterior tap is bright and clicky, a posterior one dull, so one strike carries both what the tissue is and where it sits.",
     commit: "672eb3b",
-    channels: { stereo: true, rhythm: false, bone: true, depth: true },
+    channels: { stereo: true, rhythm: false, bone: true, depth: true, height: false, atlas: false },
     taps: BONE_TAPS,
+  },
+  {
+    id: "06-height",
+    number: "06",
+    name: "Height",
+    summary:
+      "Adds a loudness window for anatomical inferior-superior position: lower voxels are quieter and higher voxels louder.",
+    commit: "working",
+    channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: false },
+    taps: BONE_TAPS,
+  },
+  {
+    id: "07-texture",
+    number: "07",
+    name: "Texture",
+    summary:
+      "Replaces the pitched voice with unpitched white noise: brightness carries intensity instead of pitch, so there is no tonal center for the bone rhythm to compete with, and the taps can read as a foreground event against a flat bed rather than a texture riding on top of a moving tone.",
+    commit: "working",
+    channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: false },
+    taps: BONE_TAPS,
+    mode: "texture",
+  },
+  {
+    id: "08-regions",
+    number: "08",
+    name: "Regions",
+    summary:
+      "Keeps the texture and bone rhythm of 07 and names the anatomy: entering a region of the AAL atlas is called out in speech, so a listener gets a label as well as a position.",
+    commit: "working",
+    channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
+    taps: BONE_TAPS,
+    mode: "texture",
   },
 ];
 

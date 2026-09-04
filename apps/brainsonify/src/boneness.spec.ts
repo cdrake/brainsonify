@@ -6,6 +6,7 @@ import {
   bonenessAt,
   computeBoneness,
   convolve1d,
+  densestVoxel,
   depthFromSurface,
   downsample2,
   eigSym3,
@@ -65,7 +66,7 @@ describe("gaussianKernel", () => {
   });
 
   it("gives the second derivative the sign of the curvature it measures", () => {
-    // Negative at the centre: a bright ridge curves downward away from its peak.
+    // Negative at the center: a bright ridge curves downward away from its peak.
     const k = gaussianKernel(1.5, 2);
     expect(k[(k.length - 1) / 2]).toBeLessThan(0);
   });
@@ -116,7 +117,7 @@ describe("sheetness", () => {
     const r = sheetness(phantom, 1.5);
     const at = (i: number) => r[index(i, 20, 20, phantom.dims)];
 
-    // Depth 6-8 below the face at i=4, so the sheet centre is i=11.
+    // Depth 6-8 below the face at i=4, so the sheet center is i=11.
     expect(at(11)).toBeGreaterThan(0.4);
     expect(at(20)).toBeLessThan(0.05); // solid interior
   });
@@ -145,7 +146,7 @@ describe("sheetness", () => {
 });
 
 describe("depthFromSurface", () => {
-  it("measures millimetres in from the outside, not voxels", () => {
+  it("measures millimeters in from the outside, not voxels", () => {
     const n = 24;
     const dims: Dims = [n, n, n];
     const data = new Float32Array(n ** 3);
@@ -154,7 +155,7 @@ describe("depthFromSurface", () => {
         for (let i = 4; i < 20; i++) data[index(i, j, k, dims)] = 1;
 
     const depth = depthFromSurface({ data, dims, zoom: [2, 2, 2] }, 0.08);
-    // The block is 16 voxels across at 2mm, so its centre is 16mm from the face.
+    // The block is 16 voxels across at 2mm, so its center is 16mm from the face.
     expect(depth[index(12, 12, 12, dims)]).toBeCloseTo(16, 0);
     expect(depth[index(4, 12, 12, dims)]).toBeCloseTo(2, 0);
     expect(depth[index(0, 0, 0, dims)]).toBe(0);
@@ -178,7 +179,7 @@ describe("depthFromSurface", () => {
 });
 
 describe("downsample2", () => {
-  it("halves each axis and doubles the millimetres per voxel", () => {
+  it("halves each axis and doubles the millimeters per voxel", () => {
     const grid: Grid = {
       data: new Float32Array(8 * 6 * 4).fill(1),
       dims: [8, 6, 4],
@@ -295,5 +296,44 @@ describe("reach", () => {
     expect(wide.dims).toEqual(dims);
     expect(wide.factor).toBe(2);
     expect(wide.zoom).toEqual(zoom);
+  });
+});
+
+describe("densestVoxel", () => {
+  const dims: Dims = [9, 9, 9];
+  const zoom: Zoom = [2, 2, 2];
+  const seeded = () => {
+    const data = new Float32Array(dims[0] * dims[1] * dims[2]);
+    data[index(4, 4, 4, dims)] = 0.3;
+    data[index(6, 4, 4, dims)] = 0.9;
+    return { data, dims, factor: 2, zoom };
+  };
+
+  it("points at the voxel the reported value actually came from, not the queried one", () => {
+    const wide = reach(seeded(), 4);
+    // Coarse (5,4,4) reports the stronger neighbor at coarse (6,4,4), which
+    // is full-resolution (12,8,8) under factor 2.
+    expect(densestVoxel(wide, 10, 8, 8)).toEqual([12, 8, 8]);
+  });
+
+  it("points a weaker cell at its stronger neighbor rather than itself", () => {
+    const wide = reach(seeded(), 4);
+    // Full-resolution (8,8,8) is coarse (4,4,4), the 0.3 seed itself, whose
+    // own reach also finds the 0.9 neighbor.
+    expect(densestVoxel(wide, 8, 8, 8)).toEqual([12, 8, 8]);
+  });
+
+  it("returns null where nothing in reach clears zero, rather than the queried voxel", () => {
+    const wide = reach(seeded(), 4);
+    expect(densestVoxel(wide, 0, 0, 0)).toBeNull();
+  });
+
+  it("points a zero-reach map at itself, the one honest measurement", () => {
+    const point = reach(seeded(), 0);
+    expect(densestVoxel(point, 8, 8, 8)).toEqual([8, 8, 8]);
+  });
+
+  it("returns null for a map that has not been through reach() yet", () => {
+    expect(densestVoxel(seeded(), 8, 8, 8)).toBeNull();
   });
 });

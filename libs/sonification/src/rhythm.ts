@@ -94,7 +94,7 @@ export function relativeOpacity(alpha: number, peak: number): number {
  * the listener unable to say whether a middling rate means "partly bone" or
  * "somewhere near bone".
  *
- * A logistic centred on `mid`, rescaled so 0 and 1 still land on 0 and 1: a
+ * A logistic centered on `mid`, rescaled so 0 and 1 still land on 0 and 1: a
  * gradual climb becomes a step with soft shoulders. The shoulders matter —
  * a hard threshold would chatter between two rates as the pointer wanders
  * across it.

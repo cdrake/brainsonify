@@ -9,7 +9,7 @@ export type IntensityRange = Extent;
 
 export const DEFAULT_RANGE: IntensityRange = { lo: 0, hi: 1 };
 
-/** A volume's world-space bounding box, in millimetres, per axis. */
+/** A volume's world-space bounding box, in millimeters, per axis. */
 export interface Bounds {
   x: Extent;
   y: Extent;
@@ -65,6 +65,11 @@ export function pan(mm: number, extent: Extent, width: number): number {
  */
 export function anteriority(mm: number, extent: Extent, spread: number): number {
   return signedPosition(mm, extent, spread);
+}
+
+/** Places a world coordinate on the inferior-superior axis, -1 to +1. */
+export function elevation(mm: number, extent: Extent): number {
+  return signedPosition(mm, extent, 1);
 }
 
 /**

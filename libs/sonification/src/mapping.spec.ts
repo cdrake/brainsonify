@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_RANGE, anteriority, boundsFromFrac, frequency, normalise, pan } from "./mapping";
+import {
+  DEFAULT_RANGE,
+  anteriority,
+  boundsFromFrac,
+  elevation,
+  frequency,
+  normalise,
+  pan,
+} from "./mapping";
 
 describe("normalise", () => {
   const range = { lo: 0, hi: 200 };
@@ -48,7 +56,7 @@ describe("frequency", () => {
 const LR = { lo: -90, hi: 90 };
 
 describe("pan", () => {
-  it("puts the midline dead centre and the extremes hard over", () => {
+  it("puts the midline dead center and the extremes hard over", () => {
     expect(pan(0, LR, 1)).toBeCloseTo(0);
     expect(pan(-90, LR, 1)).toBeCloseTo(-1);
     expect(pan(90, LR, 1)).toBeCloseTo(1);
@@ -70,7 +78,7 @@ describe("pan", () => {
     expect(pan(-90, LR, 4)).toBeCloseTo(-1);
   });
 
-  it("stays centred for a degenerate extent instead of pinning hard left", () => {
+  it("stays centered for a degenerate extent instead of pinning hard left", () => {
     // normalise returns 0 for an empty span; naively reusing it here would
     // map every voxel to -1 and silently mute one channel.
     expect(pan(10, { lo: 5, hi: 5 }, 1)).toBe(0);
@@ -123,5 +131,19 @@ describe("anteriority", () => {
     expect(anteriority(50, extent, 1)).toBe(pan(50, extent, 1));
     expect(pan(50, extent, 0)).toBe(0);
     expect(anteriority(50, extent, 1)).toBe(0.5);
+  });
+});
+
+describe("elevation", () => {
+  const extent = { lo: -100, hi: 100 };
+
+  it("puts inferior below zero and superior above zero", () => {
+    expect(elevation(-100, extent)).toBe(-1);
+    expect(elevation(0, extent)).toBe(0);
+    expect(elevation(100, extent)).toBe(1);
+  });
+
+  it("stays neutral for a volume with no thickness on Z", () => {
+    expect(elevation(5, { lo: 3, hi: 3 })).toBe(0);
   });
 });

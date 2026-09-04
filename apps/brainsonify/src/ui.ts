@@ -62,7 +62,7 @@ export class Controls {
     };
   }
 
-  /** How far the bone probe reaches, in millimetres. 0 reads a single voxel. */
+  /** How far the bone probe reaches, in millimeters. 0 reads a single voxel. */
   get spike(): number {
     return Number(this.spikeReach.value);
   }
@@ -99,6 +99,12 @@ export class Controls {
     this.syncLabels();
   }
 
+  /** Sets the `Mapping` select, for a condition that wants a different default. */
+  setMode(mode: Mode): void {
+    this.mode.value = mode;
+    this.syncLabels();
+  }
+
   private syncLabels(): void {
     const v = this.values;
     el("fLoV").textContent = `${v.lowHz} Hz`;
@@ -121,18 +127,22 @@ export interface Reading {
   raw: number;
   norm: number;
   freq: number;
-  /** World coordinate in millimetres. */
+  /** World coordinate in millimeters. */
   mm?: readonly number[];
   /** Stereo position, -1..1. */
   pan?: number;
   /** Front-back position, -1 posterior to +1 anterior. */
   depth?: number;
+  /** Inferior-superior position, -1 low to +1 high. */
+  height?: number;
   /** Colormap alpha at this voxel, 0..1. */
   opacity?: number;
   /** How bone-like this voxel is, 0..1, or null while the map is still building. */
   bone?: number | null;
   /** Tap rate in taps per second. */
   taps?: number;
+  /** The atlas region under the pointer, or null where nothing is labelled. */
+  region?: string | null;
   /** Which pick branch produced the sample. */
   source?: string;
 }
@@ -145,10 +155,14 @@ export class Readout {
   private mm = el("rMM");
   private stereo = el("rPan");
   private depth = el("rDepth");
+  private height = el("rHeight");
   private opacity = el("rOpacity");
   private bone = el("rBone");
   private taps = el("rTaps");
   private src = el("rSrc");
+  private regionRow = el("rRegion");
+  /** What the region row says when there is no region to show: a loading or fitness note. */
+  private regionStatus: string | null = null;
   private bar = el<HTMLElement>("barFill");
 
   show(r: Reading): void {
@@ -158,10 +172,12 @@ export class Readout {
     if (r.mm !== undefined) this.mm.textContent = r.mm.map((n) => n.toFixed(0)).join(", ");
     this.stereo.textContent = formatPan(r.pan ?? 0);
     this.depth.textContent = formatDepth(r.depth ?? 0);
+    this.height.textContent = formatHeight(r.height ?? 0);
     this.opacity.textContent = (r.opacity ?? 0).toFixed(2);
     this.bone.textContent = r.bone === undefined || r.bone === null ? "…" : r.bone.toFixed(2);
     this.taps.textContent = formatTaps(r.taps ?? 0);
     this.src.textContent = r.source ?? "2D slice";
+    this.regionRow.textContent = r.region ?? this.regionStatus ?? "\u2014";
     this.bar.style.width = `${r.norm * 100}%`;
   }
 
@@ -172,6 +188,7 @@ export class Readout {
       this.freq,
       this.stereo,
       this.depth,
+      this.height,
       this.opacity,
       this.bone,
       this.taps,
@@ -180,11 +197,18 @@ export class Readout {
     for (const node of rows) {
       node.textContent = "—";
     }
+    this.regionRow.textContent = this.regionStatus ?? "\u2014";
     this.bar.style.width = "0%";
   }
 
   status(text: string): void {
     this.value.textContent = text;
+  }
+
+  /** Sets what the region row shows while no region is under the pointer. */
+  region(status: string | null): void {
+    this.regionStatus = status;
+    this.regionRow.textContent = status ?? "\u2014";
   }
 }
 
@@ -262,7 +286,7 @@ function tag(name: string, text: string): HTMLElement {
 /**
  * Renders the clip depth as a share of the volume rather than a raw depth.
  *
- * The underlying units are a signed distance from the centre of the volume,
+ * The underlying units are a signed distance from the center of the volume,
  * which is meaningless to someone deciding how far to cut.
  */
 export function formatClip(cut: number): string {
@@ -284,14 +308,21 @@ export function formatTaps(rate: number): string {
  */
 export function formatDepth(depth: number): string {
   const magnitude = Math.round(Math.abs(depth) * 100);
-  if (magnitude === 0) return "centre";
+  if (magnitude === 0) return "center";
   return `${depth < 0 ? "P" : "A"} ${magnitude}%`;
+}
+
+/** Renders a -1..1 inferior-superior position anatomically. */
+export function formatHeight(height: number): string {
+  const magnitude = Math.round(Math.abs(height) * 100);
+  if (magnitude === 0) return "center";
+  return `${height < 0 ? "I" : "S"} ${magnitude}%`;
 }
 
 /** Renders a -1..1 stereo position the way a listener hears it. */
 export function formatPan(pan: number): string {
   const magnitude = Math.round(Math.abs(pan) * 100);
-  if (magnitude === 0) return "centre";
+  if (magnitude === 0) return "center";
   return `${pan < 0 ? "L" : "R"} ${magnitude}%`;
 }
 

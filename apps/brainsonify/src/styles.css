@@ -81,6 +81,20 @@ button:hover { background: #2a3140; }
 button.primary { background: #1e6fd9; border-color: #1e6fd9; }
 button.primary:hover { background: #2a7de6; }
 button.on { background: #158a4a; border-color: #158a4a; }
+button:disabled { opacity: .45; cursor: default; }
+button:disabled:hover { background: #202631; }
+
+/* The sound key's current label, for anyone reading rather than listening. */
+.keyCaption {
+  font-size: 12.5px;
+  color: #e6e8ea;
+  line-height: 1.4;
+  margin: -2px 0 12px;
+  padding: 7px 10px;
+  border-left: 3px solid #1e6fd9;
+  background: #17324f;
+  border-radius: 0 7px 7px 0;
+}
 
 .row { display: flex; gap: 8px; align-items: center; margin-bottom: 9px; flex-wrap: wrap; }
 .row--wide { flex: 1 1 100%; }
@@ -89,6 +103,29 @@ input[type=range] { flex: 1 1 90px; min-width: 80px; accent-color: #1e6fd9; }
 input[type=checkbox] { accent-color: #1e6fd9; margin-right: 6px; }
 select { width: 100%; }
 input[type=file] { font-size: 12px; width: 100%; }
+
+.crosshair {
+  border: 1px solid #2e3644;
+  border-radius: 7px;
+  margin: 0 0 9px;
+  padding: 7px 9px 9px;
+}
+.crosshair legend { padding: 0 4px; color: #aab3bf; font-size: 12.5px; }
+.crosshair .row { margin: 3px 0 9px; }
+.crosshairGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(56px, 1fr));
+  gap: 6px;
+  max-width: 230px;
+  margin: auto;
+}
+.crosshairGrid button { min-height: 44px; padding: 8px 4px; }
+.crosshairDepth { display: flex; gap: 6px; max-width: 230px; margin: 6px auto 0; }
+.crosshairDepth button { flex: 1; min-height: 44px; }
+button:focus-visible, select:focus-visible, input:focus-visible {
+  outline: 3px solid #6db3f2;
+  outline-offset: 2px;
+}
 
 .val {
   font-variant-numeric: tabular-nums;

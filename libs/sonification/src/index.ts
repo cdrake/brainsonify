@@ -1,11 +1,13 @@
 export {
   Sonifier,
+  heightGain,
   tapBand,
   tapLength,
   type AudioSettings,
   type Mode,
   type VoiceState,
 } from "./audio";
+export { soundKey, sweep, type KeyChannels, type KeySettings, type KeyStep } from "./key";
 export {
   LOUDNESS_COMPENSATION,
   LOUDNESS_REF_HZ,
@@ -17,6 +19,7 @@ export {
   DEFAULT_RANGE,
   anteriority,
   boundsFromFrac,
+  elevation,
   frequency,
   normalise,
   pan,

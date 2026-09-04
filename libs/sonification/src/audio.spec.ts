@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { tapBand, tapLength } from "./audio";
+import { heightGain, tapBand, tapLength } from "./audio";
 
 /**
  * The tap envelope, which is the part of the audio engine that can be reasoned
@@ -37,7 +37,7 @@ describe("tapLength", () => {
 });
 
 describe("tapBand", () => {
-  it("leaves a centred tap on the neutral band", () => {
+  it("leaves a centered tap on the neutral band", () => {
     expect(tapBand(0)).toBe(1800);
   });
 
@@ -47,7 +47,7 @@ describe("tapBand", () => {
     expect(tapBand(1) / tapBand(-1)).toBe(4);
   });
 
-  it("is geometric, so equal steps of position are equal ratios of colour", () => {
+  it("is geometric, so equal steps of position are equal ratios of color", () => {
     // Half way forward is half an octave up, not half the frequency span.
     expect(tapBand(0.5)).toBeCloseTo(1800 * Math.SQRT2, 6);
     expect(tapBand(0.5) / tapBand(0)).toBeCloseTo(tapBand(0) / tapBand(-0.5), 6);
@@ -62,5 +62,18 @@ describe("tapBand", () => {
   it("clamps, so a miscalculated position cannot put the band out of hearing", () => {
     expect(tapBand(9)).toBe(3600);
     expect(tapBand(-9)).toBe(900);
+  });
+});
+
+describe("heightGain", () => {
+  it("maps low, center, and high positions through a bounded window", () => {
+    expect(heightGain(-1)).toBeCloseTo(0.6);
+    expect(heightGain(0)).toBeCloseTo(0.8);
+    expect(heightGain(1)).toBe(1);
+  });
+
+  it("clamps positions and never boosts above the master volume", () => {
+    expect(heightGain(-9)).toBeCloseTo(0.6);
+    expect(heightGain(9)).toBe(1);
   });
 });

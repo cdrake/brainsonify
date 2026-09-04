@@ -107,7 +107,7 @@ describe("VoxelSampler 3D picking", () => {
 
     // NiiVue paints the crosshair over the picking-shader output before it
     // reads the pixel back, so a visible crosshair during the pick draw means
-    // the pick reads crosshair colour and lands somewhere under the surface.
+    // the pick reads crosshair color and lands somewhere under the surface.
     expect(crosshairVisibleDuringDraws[0]).toBe(false);
     expect(nv.opts.show3Dcrosshair).toBe(true);
     // The display must not be left without its crosshair.

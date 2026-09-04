@@ -35,6 +35,12 @@ export interface BoneMap {
   factor: number;
   /** Millimetres per entry on each axis, for reasoning in anatomy not indices. */
   zoom: Zoom;
+  /**
+   * Flat index into this same grid of where each entry's value actually came
+   * from. Only `reach()` sets this: the raw filter output has nothing to
+   * report but itself, so there is nothing to point at yet.
+   */
+  origin?: Int32Array;
 }
 
 const index = (i: number, j: number, k: number, [nx, ny]: Dims) => i + nx * (j + ny * k);
@@ -262,7 +268,7 @@ export function sheetness(
 
 /* ---------------- depth from the scalp ---------------- */
 
-/** Felzenszwalb's exact 1D squared distance transform, in millimetres. */
+/** Felzenszwalb's exact 1D squared distance transform, in millimeters. */
 function edt1d(f: Float64Array, n: number, spacing: number): Float64Array {
   const v = new Int32Array(n);
   const z = new Float64Array(n + 1);
@@ -301,7 +307,7 @@ function edt1d(f: Float64Array, n: number, spacing: number): Float64Array {
  * How far each voxel sits beneath the outer surface of the head, in mm.
  *
  * This is what separates skull from sulci. Both are thin dark sheets and the
- * Hessian likes both, but the skull is a shell a few millimetres under the
+ * Hessian likes both, but the skull is a shell a few millimeters under the
  * scalp and the sulci are everywhere else. Interior air — the sinuses, the ear
  * canals — is filled first, or it would read as a second outer surface and put
  * a spurious shell around the middle of the head.
@@ -514,7 +520,7 @@ export function computeBoneness(grid: Grid, options: BonenessOptions = {}): Bone
  * Sampling boneness at a point is the right measurement and the wrong probe.
  * The skull is a 4-7mm shell, which is a razor-thin target to hover: a raster
  * of the 2D tiles put 52 of 73,616 points on it. Worse, on the 3D render the
- * depth pick lands on the *scalp*, and the skull is several millimetres beneath
+ * depth pick lands on the *scalp*, and the skull is several millimeters beneath
  * that — so the one view the channel was built for could never sound bone at
  * all without clipping the head open first.
  *
@@ -530,25 +536,41 @@ export function computeBoneness(grid: Grid, options: BonenessOptions = {}): Bone
  */
 export function reach(map: BoneMap, radiusMm: number): BoneMap {
   const n = map.dims[0] * map.dims[1] * map.dims[2];
-  let src = Float32Array.from(map.data);
-  let dst = new Float32Array(n);
+  let srcVal = Float32Array.from(map.data);
+  let dstVal = new Float32Array(n);
+  // Starts as the identity: before any widening, an entry's value is its own.
+  let srcIdx = new Int32Array(n);
+  for (let i = 0; i < n; i++) srcIdx[i] = i;
+  let dstIdx = new Int32Array(n);
 
   if (radiusMm > 0) {
     for (const axis of [0, 1, 2] as const) {
       const radius = Math.round(radiusMm / map.zoom[axis]);
       if (radius < 1) continue;
-      maxAlongAxis(src, dst, map.dims, axis, radius);
-      [src, dst] = [dst, src];
+      maxAlongAxis(srcVal, dstVal, srcIdx, dstIdx, map.dims, axis, radius);
+      [srcVal, dstVal] = [dstVal, srcVal];
+      [srcIdx, dstIdx] = [dstIdx, srcIdx];
     }
   }
 
-  return { ...map, data: src };
+  return { ...map, data: srcVal, origin: srcIdx };
 }
 
-/** Sliding-window maximum along one axis, clamped at the ends. */
+/**
+ * Sliding-window maximum along one axis, clamped at the ends.
+ *
+ * Carries an index array alongside the values, so the max is not just a
+ * number but a pointer back to whichever original entry produced it. Each
+ * pass reads its index from `srcIdx` rather than recomputing a local
+ * position, so the index surviving three passes is the true flat index in
+ * the untouched grid, not an offset relative to whichever pass last touched
+ * it.
+ */
 function maxAlongAxis(
-  src: Float32Array,
-  dst: Float32Array,
+  srcVal: Float32Array,
+  dstVal: Float32Array,
+  srcIdx: Int32Array,
+  dstIdx: Int32Array,
   dims: Dims,
   axis: 0 | 1 | 2,
   radius: number,
@@ -565,16 +587,53 @@ function maxAlongAxis(
       const base = u * strides[a1] + v * strides[a2];
       for (let t = 0; t < n; t++) {
         let best = 0;
+        let bestIdx = base + t * stride;
         const lo = Math.max(0, t - radius);
         const hi = Math.min(n - 1, t + radius);
         for (let s = lo; s <= hi; s++) {
-          const value = src[base + s * stride];
-          if (value > best) best = value;
+          const at = base + s * stride;
+          const value = srcVal[at];
+          if (value > best) {
+            best = value;
+            bestIdx = srcIdx[at];
+          }
         }
-        dst[base + t * stride] = best;
+        dstVal[base + t * stride] = best;
+        dstIdx[base + t * stride] = bestIdx;
       }
     }
   }
+}
+
+/**
+ * Where the densest bone within reach of a full-resolution voxel actually is.
+ *
+ * `bonenessAt` answers "how bone-like is it here", which is what drives the
+ * tap rate; this answers "where is the bone that answer is talking about",
+ * which is nothing that number alone can say once the probe has widened it
+ * outward. Returns full-resolution voxel coordinates, on the same rounding
+ * convention `bonenessAt` uses to go the other way, so the two stay
+ * consistent with each other.
+ *
+ * Null when the map has not been through `reach()` yet, or when nothing
+ * within range cleared zero — a real "nothing here" rather than a location
+ * with nothing to say about it.
+ */
+export function densestVoxel(map: BoneMap, i: number, j: number, k: number): [number, number, number] | null {
+  if (!map.origin) return null;
+
+  const [nx, ny, nz] = map.dims;
+  const ci = Math.min(nx - 1, Math.max(0, Math.round(i / map.factor)));
+  const cj = Math.min(ny - 1, Math.max(0, Math.round(j / map.factor)));
+  const ck = Math.min(nz - 1, Math.max(0, Math.round(k / map.factor)));
+  const cell = index(ci, cj, ck, map.dims);
+  if (map.data[cell] <= 0) return null;
+
+  const origin = map.origin[cell];
+  const oi = origin % nx;
+  const oj = Math.floor(origin / nx) % ny;
+  const ok = Math.floor(origin / (nx * ny));
+  return [oi * map.factor, oj * map.factor, ok * map.factor];
 }
 
 /** Boneness at a full-resolution voxel index. Nearest entry; no interpolation. */

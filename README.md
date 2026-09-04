@@ -57,11 +57,14 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `libs/sonification/src/audio.ts` | `Sonifier`: sine or band-passed pink noise, gated, plus the tap layer |
 | `libs/sonification/src/rhythm.ts` | Colormap alpha → opacity → tap rate, and the contrast curve |
 | `libs/sonification/src/loudness.ts` | Equal-loudness weighting, so pitch does not double as level |
+| `libs/sonification/src/key.ts` | The sound key: one spoken-and-sounded step per active channel |
 | `apps/brainsonify/src/experiments.ts` | The experiment registry: conditions, channels, URL |
 | `apps/brainsonify/src/boneness.ts` | Hessian sheetness + surface alignment → how bone-like a voxel is |
 | `apps/brainsonify/src/boneness.worker.ts` | Runs that map off the main thread, once per volume |
 | `apps/brainsonify/src/sampler.ts` | Pointer position → voxel intensity, 2D and 3D |
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
+| `apps/brainsonify/src/soundkey.ts` | Plays the key: says each label, then drives the voice through its sweep |
+| `apps/brainsonify/src/atlas.ts` | The AAL atlas: world position to region name, spoken on entry |
 | `apps/brainsonify/src/main.ts` | Wiring, volume loading, drag and drop |
 
 ## Experiments
@@ -75,7 +78,10 @@ links to the earlier ones, and each has a stable URL:
 ?experiment=02-stereo    + stereo carries anatomical left-right
 ?experiment=03-rhythm    + tap rate follows opacity
 ?experiment=04-bone      tap rate follows boneness instead
-?experiment=05-depth     + tap brightness carries front-back        (default)
+?experiment=05-depth     + tap brightness carries front-back
+?experiment=06-height    + loudness carries inferior-superior
+?experiment=07-texture   white noise: brightness carries intensity, not pitch
+?experiment=08-regions   + the AAL region under the pointer is spoken     (default)
 ```
 
 Switching does not reload: a volume you dropped in survives the change, which is
@@ -110,7 +116,7 @@ registry that drives the switcher, the default, and the visible controls.
 - **Clipping to get inside.** On a whole-head scan the scalp and skull wrap
   everything, so the depth picker can only ever land on the outside — the render
   is a face, not a brain. `Clip` cuts the near side away, and because the picking
-  shader honours clip planes (`clipSampleRange` skips clipped samples) the pick
+  shader honors clip planes (`clipSampleRange` skips clipped samples) the pick
   then lands on whatever the cut exposes. The plane's normal is the camera's own
   angles flipped, so the opening faces the viewer and keeps facing them through a
   rotation instead of swinging round to the far side. A ray that passes only
@@ -130,31 +136,74 @@ registry that drives the switcher, the default, and the visible controls.
   ears the same arrival-time and level difference — the cone of confusion — so
   stereo carries left-right and nothing else. What separates front from back in
   life is the pinna filtering sound arriving from behind, which is a spectral
-  cue, so depth rides the *colour* of the tap rather than its position: anterior
-  taps are struck through a band an octave above centre and read bright and
+  cue, so depth rides the *color* of the tap rather than its position: anterior
+  taps are struck through a band an octave above center and read bright and
   clicky, posterior taps an octave below and read dull. A tap is a broadband
   burst and carries a spectral cue well; a sine would only change hue. The band
   is geometric about 1800 Hz, and each strike is weighted by the loudness curve
   at the band it is actually struck through — a fixed level would make anterior
   taps audibly louder as well as brighter, which is two cues that can disagree.
+- **Height uses a loudness window.** World Z maps inferior to superior as a
+  signed position. The output gain moves from 0.6 at the inferior extreme to
+  1.0 at the superior extreme, with the master `Volume` control remaining the
+  overall ceiling. This leaves pitch for intensity and tap brightness for
+  front-back.
 - **A measurement is not a probe.** Read at a point, that map is unusable: the
   skull is a 4-7mm shell, so 49 of 46,224 sample points land on it, and on the
   3D render the depth pick lands on the *scalp* with the bone several
-  millimetres beneath — the one view the channel exists for could never sound
+  millimeters beneath — the one view the channel exists for could never sound
   bone at all. `Spike` sets a reach, and `reach()` widens the map so every voxel
   reports the strongest bone within that distance, the way pressing on your own
   head finds the skull under it. At the 8mm default the target grows 53-fold and
   a third of scalp points sound the vault under them. The cost is real and is
   the point of making it adjustable: cortex within 8mm of the inner table
   reports bone too, so the boundary softens as the probe lengthens.
+- **The probe is drawn, not just heard.** A condition that taps on bone also
+  draws a line on the 2D tiles from the sampled voxel to the full-resolution
+  voxel `reach()` actually reported — `densestVoxel()` in `boneness.ts` decodes
+  it back from an index the widening filter carries alongside the value, the
+  same way a chain of sliding-window maximums can carry an argmax. The two
+  ends are rarely on the slice a tile is currently showing, so the line is
+  projected onto each tile's plane with the app's own `projectToTile()` rather
+  than NiiVue's `frac2canvasPos`, which refuses anything more than ~2mm off
+  the current slice — the right call for its own click-to-measure ruler, the
+  wrong one for a probe that by design reaches past the slice you are looking
+  at.
 - **Missed picks.** On a miss NiiVue leaves `scene.crosshairPos` untouched rather
   than signalling failure, so the app compares the object reference across the
   draw. Without that check, hovering off the head keeps sounding the last voxel
   that was hit.
-- **Audio.** A Web Audio oscillator (or band-passed pink noise) whose frequency
-  is set from the normalised intensity, with a configurable glide and a gate that
-  silences background voxels. Both sources run continuously and the gate rides
-  the output gain, which avoids clicks.
+- **Audio.** A Web Audio oscillator, band-passed pink noise, or low-passed
+  white noise, whose frequency (or cutoff) is set from the normalised
+  intensity, with a configurable glide and a gate that silences background
+  voxels. All three sources run continuously — each behind its own gain, only
+  one open at a time — and the gate rides the shared output gain, which avoids
+  clicks either way.
+- **The sound key.** Every condition assumes the listener knows what the
+  sounds mean, and a listener working by ear has no readout rows to learn it
+  from. So enabling sound plays a key: one step per active channel, in the
+  order the study added them, each announced by the browser's own speech
+  engine and then sounded with every other channel held neutral. Pitch sweeps
+  its range, the image pans left to right, the taps run from their slowest
+  rate to their fastest with the tone muted, and so on. The key is built from
+  the panel's current settings and played through the same `Sonifier` the
+  hover uses, so it cannot describe a mapping other than the one in force.
+  Hovering cuts it short; `Sound key` plays it again. The speech uses the
+  most natural English voice the browser offers (`Natural`, `Premium` or
+  `Enhanced`, then Chrome's Google voices), and the platform default when
+  there is none. The Google voices are Chrome's own: Safari and the browser
+  built into VS Code do not have them, and on a Mac with no `Premium` or
+  `Enhanced` voice downloaded they fall back to Samantha.
+- **Region names.** Condition 08 looks the voxel under the pointer up in the
+  AAL atlas and says the region's name when the pointer enters it, over
+  whatever else is sounding. The atlas is NiiVue's own copy, fetched at
+  runtime like the demo volumes and never added to the scene: it is looked
+  up by world position through its own affine, so the scan's grid never has
+  to match it. A name is spoken only once the pointer has rested in the
+  region for a moment, so a sweep across the cortex stays quiet rather than
+  stammering fragments; the same voice as the sound key says it, side first.
+  AAL is in MNI space, so the lookup is on for the MNI152 demo and for a
+  dropped-in file, which is assumed to be MNI, and off for the whole-head T1.
 - **Reading a rhythm takes time.** Two rates are compared by counting, and
   counting costs taps: telling 1.2/s from 3.9/s means waiting out two or three
   of each, close to a second, by which time the pointer has usually moved. The
@@ -178,7 +227,7 @@ registry that drives the switcher, the default, and the visible controls.
 
 | Control | Effect |
 |---|---|
-| Pure tone / filtered noise | Sine pitch, or noise band-passed at the mapped frequency |
+| Mapping | Sine pitch, pink noise band-passed at the mapped frequency, or white noise low-passed at it (brightness carries intensity, unpitched) |
 | Low | Frequency at intensity 0 |
 | Octaves | How much pitch range the intensity span covers |
 | Gate | Normalised intensity below which output is silenced |
@@ -186,11 +235,13 @@ registry that drives the switcher, the default, and the visible controls.
 | Clip | Cuts the near side off the render so the pointer can reach inside the head |
 | Volume | Master output level |
 | Stereo | Width of the anatomical left–right field, mono to hard-panned |
-| Depth | Spread of the front–back field, flat to a full two octaves of tap colour |
+| Depth | Spread of the front–back field, flat to a full two octaves of tap color |
+| Height | Loudness window for anatomical inferior–superior position |
 | Taps | Fastest tap rate, at the top of the driver's range; each condition sets its own default |
-| Spike | How far the bone probe reaches; the tapping reports the densest bone within it |
+| Spike | How far the bone probe reaches; the tapping reports the densest bone within it, and a line on the 2D tiles shows where |
 | Rate | Multiplies the whole rhythm, so the same contrast arrives sooner |
 | Taps only | Mutes the tone and leaves the density channel on its own |
+| Sound key | Replays the spoken key to the active condition's sounds; it also plays whenever sound is enabled |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
 

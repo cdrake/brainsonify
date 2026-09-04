@@ -18,7 +18,7 @@ function ramp(peak: number): Uint8ClampedArray {
 }
 
 describe("opacityFromLut", () => {
-  it("reads the alpha channel, not the colour", () => {
+  it("reads the alpha channel, not the color", () => {
     // NiiVue's "gray" ramps alpha to 128, so full intensity is half opaque —
     // the value has to come off the LUT rather than being assumed from norm.
     const lut = ramp(128);
@@ -119,7 +119,7 @@ describe("tapRate", () => {
     expect(tapRate(1)).toBeLessThan(20);
   });
 
-  it("honours a custom range", () => {
+  it("honors a custom range", () => {
     expect(tapRate(1, { slowest: 2, fastest: 8 })).toBeCloseTo(8, 5);
     expect(tapRate(0.5, { slowest: 2, fastest: 8 })).toBeCloseTo(4, 5);
   });

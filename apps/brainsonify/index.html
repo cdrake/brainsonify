@@ -18,7 +18,11 @@
     <p class="sub" id="expSummary">Move the mouse over the image.</p>
     <p class="visually-hidden" id="expAnnounce" role="status"></p>
 
-    <button id="audioBtn" class="primary">Enable sound</button>
+    <div class="row">
+      <button id="audioBtn" class="primary">Enable sound</button>
+      <button id="keyBtn" disabled title="Play the sound key again">Sound key</button>
+    </div>
+    <p class="keyCaption" id="keyCaption" hidden></p>
 
     <h2>Volume</h2>
     <div class="row"><input type="file" id="file" accept=".nii,.nii.gz,.gz"></div>
@@ -30,6 +34,7 @@
       <select id="mode">
         <option value="tone">Pure tone (pitch = intensity)</option>
         <option value="noise">Filtered noise (texture)</option>
+        <option value="texture">White noise (brightness = intensity)</option>
       </select>
     </div>
     <div class="row">
@@ -37,6 +42,38 @@
         <input type="checkbox" id="render3d" checked>Sonify the 3D render (depth pick)
       </label>
     </div>
+    <fieldset class="crosshair" aria-labelledby="crosshairHeading">
+      <legend id="crosshairHeading">Crosshair position</legend>
+      <div class="row">
+        <label for="crosshairStep">Step size</label>
+        <select id="crosshairStep">
+          <option value="0.01">Fine (1%)</option>
+          <option value="0.05" selected>Medium (5%)</option>
+          <option value="0.1">Large (10%)</option>
+        </select>
+      </div>
+      <div class="crosshairGrid" role="group" aria-label="Move crosshair">
+        <span></span>
+        <button type="button" data-crosshair-axis="2" data-crosshair-delta="1" aria-label="Move crosshair up">Up</button>
+        <span></span>
+        <button type="button" data-crosshair-axis="0" data-crosshair-delta="-1" aria-label="Move crosshair left">Left</button>
+        <button type="button" data-crosshair-action="center" aria-label="Return crosshair to center">Center</button>
+        <button type="button" data-crosshair-axis="0" data-crosshair-delta="1" aria-label="Move crosshair right">Right</button>
+        <span></span>
+        <button type="button" data-crosshair-axis="2" data-crosshair-delta="-1" aria-label="Move crosshair down">Down</button>
+        <span></span>
+      </div>
+      <div class="crosshairDepth" role="group" aria-label="Move crosshair through depth">
+        <button type="button" data-crosshair-axis="1" data-crosshair-delta="-1" aria-label="Move crosshair backward">Back</button>
+        <button type="button" data-crosshair-axis="1" data-crosshair-delta="1" aria-label="Move crosshair forward">Front</button>
+      </div>
+      <p class="note crosshairHint">
+        Arrow keys move left/right/up/down; Page Up and Page Down move
+        forward/back. Works from any button in this group, no need to tab
+        to a specific one first.
+      </p>
+      <p class="visually-hidden" id="crosshairStatus" role="status" aria-live="polite"></p>
+    </fieldset>
     <div class="row">
       <label for="depth">Surface</label>
       <input type="range" id="depth" min="0" max="6" step="1" value="1">
@@ -113,7 +150,9 @@
       <div data-requires="rhythm"><span>opacity</span><span id="rOpacity">&mdash;</span></div>
       <div data-requires="bone"><span>boneness</span><span id="rBone">&mdash;</span></div>
       <div data-requires="depth"><span>front-back</span><span id="rDepth">&mdash;</span></div>
+      <div data-requires="height"><span>height</span><span id="rHeight">&mdash;</span></div>
       <div data-requires="rhythm bone"><span>tapping</span><span id="rTaps">&mdash;</span></div>
+      <div data-requires="atlas"><span>region</span><span id="rRegion">&mdash;</span></div>
       <div><span>pick</span><span id="rSrc">&mdash;</span></div>
       <div id="bar"><i id="barFill"></i></div>
     </div>
@@ -121,7 +160,7 @@
     <p class="note">
       Just hover. Sound follows the voxel under the pointer, no clicking needed.
       Click still moves the crosshair if you want to change slice.<br><br>
-      On a T1, sulci are CSF-dark and gyral crowns are grey matter, so sweeping
+      On a T1, sulci are CSF-dark and gyral crowns are gray matter, so sweeping
       laterally across the cortical ribbon should produce a repeating dip as you
       cross each sulcus.
     </p>
@@ -148,7 +187,10 @@
       rate is pushed
       towards its ends rather than spread evenly, because bone is a boundary
       rather than a quantity: sweep the vault and it should flutter almost too
-      fast to count, sweep the brain and it should barely tick.
+      fast to count, sweep the brain and it should barely tick. An orange line
+      on the 2D tiles marks where the probe actually found that bone, since
+      &ldquo;densest within reach&rdquo; is not always the voxel under the
+      pointer.
     </p>
     <p class="note">
       On a whole-head scan the scalp and skull wrap everything, so hovering the
@@ -163,9 +205,24 @@
       is legible at once. <code>Taps only</code> drops the tone entirely, so
       nothing competes with the rhythm while you learn what it is saying.
     </p>
+    <p class="note" data-requires="rhythm bone">
+      <code>White noise</code> drops the pitch channel entirely: brightness
+      (a lowpass cutoff) carries intensity instead, so there is no tone for
+      the taps to compete with. Meant to make the rhythm easier to hear on its
+      own, in the background, rather than as a texture riding on top of a
+      pitch that is also moving.
+    </p>
+    <p class="note" data-requires="atlas">
+      The region under the pointer is named out loud when you enter it, from
+      the AAL atlas, over whatever else is sounding. Rest in a region to hear
+      it; a sweep straight across says nothing, so the names do not pile up.
+      The atlas is in MNI space: it is right for the MNI152 demo and for any
+      scan already in that space, and it is switched off for the whole-head
+      T1, which is not.
+    </p>
     <p class="note">
-      Wear the bone-conduction headset. Try <code>Filtered noise</code> if the
-      pure tone feels too abstract.
+      Wear the bone-conduction headset. Try <code>Filtered noise</code> or
+      <code>White noise</code> if the pure tone feels too abstract.
     </p>
   </aside>
 

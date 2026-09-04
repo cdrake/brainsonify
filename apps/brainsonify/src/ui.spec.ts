@@ -11,6 +11,7 @@ import {
   applyChannels,
   formatClip,
   formatDepth,
+  formatHeight,
   formatPan,
   formatTaps,
 } from "./ui";
@@ -29,6 +30,20 @@ beforeEach(() => {
 describe("Controls", () => {
   it("binds every control in index.html", () => {
     expect(() => new Controls()).not.toThrow();
+  });
+
+  it("provides individually labeled crosshair movement buttons", () => {
+    const buttons = [...document.querySelectorAll("[data-crosshair-axis], [data-crosshair-action]")];
+    expect(buttons).toHaveLength(7);
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Move crosshair up",
+      "Move crosshair left",
+      "Return crosshair to center",
+      "Move crosshair right",
+      "Move crosshair down",
+      "Move crosshair backward",
+      "Move crosshair forward",
+    ]);
   });
 
   it("reads the panel defaults", () => {
@@ -81,7 +96,7 @@ describe("spike", () => {
     expect(new Controls().spike).toBeGreaterThanOrEqual(8);
   });
 
-  it("tracks the slider and labels it in millimetres", () => {
+  it("tracks the slider and labels it in millimeters", () => {
     const controls = new Controls();
     const slider = document.getElementById("spike") as HTMLInputElement;
 
@@ -105,10 +120,10 @@ describe("spike", () => {
 
   it("belongs to the bone channel alone", () => {
     const row = document.getElementById("spike")?.closest("[data-requires]") as HTMLElement;
-    applyChannels({ stereo: true, rhythm: true, bone: false, depth: false });
+    applyChannels({ stereo: true, rhythm: true, bone: false, depth: false, height: false, atlas: false });
     expect(row.hidden).toBe(true);
 
-    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false });
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false, height: false, atlas: false });
     expect(row.hidden).toBe(false);
   });
 });
@@ -132,10 +147,10 @@ describe("taps-only", () => {
     const row = document.getElementById("tapsOnly")?.closest("[data-requires]") as HTMLElement;
     expect(row).toBeTruthy();
 
-    applyChannels({ stereo: true, rhythm: false, bone: false, depth: false });
+    applyChannels({ stereo: true, rhythm: false, bone: false, depth: false, height: false, atlas: false });
     expect(row.hidden).toBe(true);
 
-    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false });
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false, height: false, atlas: false });
     expect(row.hidden).toBe(false);
   });
 });
@@ -159,10 +174,10 @@ describe("depth", () => {
   it("belongs to the depth channel alone, so earlier conditions never show it", () => {
     const row = document.getElementById("spread")?.closest("[data-requires]") as HTMLElement;
 
-    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false });
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: false, height: false, atlas: false });
     expect(row.hidden).toBe(true);
 
-    applyChannels({ stereo: true, rhythm: false, bone: true, depth: true });
+    applyChannels({ stereo: true, rhythm: false, bone: true, depth: true, height: false, atlas: false });
     expect(row.hidden).toBe(false);
   });
 });
@@ -173,9 +188,20 @@ describe("formatDepth", () => {
     expect(formatDepth(0.4)).toBe("A 40%");
   });
 
-  it("calls the middle centre rather than a signed zero", () => {
-    expect(formatDepth(0)).toBe("centre");
-    expect(formatDepth(-0.001)).toBe("centre");
+  it("calls the middle center rather than a signed zero", () => {
+    expect(formatDepth(0)).toBe("center");
+    expect(formatDepth(-0.001)).toBe("center");
+  });
+});
+
+describe("formatHeight", () => {
+  it("names inferior and superior positions", () => {
+    expect(formatHeight(-0.4)).toBe("I 40%");
+    expect(formatHeight(0.4)).toBe("S 40%");
+  });
+
+  it("calls the middle center", () => {
+    expect(formatHeight(0)).toBe("center");
   });
 });
 
@@ -290,9 +316,9 @@ describe("formatPan", () => {
     expect(formatPan(0.4)).toBe("R 40%");
   });
 
-  it("calls dead centre centre rather than a zero-width side", () => {
-    expect(formatPan(0)).toBe("centre");
-    expect(formatPan(-0.001)).toBe("centre");
+  it("calls dead center center rather than a zero-width side", () => {
+    expect(formatPan(0)).toBe("center");
+    expect(formatPan(-0.001)).toBe("center");
   });
 });
 
