@@ -135,7 +135,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Height",
     summary:
       "Adds a loudness window for anatomical inferior-superior position: lower voxels are quieter and higher voxels louder.",
-    commit: "working",
+    commit: "ec159e5",
     channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: false },
     taps: BONE_TAPS,
   },
@@ -145,7 +145,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Texture",
     summary:
       "Replaces the pitched voice with unpitched white noise: brightness carries intensity instead of pitch, so there is no tonal center for the bone rhythm to compete with, and the taps can read as a foreground event against a flat bed rather than a texture riding on top of a moving tone.",
-    commit: "working",
+    commit: "ec159e5",
     channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: false },
     taps: BONE_TAPS,
     mode: "texture",
@@ -156,7 +156,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Regions",
     summary:
       "Keeps the texture and bone rhythm of 07 and names the anatomy: entering a region of the AAL atlas is called out in speech, so a listener gets a label as well as a position.",
-    commit: "working",
+    commit: "ec159e5",
     channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
     taps: BONE_TAPS,
     mode: "texture",
