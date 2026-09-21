@@ -14,7 +14,8 @@
     "verbatimModuleSyntax": true,
     "baseUrl": ".",
     "paths": {
-      "@brainsonify/sonification": ["libs/sonification/src/index.ts"]
+      "@brainsonify/sonification": ["libs/sonification/src/index.ts"],
+      "@brainsonify/control": ["libs/control/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist"]

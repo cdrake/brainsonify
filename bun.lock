@@ -25,6 +25,13 @@
         "@niivue/niivue": "^0.69.0",
       },
     },
+    "libs/control": {
+      "name": "@brainsonify/control",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brainsonify/sonification": "workspace:*",
+      },
+    },
     "libs/sonification": {
       "name": "@brainsonify/sonification",
       "version": "0.1.0",
@@ -230,6 +237,8 @@
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
 
     "@brainsonify/app": ["@brainsonify/app@workspace:apps/brainsonify"],
+
+    "@brainsonify/control": ["@brainsonify/control@workspace:libs/control"],
 
     "@brainsonify/sonification": ["@brainsonify/sonification@workspace:libs/sonification"],
 

@@ -1,5 +1,7 @@
 import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER, SLICE_TYPE, cmapper } from "@niivue/niivue";
 
+import { ControlAPI, ControlSurface, type ControlState, type KnobScene } from "@brainsonify/control";
+
 import {
   DEFAULT_BOUNDS,
   DEFAULT_RANGE,
@@ -23,6 +25,7 @@ import {
 
 import "./styles.css";
 import { RegionCallout, loadAtlas, type Atlas } from "./atlas";
+import { VirtualController } from "./controllers/virtual";
 import {
   EXPERIMENTS,
   experimentHref,
@@ -35,7 +38,7 @@ import { type PlanarLayout, planarLayout } from "./layout";
 import { VoxelSampler, type Sample } from "./sampler";
 import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
 import { KeyPlayer, browserSpeech } from "./soundkey";
-import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
+import { Controls, ExperimentNav, Readout, applyChannels, el, spokenPosition } from "./ui";
 
 /**
  * Clip depth is a signed distance from the center of the volume: NiiVue treats
@@ -543,11 +546,17 @@ const crosshairStep = el<HTMLSelectElement>("crosshairStep");
 const crosshairStatus = el("crosshairStatus");
 const sweepBtn = el<HTMLButtonElement>("sweepBtn");
 
-function nudgeCrosshair(axis: number, direction: number): void {
+/** Moves the crosshair along one axis by a signed fraction of the volume, and sounds where it lands. */
+function moveCrosshair(axis: number, delta: number): void {
   const position = nv.scene.crosshairPos;
-  position[axis] = Math.min(1, Math.max(0, position[axis] + direction * Number(crosshairStep.value)));
+  position[axis] = Math.min(1, Math.max(0, position[axis] + delta));
   nv.drawScene();
   sampler.sampleFraction(position, onSample);
+}
+
+/** The panel's buttons: one step of the chosen size in one direction. */
+function nudgeCrosshair(axis: number, direction: number): void {
+  moveCrosshair(axis, direction * Number(crosshairStep.value));
   const axisName = ["left/right", "back/forward", "down/up"][axis];
   const directionName = direction < 0 ? axisName.split("/")[0] : axisName.split("/")[1];
   crosshairStatus.textContent = `Crosshair moved ${directionName}.`;
@@ -690,6 +699,107 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-crossha
     nudgeCrosshair(...move);
   });
 }
+
+/* ---------------- the knob ---------------- */
+
+/**
+ * The panel and the control API hold the same values, each following the
+ * other. A hand on a slider reaches the API through the panel's change
+ * listener; the knob reaches the panel through the API's. Neither loops:
+ * a value already held is not written again, so each direction ends after
+ * one hop.
+ */
+const api = new ControlAPI(controls.snapshot() as Partial<ControlState>);
+controls.onChange((values) => api.setState(values as Partial<ControlState>));
+api.onStateChange((event) => {
+  const changed: Record<string, number | string | boolean> = {};
+  for (const id of event.changedParameters) {
+    changed[id] = event.currentState[id as keyof ControlState];
+  }
+  controls.apply(changed);
+});
+
+/**
+ * The whole planes `c` cycles through, in NiiVue's own order, so the knob's
+ * "next plane" and a `c` on the canvas walk the same ring. The current one
+ * is read back from the scene rather than remembered, so the two stay in
+ * step however the plane was last moved.
+ */
+const WHOLE_PLANES: ReadonlyArray<{ name: string; plane: [number, number, number] }> = [
+  { name: "left", plane: [0, 270, 0] },
+  { name: "right", plane: [0, 90, 0] },
+  { name: "posterior", plane: [0, 0, 0] },
+  { name: "anterior", plane: [0, 180, 0] },
+  { name: "inferior", plane: [0, 0, -90] },
+  { name: "superior", plane: [0, 0, 90] },
+  { name: "off", plane: [CLIP_OFF, 0, 0] },
+];
+/** Past this NiiVue's shader treats the depth as no plane at all. */
+const PLANE_OFF = 1.8;
+
+function currentPlane(): [number, number, number] {
+  const [depth = CLIP_OFF, azimuth = 0, elevationDeg = 0] = nv.scene.clipPlaneDepthAziElevs[0] ?? [];
+  return [depth, azimuth, elevationDeg];
+}
+
+/** The scene as the control surface sees it: fractions in, words out. */
+const knobScene: KnobScene = {
+  moveCrosshair(axis, delta) {
+    moveCrosshair(axis, delta);
+  },
+  centerCrosshair,
+  movePlane(delta) {
+    const [depth, azimuth, elevationDeg] = currentPlane();
+    if (depth >= PLANE_OFF) return false;
+    // The wheel over the render moves the same number; its own limits are kept.
+    nv.setClipPlane([Math.min(1.5, Math.max(-1.5, depth + delta)), azimuth, elevationDeg]);
+    return true;
+  },
+  nextPlane() {
+    const [depth, azimuth, elevationDeg] = currentPlane();
+    const at =
+      depth >= PLANE_OFF
+        ? WHOLE_PLANES.length - 1
+        : WHOLE_PLANES.findIndex(({ plane }) => plane[1] === azimuth && plane[2] === elevationDeg);
+    const next = WHOLE_PLANES[(at + 1) % WHOLE_PLANES.length];
+    nv.setClipPlane([...next.plane]);
+    return next.name;
+  },
+  describe() {
+    const mm = Array.from(nv.frac2mm(nv.scene.crosshairPos));
+    const where = [
+      spokenPosition(pan(mm[0], bounds.x, 1), "left", "right"),
+      spokenPosition(anteriority(mm[1], bounds.y, 1), "back", "front"),
+      spokenPosition(elevation(mm[2], bounds.z), "down", "up"),
+    ].join(", ");
+    const region = atlas && atlasFits ? atlas.regionAt(mm) : null;
+    return region ? `${region}. ${where}.` : `${where}.`;
+  },
+};
+
+const knobStatus = el("knobStatus");
+const knobSpeech = browserSpeech();
+const surface = new ControlSurface({
+  api,
+  scene: knobScene,
+  announce(text) {
+    // The status line is for the technician's eyes; the live region and the
+    // voice are for the listener, who otherwise has no way to know that what
+    // the knob does just changed. Spoken only while sound is on, the same
+    // rule the region callout keeps: silence means the app was told to be quiet.
+    crosshairStatus.textContent = text;
+    showKnob();
+    if (sonifier.running) void knobSpeech.say(text);
+  },
+});
+/** The technician's line: what the knob does now, and what its parameter reads. */
+const showKnob = () => {
+  knobStatus.textContent = `${surface.describeMode()} ${surface.describeStep()}`;
+};
+showKnob();
+// A numeric nudge is silent, so the line follows the state as well as the voice.
+api.onStateChange(showKnob);
+new VirtualController(surface).attach();
 
 canvas.addEventListener("pointermove", track);
 canvas.addEventListener("pointerenter", track);

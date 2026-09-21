@@ -1175,3 +1175,127 @@ a look with a real window resize.
 
 - resize a real window through the three layouts and watch the render.
 - listen to 11 with the lines running each way.
+
+## Entry 17 — 21 September 2026
+
+### the control api lands as a library
+
+the control api written outside the repo is in as libs/control: a schema
+of the eighteen panel parameters, a state store that validates, clamps,
+emits events and keeps twenty steps of undo, and the public index. the
+plan documents that came with it are in docs/control. nothing in the app
+uses it yet; that is the next phase, with the virtual controller.
+
+two things changed on the way in. the controller imported the Experiment
+type from the sonification lib, where it does not live; it is the app's
+registry type. a library must not reach into the app, so the controller
+names only the two fields it reads, mode and taps, as an ExperimentPreset,
+and the app's experiments satisfy it structurally. and the library's
+configs mirror sonification's rather than the ones drafted alongside the
+code: that draft pointed at a tsconfig.spec.json this workspace does not
+have, and nx here infers the test target from vitest.config.ts.
+
+the strict settings turned up two real bugs as well as type errors. the
+single-parameter path passed the previous value where the state listener
+expects the previous state, and undo passed the state after the undo as
+the one before it. both fixed; undo now also tells the per-parameter
+listeners. an empty test run passes for now so the workspace stays green
+until the specs are written.
+
+### next
+
+- specs for schema, state and controller.
+- the virtual controller, then wire the panel through the api.
+
+
+---
+
+## Entry 18 — 21 September 2026
+
+### the knob, and a keyboard standing in for it
+
+the app is used by two people at once: a visually impaired listener and a
+sighted technician, with some back and forth between them. that settled
+the shape of the controller before any code. the listener gets one knob
+and turns it; the technician gets buttons that change what turning does.
+the ControlSurface in libs/control is that arrangement with nothing
+physical in it, and the app has a keyboard driving it now. the physical
+device is an elecrow crowpanel 2.1" rotary display; it presents itself
+as a bluetooth keyboard and sends the same keys, so the browser never
+knows which one it is talking to. docs/control/CROWPANEL.md is the target
+for the firmware.
+
+### decisions
+
+pressing the knob never changes anything. it says where the crosshair is,
+region first when the atlas fits, or what the focused parameter reads. a
+shared device needs one gesture the listener can make freely, whenever
+they lose track, without undoing anything, and that is it. the change
+gestures are all the technician's.
+
+every button press is announced, into the crosshair live region and out
+loud while sound is on, the same rule the region callout keeps. the
+listener otherwise has no way to know that the knob now does something
+else. numeric nudges stay silent: the sound is the feedback. on and off
+and list settings are spoken, since those have no sound of their own.
+
+the key table is the protocol. one table in the app, keys chosen around
+the ones niivue reads on a focused canvas so a key never does two things
+depending on focus, and a spec that checks the two sets do not overlap.
+the physical panel sends the same keys. the numbers 1 to 5 are one button
+per mode, 0 cycles for when the numbers are out of reach.
+
+ble hid keyboard first, before serial or gatt. it needs no browser code
+and no pairing gesture in the page. serial and gatt are only worth it if
+pairing is a problem in the room or the round display should show what
+the app says.
+
+the schema was corrected to the panel rather than the panel to the
+schema. the draft that came in with the library had a sensitivity
+parameter the panel does not have, and ranges and defaults the panel
+does not use; the panel is what has been listened to. a spec now reads
+index.html and checks every range, step, default and option against the
+schema, so they cannot drift again. the default state is derived from
+the schema rather than written out a second time.
+
+the panel and the api hold the same values and follow each other, one
+hop each way: a value already held is not written again, so neither
+direction loops. the panel stays the source of the html; the api is a
+second view of it.
+
+### implementation notes
+
+the api rejects a value outside its range rather than clamping it; the
+clamp in setParameter is never reached. left as is, since the surface
+clamps before it calls.
+
+the running dev server predated the path alias for @brainsonify/control
+in tsconfig.base.json, and vite-tsconfig-paths reads that file at
+startup, so main.ts failed to load with a resolve error while the
+production build passed. a second server on another port picked it up.
+the one on 4200 needs a restart.
+
+the knob's status line went stale after a silent numeric turn, since it
+was only refreshed on an announcement. it follows the api's state
+change now, so a hand on a slider updates it too.
+
+checked headed in chrome: turns move the crosshair and the plane, modes
+and focus announce, the sliders follow the knob and the knob line follows
+the sliders, keys inside a form control are ignored. not yet listened to
+with sound on.
+
+### open questions
+
+- two step-size controls now exist: the select beside the crosshair
+  buttons and the knob's own. is that one too many, or is it right that
+  the technician's buttons and the listener's knob have separate sizes?
+- a large step on a parameter is ten schema steps, which on a 0.05-step
+  slider is half its range. is that ever what a technician wants?
+
+### next
+
+- restart the dev server on 4200.
+- listen to a session with the knob and sound on: does the spoken mode
+  change land over the tone, and is the press readout the right length?
+- firmware: the crowpanel as a ble keyboard sending the table in
+  CROWPANEL.md.

@@ -138,6 +138,45 @@ or faster, and say what you changed. **Lines run** picks which way each
 line is read: left to right, right to left, top to bottom, or bottom to
 top. Say which way the lines now run, since the sound alone does not.
 
+## The knob
+
+The knob is the listener's; its buttons are yours. Until the rotary panel
+arrives, the knob is the keyboard: `↑` and `↓` turn it, `Enter` presses it,
+and the number keys and a few letters are the buttons. The panel will send
+these same keys over Bluetooth, so nothing in this section changes when it
+does.
+
+What a turn does depends on the mode, and the mode is yours to set:
+
+- `1` moves the crosshair left and right, `2` back and front, `3` down and up
+- `4` slides the cut plane along its own axis — the same move as the wheel
+  over the render — and says "No plane is cut" if there is nothing to slide
+- `5` sets a panel parameter; `[` and `]` pick which one, in the panel's own
+  top-to-bottom order
+- `0` steps to the next mode when the numbers are out of reach
+- `s` cycles the step size: fine, medium, large
+- `Home` centers the crosshair; `n` jumps to the next whole plane, the same
+  cycle as `c`, and the two stay in step
+
+Every one of those is said out loud while sound is on — "Knob moves the cut
+plane." — so you don't have to announce the change itself, but you should
+still say why: "I'm handing you the cut plane now, turn it to go deeper."
+Turning a slider value with the knob is silent, the sound is the feedback;
+switching an on/off or a list setting is spoken.
+
+Pressing the knob changes nothing. It says where the crosshair is — region
+first on an MNI scan, then left/right, front/back and height — or, in
+parameter mode, what that parameter reads. Tell the listener that up front:
+it is the one thing they can do freely, whenever they lose track, without
+undoing anything.
+
+The keys work from anywhere on the page except inside a slider, list or
+button, so click on empty space before handing over. The **Knob:** line
+under the crosshair buttons shows what the knob does right now, its step
+size, and the focused parameter's value; glance at it when a listener asks
+what turning will do. The step-size select beside the crosshair buttons is
+for those buttons only; the knob's step size is set with `s`.
+
 ## Quick troubleshooting
 
 No sound at all: check **Enable sound** actually shows "Sound on" (it

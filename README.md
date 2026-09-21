@@ -46,6 +46,7 @@ cache hit rather than a rebuild.
 ```
 apps/brainsonify/   Vite app: NiiVue canvas, pointer sampling, control panel
 libs/sonification/  Framework-free audio core: intensity -> frequency, Web Audio voice
+libs/control/       Control API: the parameter schema, a state store with events and undo, and the knob surface
 ```
 
 The split is deliberate: everything in `libs/sonification` is pure TypeScript with
@@ -66,6 +67,12 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
 | `apps/brainsonify/src/soundkey.ts` | Plays the key: says each label, then drives the voice through its sweep |
 | `apps/brainsonify/src/atlas.ts` | The AAL atlas: world position to region name, spoken on entry |
+| `libs/control/src/schema.ts` | The panel's parameters: range, step, default and spoken name for each |
+| `libs/control/src/controller.ts` | `ControlAPI`: a validated state store with change events and undo |
+| `libs/control/src/surface.ts` | `ControlSurface`: one knob, its modes and step sizes, and what it says |
+| `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
+| `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
+| `apps/brainsonify/src/panel.spec.ts` | Guards that the schema and the panel in `index.html` agree |
 | `apps/brainsonify/src/main.ts` | Wiring, volume loading, drag and drop |
 
 ## Experiments
@@ -253,6 +260,34 @@ registry that drives the switcher, the default, and the visible controls.
   explores at. The taps get the same treatment, since 1800 Hz sits near the peak
   of the ear's sensitivity and a tap at full scale was some 13 dB louder than a
   low tone at full scale.
+- **The knob.** The app is built for two people at once: a listener who turns
+  one knob and hears the result, and a technician who presses buttons that
+  change what turning does. `ControlSurface` in `libs/control` is that
+  arrangement with nothing physical in it. A turn moves the crosshair along
+  one axis, slides the cut plane along its own axis (the wheel's move over
+  the render), or nudges the focused panel parameter. The buttons pick the
+  mode, the step size (fine, medium, large: 1, 5 and 10 percent of the volume
+  for the crosshair and the plane, 1, 5 and 10 schema steps for a parameter),
+  the focused parameter in the panel's order, center the crosshair, or jump to
+  the next whole plane in the same cycle as `c`, read back from the scene so
+  the two stay in step. Pressing the knob never changes anything: it says
+  where the crosshair is, region first when the atlas fits, or what the
+  focused parameter reads. A shared device needs one gesture the listener can
+  make freely, and that is it. Every button press is announced into the
+  crosshair live region and, while sound is on, out loud, since a listener
+  otherwise has no way to know the knob now does something else; numeric
+  nudges are silent, because the sound is the feedback. The virtual controller
+  is a keyboard: `controllers/keys.ts` is the whole protocol, chosen around the
+  keys NiiVue already reads on a focused canvas, and a physical rotary panel
+  presenting itself as a Bluetooth keyboard sends the same keys
+  ([docs/control/CROWPANEL.md](docs/control/CROWPANEL.md)). The panel and the
+  control API hold the same values and each follows the other: a slider
+  reaches the API through the panel's change listener, the knob reaches the
+  sliders through the API's, and a value already held is not written again,
+  so neither direction loops. `panel.spec.ts` checks the schema against
+  `index.html` so the two cannot drift. The knob's step size is separate from
+  the step select beside the crosshair buttons: that select belongs to the
+  buttons, the knob's belongs to the knob.
 
 ## Controls
 
@@ -278,6 +313,7 @@ registry that drives the switcher, the default, and the visible controls.
 | Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |
 | Line / Lines / Rest | The sweep's pace: seconds per line, lines to a face, and the silence between lines, up to 3 s; each sweep condition sets its own on entry |
 | Lines run | Which cardinal direction each line is read in: left to right, right to left, top to bottom, bottom to top; rows always step top down and columns left to right |
+| Knob | `↑` `↓` turn, `Enter` press and hear where you are; `1`–`5` pick what a turn moves (left/right, back/front, down/up, cut plane, parameter), `0` the next mode; `[` `]` the parameter, `s` the step size, `Home` centers, `n` the next whole plane. Works anywhere on the page outside a form control |
 
 Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
 demo volumes are fetched from `niivue.github.io` at runtime and are not stored
