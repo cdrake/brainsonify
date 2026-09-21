@@ -197,7 +197,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Coronal cut",
     summary:
       "Keeps everything 08 maps, and opens already cut to the medial slice of the coronal plane instead of whole: a fixed anatomical starting point for a sighted technician to guide a listener from, moving the cut with NiiVue's own mouse wheel and `c` presets rather than free 3D hovering alone.",
-    commit: "working",
+    commit: "206792f",
     channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
     taps: BONE_TAPS,
     mode: "texture",
@@ -209,7 +209,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Radar sweep",
     summary:
       "Keeps 09's coronal cut and everything it maps, and adds a sweep that reads the cut face on its own: left to right along one line, then the next line down, looping, with the bone spike's reach in play the whole way -- so a listener can sit back and take in a whole plane instead of hunting for it with the pointer.",
-    commit: "working",
+    commit: "206792f",
     channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
     taps: BONE_TAPS,
     mode: "texture",

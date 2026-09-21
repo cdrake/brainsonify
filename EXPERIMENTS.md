@@ -357,7 +357,7 @@ _Not yet run with listeners._
 
 ## 07 — Texture
 
-`?experiment=07-texture` · commit: working · **default**
+`?experiment=07-texture` · `206792f` · **default**
 
 ### What it maps
 
@@ -478,7 +478,7 @@ _Not yet run with listeners._
 
 ## 09 — Coronal cut
 
-`?experiment=09-coronal` · commit: working
+`?experiment=09-coronal` · `206792f`
 
 Condition 08, with one change to how a session starts rather than to what
 anything sounds like: the scan opens already cut to the medial slice of the
@@ -550,7 +550,7 @@ _Not yet run with listeners._
 
 ## 10 — Radar sweep
 
-`?experiment=10-sweep` · commit: working · **default**
+`?experiment=10-sweep` · `206792f` · **default**
 
 Condition 09, with one addition to how a session is driven rather than to
 what anything sounds like: a **Start radar sweep** button that reads the cut
