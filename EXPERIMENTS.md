@@ -636,7 +636,7 @@ _Not yet run with listeners._
 
 ## 11 — Fast lines
 
-`?experiment=11-fast-lines` · commit: working · **default**
+`?experiment=11-fast-lines` · `971a69e` · **default**
 
 Condition 10 at a different pace, and nothing else: the same coronal opening
 cut, the same channels, the same sweep over the same twenty-one lines. Each

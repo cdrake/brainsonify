@@ -241,7 +241,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
     name: "Fast lines",
     summary:
       "The same sweep as 10, at a different pace: each line of the face is a half-second run with a short silence after it, so a line is heard as one gesture with the bone taps inside it, and a whole face goes by in seconds instead of over a minute.",
-    commit: "working",
+    commit: "971a69e",
     channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
     taps: BONE_TAPS,
     mode: "texture",
