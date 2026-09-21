@@ -32,7 +32,7 @@ import {
 import { bonenessAt, densestVoxel, reach, type BoneMap, type Grid } from "./boneness";
 import type { BoneReply, BoneRequest } from "./boneness.worker";
 import { VoxelSampler, type Sample } from "./sampler";
-import { advance, cutFace, facePoint, type Raster } from "./sweep";
+import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
 import { KeyPlayer, browserSpeech } from "./soundkey";
 import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
 
@@ -151,7 +151,8 @@ function activate(experiment: Experiment, pushHistory: boolean): void {
   // The sweep belongs to the conditions that offer it; a run left going
   // across a switch would keep sounding a condition the visitor has left.
   el("sweepRow").hidden = !experiment.sweep;
-  if (!experiment.sweep && sweeping) stopSweep();
+  if (experiment.sweep) controls.setSweepPace(experiment.sweep);
+  else if (sweeping) stopSweep();
   key.cancel();
   callout.leave();
   sonifier.silence();
@@ -464,20 +465,20 @@ function projectRenderPoint(
 }
 
 /**
- * Draws one full horizontal line through the sampled point's own height, on
- * every tile that shows it -- the 2D tiles via `projectToTile`, the render
- * tile via `projectRenderPoint`. One line, not a crosshair pair: this reads
- * as a radar-style sweep line, at a glance, from across the room -- which a
- * pair of crossing lines reads as a target reticle instead. Horizontal
- * because the sweep below reads the face in lines, left to right, and then
- * steps down to the next: the line is the line being read. While the sweep
- * runs it is drawn only as far as the sweep has got, growing from the left
- * edge like the beam of a scanner, so a technician can see where along the
- * line the sound is coming from -- the spike only marks the point when there
- * is bone within reach, and soft tissue would otherwise leave no mark at
- * all. An ordinary hover draws the same single line, full width, at
- * whatever height it is currently over, so the line means the same thing
- * whether the sweep or the pointer put it there.
+ * Draws one line through the sampled point, on every tile that shows it --
+ * the 2D tiles via `projectToTile`, the render tile via
+ * `projectRenderPoint`. One line, not a crosshair pair: this reads as a
+ * radar-style sweep line, at a glance, from across the room -- which a
+ * pair of crossing lines reads as a target reticle instead. The line is the
+ * line being read: while the sweep runs it is drawn from where the current
+ * line began to where the sweep has got, growing like the beam of a
+ * scanner along whichever way the lines run, so a technician can
+ * see where along the line the sound is coming from -- the spike only
+ * marks the point when there is bone within reach, and soft tissue would
+ * otherwise leave no mark at all. An ordinary hover draws a single
+ * horizontal line, full width, at whatever height it is currently over, so
+ * the line means the same thing whether the sweep or the pointer put it
+ * there.
  */
 function drawScanLineOverlay(): void {
   if (!scanPoint) return;
@@ -486,6 +487,16 @@ function drawScanLineOverlay(): void {
       tile.axCorSag === SLICE_TYPE.RENDER ? projectRenderPoint(scanPoint, tile) : projectToTile(scanPoint, tile);
     if (!point) continue;
     const [x, y] = point;
+    if (sweeping && sweepLineStart) {
+      // The line being read, from where it began to where the sweep has
+      // got: along whichever cardinal direction the lines run.
+      const from =
+        tile.axCorSag === SLICE_TYPE.RENDER
+          ? projectRenderPoint(sweepLineStart, tile)
+          : projectToTile(sweepLineStart, tile);
+      if (from) nv.drawLine([from[0], from[1], x, y], SCAN_LINE_WIDTH, SCAN_LINE_COLOR);
+      continue;
+    }
     const [left, , width] = tile.leftTopWidthHeight;
     const right = sweeping ? x : left + width;
     nv.drawLine([left, y, right, y], SCAN_LINE_WIDTH, SCAN_LINE_COLOR);
@@ -526,26 +537,28 @@ function centerCrosshair(): void {
 
 /* ---------------- radar sweep ---------------- */
 
-/**
- * Seconds for one line of the face, left to right, and how far down the
- * face the next line is, as a fraction of it. Together they set how long a
- * whole face takes: at 4 s and 0.05 that is twenty lines and eighty seconds.
- * First guesses, tunable here without touching the loop itself; nothing
- * has been listened to at any other setting yet.
- */
-const SWEEP_LINE_SECONDS = 4;
-const SWEEP_LINE_STEP = 0.05;
-
 /** Where on the face the sweep has got to. Starts at the top left, the way a page is read. */
-let raster: Raster = { across: 0, line: 0 };
+let raster: Raster = START;
+/** Whether the last frame was in the silence between lines, so the silence is asked for once, not every frame. */
+let sweepResting = false;
+/**
+ * Where the line the sweep is on begins, in world millimeters, so the scan
+ * line can be drawn from there to the sampled point whichever way the
+ * lines run. Null while resting or when the sweep is not running.
+ */
+let sweepLineStart: [number, number, number] | null = null;
 
 /**
  * One frame of the sweep: moves along the current line by real elapsed
- * time (not a fixed step per frame, so a line takes `SWEEP_LINE_SECONDS`
- * regardless of frame rate), steps down to the next line when this one runs
- * off the right edge, wraps to the top after the bottom one, and samples
- * there -- the exact call `nudgeCrosshair` already makes by hand, just timed
- * and automatic instead of one press at a time.
+ * time (not a fixed step per frame, so a line takes as many seconds as the
+ * `Line` slider says regardless of frame rate), steps down to the next line
+ * when this one runs off the right edge, wraps to the top after the bottom
+ * one, and samples there -- the exact call `nudgeCrosshair` already makes
+ * by hand, just timed and automatic instead of one press at a time. The
+ * pace is read off the sliders every frame, so moving one mid-sweep takes
+ * effect on the next frame rather than the next run. A rest between lines
+ * is silence: the sweep is at the start of the next line and not sounding,
+ * the same "nothing under the pointer" a pointer leaving the canvas is.
  *
  * The face is read afresh every frame from NiiVue's own clip plane rather
  * than once at the start, so the sweep follows the plane when the wheel
@@ -571,13 +584,24 @@ function sweepFrame(token: number, lastTime: number): void {
   requestAnimationFrame((now) => {
     if (!sweeping || token !== sweepToken) return;
     const dt = (now - lastTime) / 1000;
-    raster = advance(raster, dt, SWEEP_LINE_SECONDS, SWEEP_LINE_STEP);
-    const position = nv.scene.crosshairPos;
-    const point = facePoint(cutFace(nv.scene.clipPlane, position), raster.across, raster.line);
-    position[0] = point[0];
-    position[1] = point[1];
-    position[2] = point[2];
-    sampler.sampleFraction(position, onSample);
+    const pace = controls.sweepPace;
+    raster = advance(raster, dt, pace);
+    const resting = raster.rest > 0;
+    if (resting) {
+      sweepLineStart = null;
+      if (!sweepResting) onSample(null);
+    } else {
+      const position = nv.scene.crosshairPos;
+      const face = cutFace(nv.scene.clipPlane, position);
+      const point = facePoint(face, raster.across, raster.line, pace.direction);
+      const start = nv.frac2mm(facePoint(face, 0, raster.line, pace.direction));
+      sweepLineStart = [start[0], start[1], start[2]];
+      position[0] = point[0];
+      position[1] = point[1];
+      position[2] = point[2];
+      sampler.sampleFraction(position, onSample);
+    }
+    sweepResting = resting;
     sweepFrame(token, now);
   });
 }
@@ -588,7 +612,9 @@ function startSweep(): void {
   const token = ++sweepToken;
   // Every run starts at the top left, so a listener always hears a face
   // from its beginning rather than from wherever the last run was stopped.
-  raster = { across: 0, line: 0 };
+  raster = START;
+  sweepResting = false;
+  sweepLineStart = null;
   sweepBtn.textContent = "Stop radar sweep";
   sweepBtn.setAttribute("aria-pressed", "true");
   crosshairStatus.textContent = "Radar sweep started.";
@@ -604,6 +630,7 @@ function stopSweep(): void {
   if (!sweeping) return;
   sweeping = false;
   sweepToken++;
+  sweepLineStart = null;
   sweepBtn.textContent = "Start radar sweep";
   sweepBtn.setAttribute("aria-pressed", "false");
   crosshairStatus.textContent = "Radar sweep stopped.";

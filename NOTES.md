@@ -1035,3 +1035,94 @@ listener has to learn.
   sweep idea before adding anything else: pace, what a line sounds like, what
   the technician needs to say. each one gets its own number so 10 stays as
   the first attempt.
+
+---
+
+## Entry 14 — 21 September 2026
+
+### committed, and on to the sweep experiments
+
+okay, we committed the two weeks of work as `206792f`, with `19260c9`
+stamping 09 and 10, and a small fix after it for headers in EXPERIMENTS.md
+that still said 05 and 07 were the default. the plan from here is sweep
+experiments: we're trying to perfect the sweep idea before adding anything
+else.
+
+first one is 11, the fast gesture from Entry 13. same sweep, same lines,
+half a second a line instead of four, and 0.3 seconds of silence between
+lines so a line has a beginning and an end. a face goes by in about
+seventeen seconds instead of 84. nothing about the mapping changes, which is
+why it was the one to try first.
+
+the pace is three sliders now, Line, Lines and Rest, under the sweep button.
+each sweep condition sets them on entry, the way conditions set the Taps
+ceiling, so 10 and 11 differ only in where the sliders start. I can move
+them mid-sweep and the next frame picks it up.
+
+one correction to Entry 13: I wrote twenty lines and eighty seconds for 10.
+the step was 5% of the face and both edges are read, so it's twenty-one
+lines and 84 seconds. the log says so now. the entry stands as written.
+
+### what I noticed
+
+at half a second a line the sweep samples at the frame rate, so a line is
+about thirty voxels on this machine and fewer on a slower one. that's the
+cheap version of a fast gesture. the honest version would schedule a fixed
+number of samples on the audio clock, the way the taps already are. not
+built; noted in the 11 section.
+
+### open questions
+
+- does a half-second line still carry the tissue pattern, or is it the same
+  blur a fast hover gives?
+- is 0.3 seconds of rest enough to count lines by?
+
+### next
+
+- listen to 10 and 11 back to back on the head T1 and pick a pace.
+- if fast lines read, try faster, and try the line on the audio clock.
+
+---
+
+## Entry 15 — 21 September 2026
+
+### a wider rest, and the lines in the cardinal directions
+
+two small things after looking at 11. the Rest slider only went to a
+second, which isn't a wide enough range to find out how long a gap a
+listener wants between lines; it goes to 3 seconds now. and I want to try
+the sweep running the other ways. the current way is not bad; I just want
+to hear the others.
+
+it's a Lines run control with the four cardinal directions: left to right,
+right to left, top to bottom, bottom to top. my first cut of this was a
+quarter-turn control, the page turned as a whole, which makes the columns
+step right to left. I'd rather have the sweeps in the cardinal directions
+with the face always covered in the same order: rows step top down,
+columns step left to right, whichever way a line reads. then left to right
+against right to left is a clean comparison, since only the line changes.
+
+cardinal directions rather than an angle on purpose: every line still
+spans the whole face and the first and last still sit on its edges, so
+nothing else about the sweep changes. an angled raster would need lines of
+different lengths, or silence at their ends, and we haven't heard anything
+yet that says it's worth that. the scan line follows, drawn from where the
+line began to where the sweep has got.
+
+it's a control, not a condition. 10 and 11 both open reading left to
+right. if columns turn out to sound different in a way that matters,
+that's a condition; if not, it stays a knob.
+
+### open questions
+
+- does a column down through the vault and the brain tell differently from
+  a row across it? a column crosses skull once at the top and never again;
+  a row crosses it twice.
+- does reading right to left sound like anything but the mirror, or does
+  the stereo make it a different thing?
+- what rest do listeners actually want at half a second a line?
+
+### next
+
+- listen to 11 with the lines running each way.
+- a condition for columns if they earn one.

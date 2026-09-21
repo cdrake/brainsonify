@@ -83,7 +83,8 @@ links to the earlier ones, and each has a stable URL:
 ?experiment=07-texture   white noise: brightness carries intensity, not pitch
 ?experiment=08-regions   + the AAL region under the pointer is spoken
 ?experiment=09-coronal   + opens already cut to the medial coronal plane
-?experiment=10-sweep     + a radar sweep reads the cut face on its own       (default)
+?experiment=10-sweep     + a radar sweep reads the cut face on its own
+?experiment=11-fast-lines  the same sweep, each line a half-second gesture   (default)
 ```
 
 Switching does not reload: a volume you dropped in survives the change, which is
@@ -139,7 +140,18 @@ registry that drives the switcher, the default, and the visible controls.
   `sampleFraction` a crosshair step uses and through the same `onSample` a
   hover does, so every channel, the bone spike's reach included, is in play.
   The crosshair follows, and the magenta scan line is drawn only as far as the
-  sweep has got along the current line. Hovering is ignored while it runs.
+  sweep has got along the current line. Hovering is ignored while it runs. The
+  pace comes off three sliders, read every frame: seconds per line, lines to a
+  face, and a rest between lines, during which the sweep is silent the way a
+  pointer off the canvas is. `Lines run` picks which of the four cardinal
+  directions a line is read in. Rows always step from the top of the face
+  down and columns always from the left edge across, so between two
+  settings only the way a line reads changes, not the order the face is
+  covered in. Cardinal directions and not an angle, so every line still
+  spans the whole face and the first and last lines still lie on its edges.
+  The scan line is drawn from where the current line began to where the
+  sweep has got, whichever way it runs. Each sweep condition sets these on
+  entry.
 - **Finding bone without intensity.** Cortical bone is a signal void on a T1 —
   the darkest thing in the head — so nothing about its intensity identifies it.
   What is distinctive is its shape: a thin dark sheet lying parallel to the
@@ -263,6 +275,8 @@ registry that drives the switcher, the default, and the visible controls.
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
 | Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |
+| Line / Lines / Rest | The sweep's pace: seconds per line, lines to a face, and the silence between lines, up to 3 s; each sweep condition sets its own on entry |
+| Lines run | Which cardinal direction each line is read in: left to right, right to left, top to bottom, bottom to top; rows always step top down and columns left to right |
 
 Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
 demo volumes are fetched from `niivue.github.io` at runtime and are not stored

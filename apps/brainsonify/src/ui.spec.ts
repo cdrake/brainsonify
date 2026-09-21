@@ -448,8 +448,26 @@ describe("radar sweep", () => {
     expect(button?.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("is offered by the latest condition and by no earlier one", () => {
+  it("is offered by the sweep conditions and by no earlier one", () => {
     const offering = EXPERIMENTS.filter((e) => e.sweep).map((e) => e.id);
-    expect(offering).toEqual(["10-sweep"]);
+    expect(offering).toEqual(["10-sweep", "11-fast-lines"]);
+  });
+
+  it("reads the pace off the sliders and prints it", () => {
+    const controls = new Controls();
+    expect(controls.sweepPace).toEqual({ lineSeconds: 4, lines: 21, restSeconds: 0, direction: "right" });
+    expect(document.getElementById("sweepRestV")?.textContent).toBe("none");
+  });
+
+  it("takes a condition's own pace, clamped to the sliders", () => {
+    const controls = new Controls();
+    controls.setSweepPace({ lineSeconds: 0.5, lines: 21, restSeconds: 0.3, direction: "down" });
+    expect(controls.sweepPace).toEqual({ lineSeconds: 0.5, lines: 21, restSeconds: 0.3, direction: "down" });
+    expect(document.getElementById("sweepLineV")?.textContent).toBe("0.50 s");
+    expect(document.getElementById("sweepRestV")?.textContent).toBe("0.30 s");
+    controls.setSweepPace({ lineSeconds: 100, lines: 1, restSeconds: -1, direction: "up" });
+    expect(controls.sweepPace).toEqual({ lineSeconds: 8, lines: 5, restSeconds: 0, direction: "up" });
+    controls.setSweepPace({ lineSeconds: 4, lines: 21, restSeconds: 3, direction: "left" });
+    expect(controls.sweepPace).toEqual({ lineSeconds: 4, lines: 21, restSeconds: 3, direction: "left" });
   });
 });

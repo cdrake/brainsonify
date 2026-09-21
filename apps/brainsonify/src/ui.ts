@@ -1,6 +1,7 @@
 import type { Mode } from "@brainsonify/sonification";
 
 import type { Channels, Experiment } from "./experiments";
+import type { Direction, SweepPace } from "./sweep";
 
 function el<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -25,6 +26,10 @@ export class Controls {
   private rate = el<HTMLInputElement>("rate");
   private spikeReach = el<HTMLInputElement>("spike");
   private only = el<HTMLInputElement>("tapsOnly");
+  private sweepLine = el<HTMLInputElement>("sweepLine");
+  private sweepLines = el<HTMLInputElement>("sweepLines");
+  private sweepRest = el<HTMLInputElement>("sweepRest");
+  private sweepDir = el<HTMLSelectElement>("sweepDir");
 
   constructor() {
     const inputs = [
@@ -42,6 +47,10 @@ export class Controls {
       this.rate,
       this.spikeReach,
       this.only,
+      this.sweepLine,
+      this.sweepLines,
+      this.sweepRest,
+      this.sweepDir,
     ];
     for (const input of inputs) input.addEventListener("input", () => this.syncLabels());
     this.syncLabels();
@@ -99,6 +108,28 @@ export class Controls {
     this.syncLabels();
   }
 
+  /** How the radar sweep moves, as the sliders currently have it. */
+  get sweepPace(): SweepPace {
+    return {
+      lineSeconds: Number(this.sweepLine.value),
+      lines: Number(this.sweepLines.value),
+      restSeconds: Number(this.sweepRest.value),
+      direction: this.sweepDir.value as Direction,
+    };
+  }
+
+  /** Sets the sweep controls to a condition's own pace, clamped to each slider's range. */
+  setSweepPace(pace: SweepPace): void {
+    const clamp = (input: HTMLInputElement, value: number) => {
+      input.value = String(Math.min(Number(input.max), Math.max(Number(input.min), value)));
+    };
+    clamp(this.sweepLine, pace.lineSeconds);
+    clamp(this.sweepLines, pace.lines);
+    clamp(this.sweepRest, pace.restSeconds);
+    this.sweepDir.value = pace.direction;
+    this.syncLabels();
+  }
+
   /** Sets the `Mapping` select, for a condition that wants a different default. */
   setMode(mode: Mode): void {
     this.mode.value = mode;
@@ -119,6 +150,10 @@ export class Controls {
     el("tapsV").textContent = `${v.taps} /s`;
     el("rateV").textContent = `${v.rate.toFixed(1)}\u00d7`;
     el("spikeV").textContent = this.spike > 0 ? `${this.spike} mm` : "point";
+    const pace = this.sweepPace;
+    el("sweepLineV").textContent = `${pace.lineSeconds.toFixed(2)} s`;
+    el("sweepLinesV").textContent = String(pace.lines);
+    el("sweepRestV").textContent = pace.restSeconds > 0 ? `${pace.restSeconds.toFixed(2)} s` : "none";
   }
 }
 

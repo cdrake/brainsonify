@@ -17,6 +17,7 @@ panel links to the earlier ones.
 | 08 | Regions | [`?experiment=08-regions`](https://cdrake.github.io/brainsonify/?experiment=08-regions) | + the AAL region under the pointer is spoken |
 | 09 | Coronal cut | [`?experiment=09-coronal`](https://cdrake.github.io/brainsonify/?experiment=09-coronal) | + opens already cut to the medial coronal plane |
 | 10 | Radar sweep | [`?experiment=10-sweep`](https://cdrake.github.io/brainsonify/?experiment=10-sweep) | + a sweep reads the cut face on its own, line by line |
+| 11 | Fast lines | [`?experiment=11-fast-lines`](https://cdrake.github.io/brainsonify/?experiment=11-fast-lines) | the same sweep, each line a half-second gesture with a rest after it |
 
 The registry that drives all of this is `apps/brainsonify/src/experiments.ts`.
 It is the single source of truth: the switcher links, the default condition, and
@@ -552,7 +553,7 @@ _Not yet run with listeners._
 
 ## 10 — Radar sweep
 
-`?experiment=10-sweep` · `206792f` · **default**
+`?experiment=10-sweep` · `206792f`
 
 Condition 09, with one addition to how a session is driven rather than to
 what anything sounds like: a **Start radar sweep** button that reads the cut
@@ -583,10 +584,13 @@ cut a line runs back to front, since it has no left-right of its own; on an
 axial cut the lines run front to back, with the front at the top. With no
 plane set at all the sweep reads the coronal plane through the crosshair.
 
-The pace is set by two constants in `main.ts`: 4 seconds per line and a
-step of 5% of the face between lines, which is twenty lines and eighty
-seconds for a whole face. Those are first guesses. Nothing has been listened
-to at any other setting.
+The pace is 4 seconds per line and twenty-one lines from the top of the
+face to the bottom, both included, which is 84 seconds for a whole face.
+(First written up as twenty lines and eighty seconds; the count was off by
+one, since both edges are read.) The pace was two constants in `main.ts`
+when 10 was committed, and is now three sliders under the sweep button, set
+to these values on entering 10. Those are first guesses. Nothing has been
+listened to at any other setting.
 
 ### Why a sweep, and why its own condition
 
@@ -617,10 +621,10 @@ _Not yet run with listeners._
 
 ### Still open
 
-- 4 seconds a line and twenty lines to a face are guesses. A line takes as
-  long as it takes to hear, and a face should not take so long that the top
-  of it is forgotten by the bottom. Both want tuning by ear, and may want to
-  be controls rather than constants.
+- 4 seconds a line and twenty-one lines to a face are guesses. A line takes
+  as long as it takes to hear, and a face should not take so long that the
+  top of it is forgotten by the bottom. Both want tuning by ear; they are
+  sliders now, and 11 is the first other setting tried.
 - A line is a run of single voxels, heard one after another. Whether a line
   of tissue should instead be heard all at once, as one sound, is a design
   question that this condition does not answer; see NOTES.md Entry 13 for
@@ -629,3 +633,70 @@ _Not yet run with listeners._
   whole extent, so on the camera-relative `Clip` slider's plane it can read
   air, or nothing, at the ends of a line. The six anatomical presets are the
   intended use.
+
+## 11 — Fast lines
+
+`?experiment=11-fast-lines` · commit: working · **default**
+
+Condition 10 at a different pace, and nothing else: the same coronal opening
+cut, the same channels, the same sweep over the same twenty-one lines. Each
+line now takes half a second instead of four, and is followed by 0.3 seconds
+of silence before the next line starts, so a face goes by in about
+seventeen seconds instead of 84.
+
+### What it maps
+
+Nothing new sonically. The sweep still samples one voxel at a time through
+the same path a hover does, so the bone spike's reach, the texture, the
+stereo, the front-back tap color and the height loudness are all as they
+were. What changes is that a line is now heard as one short run rather than
+a walk: the tissue along it becomes a contour, the bone taps become clicks
+inside that contour, and the rest between lines is what says "next line".
+At a half second per line and roughly sixty frames a second, a line is
+about thirty samples, so on the MNI152 demo each sample is a few
+millimeters apart. The pace is the three sliders under the sweep button,
+set to 0.5 s, 21 lines and 0.30 s rest on entering 11.
+
+### Why this pace, and why its own condition
+
+This is the "line as a fast gesture" option from NOTES.md Entry 13: of the
+ways to hear a whole line of tissue rather than one voxel after another,
+it is the smallest step from 10, since it keeps every mapping the listener
+has already learned and changes only the clock. Whether a line read that
+fast still carries the tissue pattern, or blurs into a glissando the way a
+fast hover does, is exactly the question. The rest between lines is there
+so that a line has a beginning and an end; without it, at this pace, one
+line would run into the next and the face would be a single continuous
+sound.
+
+It is its own condition rather than a change to 10 because 10 was
+described, and its sliders set, at the slow pace; a listener comparing the
+two should be able to switch between them and hear only the pace change.
+
+### What to listen for
+
+Whether the vault still reads as two clicks near the top and one at each
+end through the middle when a line is half a second long. Whether a line
+through the ventricles sounds different from a line above them at this
+pace. Whether the rest is long enough to count lines by, and whether
+seventeen seconds is short enough that the top of the face is still in mind
+at the bottom.
+
+### Result
+
+_Not yet run with listeners._
+
+### Still open
+
+- Half a second and 0.3 seconds of rest are guesses. Faster still, with a
+  face in under ten seconds, is the direction if lines still read.
+- At this pace the sweep is sampling at the frame rate, so the number of
+  voxels per line depends on the machine. A line scheduled on the audio
+  clock, with a fixed number of samples, would be the honest version of a
+  fast gesture; this one is the cheap version.
+- The other line encodings in Entry 13 (the line as a chord, as edges, as a
+  mix) are untried.
+- The lines can run in any of the four cardinal directions (the `Lines
+  run` control): across the face either way, or down it either way. Both
+  10 and 11 open reading left to right; the others are a control to try,
+  not yet a condition.

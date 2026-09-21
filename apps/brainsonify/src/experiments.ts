@@ -13,6 +13,8 @@
 
 import { BONE_TAPS, DEFAULT_TAPS, type Mode, type TapRange } from "@brainsonify/sonification";
 
+import type { SweepPace } from "./sweep";
+
 /**
  * Which mappings a condition turns on. A channel that is off is not merely
  * quiet: its controls and its readout row are hidden, so the panel only ever
@@ -90,15 +92,32 @@ export interface Experiment {
    */
   clip?: [number, number, number];
   /**
-   * Whether this condition offers the radar sweep: a button that reads the
+   * The radar sweep this condition offers, if any: a button that reads the
    * cut face on its own, one line at a time from left to right and top to
    * bottom, looping, with the pointer ignored while it runs. Like `clip`,
    * not a channel -- it changes who is doing the moving, not what a voxel
    * sounds like. The sweep reads whatever plane NiiVue is currently cut on,
-   * so it follows the wheel and `c` like everything else.
+   * so it follows the wheel and `c` like everything else. The pace is the
+   * condition's own, the way `taps` is: entering it resets the sweep
+   * sliders, since the pace is the thing the sweep conditions differ in.
    */
-  sweep?: boolean;
+  sweep?: SweepPace;
 }
+
+/**
+ * The pace 10 was first heard at: a slow walk, one line every four seconds,
+ * twenty-one lines to a face, no gap between them. Named so 11 can say
+ * exactly what it changed.
+ */
+export const SLOW_SWEEP: SweepPace = { lineSeconds: 4, lines: 21, restSeconds: 0, direction: "right" };
+
+/**
+ * A line as a gesture: half a second across, then a short silence, so each
+ * line is heard as one short run rather than a walk, and a face takes
+ * seconds instead of over a minute. Same twenty-one lines as `SLOW_SWEEP`,
+ * so the only thing that changes between 10 and 11 is the pace.
+ */
+export const FAST_SWEEP: SweepPace = { lineSeconds: 0.5, lines: 21, restSeconds: 0.3, direction: "right" };
 
 /**
  * The medial slice of the coronal plane: depth 0 is the midline itself, and
@@ -214,7 +233,20 @@ export const EXPERIMENTS: readonly Experiment[] = [
     taps: BONE_TAPS,
     mode: "texture",
     clip: CORONAL_MEDIAL,
-    sweep: true,
+    sweep: SLOW_SWEEP,
+  },
+  {
+    id: "11-fast-lines",
+    number: "11",
+    name: "Fast lines",
+    summary:
+      "The same sweep as 10, at a different pace: each line of the face is a half-second run with a short silence after it, so a line is heard as one gesture with the bone taps inside it, and a whole face goes by in seconds instead of over a minute.",
+    commit: "working",
+    channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
+    taps: BONE_TAPS,
+    mode: "texture",
+    clip: CORONAL_MEDIAL,
+    sweep: FAST_SWEEP,
   },
 ];
 

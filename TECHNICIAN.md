@@ -14,10 +14,10 @@ where the plane currently is, and when something has finished loading.
 
 Load the scan (a demo button, or drop a `.nii` / `.nii.gz` file on the page)
 and pick the **Experiment** at the top that matches what you're demonstrating
-— the numbered switcher runs 01 (pitch only) through 10 (adds the radar
-sweep). Higher numbers layer on more channels; if this is someone's first
-session, start low and add channels across a few passes rather than opening
-on 10.
+— the numbered switcher runs 01 (pitch only) through 11 (the radar sweep
+at a fast pace). Higher numbers layer on more channels; if this is
+someone's first session, start low and add channels across a few passes
+rather than opening on 11.
 
 Click **Enable sound** yourself before handing over headphones — most
 browsers block audio until a real click happens, and that click should be
@@ -105,8 +105,8 @@ button group once.
 
 ## Letting the sweep do the moving
 
-On experiment 10 there is a **Start radar sweep** button under **Crosshair
-position**. Press it and the app reads the cut face by itself: left to right
+On experiments 10 and 11 there is a **Start radar sweep** button under
+**Crosshair position**. Press it and the app reads the cut face by itself: left to right
 along one line, then the next line down, and back to the top after the
 bottom, until you press it again. The mouse is ignored while it runs, so
 you can take your hand off it. The crosshair follows the sweep on every
@@ -117,9 +117,20 @@ The sweep reads whatever plane is currently cut, so the wheel and `c` still
 work while it runs, and the sweep goes with the plane. Say so when you move
 it: "same sweep, one cut deeper now."
 
+The sweep runs on the browser's animation frames, and browsers stop those
+for a tab that is not on screen. Keep the tab in front while it runs; if
+you switch to another window, the sweep stops where it is and picks up
+again when you come back.
+
 Tell the listener when a new line starts near the top, and roughly how far
-down the face the sweep is from time to time — a whole face takes over a
-minute, and there is nothing in the sound that says which line this is.
+down the face the sweep is from time to time — on 10 a whole face takes
+over a minute, and there is nothing in the sound that says which line this
+is. The three sliders under the button (Line, Lines, Rest) set the pace;
+10 opens slow with no gap between lines, 11 opens at half a second a line
+with a short silence after each. Move them if a listener asks for slower
+or faster, and say what you changed. **Lines run** picks which way each
+line is read: left to right, right to left, top to bottom, or bottom to
+top. Say which way the lines now run, since the sound alone does not.
 
 ## Quick troubleshooting
 

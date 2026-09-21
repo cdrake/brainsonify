@@ -99,15 +99,42 @@ export function cutFace(clipPlane: ArrayLike<number>, crosshair: ArrayLike<numbe
   return { origin, across, down };
 }
 
+/** Which way the lines of the sweep run, in the face's own terms: across is left to right, down is top to bottom. */
+export type Direction = "right" | "left" | "down" | "up";
+
+/**
+ * Lays the raster on the face so its lines run in one of the four cardinal
+ * directions. Horizontal lines always step from the top of the face to the
+ * bottom and vertical lines always from the left edge to the right, so that
+ * between "right" and "left", or "down" and "up", the only thing that
+ * changes is the way each line is read, not the order the face is covered
+ * in. Cardinal directions and not an angle, so every line still spans the
+ * whole face and the first and last still lie on its edges.
+ */
+export function oriented(across: number, line: number, direction: Direction): [number, number] {
+  switch (direction) {
+    case "left":
+      return [1 - across, line];
+    case "down":
+      return [line, across];
+    case "up":
+      return [line, 1 - across];
+    default:
+      return [across, line];
+  }
+}
+
 /**
  * Where on the face the sweep is, for `across` 0..1 along the current line
- * (left to right) and `line` 0..1 through the face (top to bottom). Either
- * can land outside the volume on a tilted plane; the sampler answers null
- * there and the sweep carries on.
+ * and `line` 0..1 through the face, laid on the face so the lines run in
+ * `direction` (see `oriented`). Either can land
+ * outside the volume on a tilted plane; the sampler answers null there and
+ * the sweep carries on.
  */
-export function facePoint(face: Face, across: number, line: number): Vec3 {
-  const a = across - 0.5;
-  const d = line - 0.5;
+export function facePoint(face: Face, across: number, line: number, direction: Direction = "right"): Vec3 {
+  const [x, y] = oriented(across, line, direction);
+  const a = x - 0.5;
+  const d = y - 0.5;
   return [
     face.origin[0] + face.across[0] * a + face.down[0] * d,
     face.origin[1] + face.across[1] * a + face.down[1] * d,
@@ -115,27 +142,65 @@ export function facePoint(face: Face, across: number, line: number): Vec3 {
   ];
 }
 
-/** Where the sweep is: a fraction along the current line, and which line. */
+/**
+ * Where the sweep is: a fraction along the current line, which line, and
+ * how many seconds of rest are left before the line starts. A rest is the
+ * silence between one line and the next; while `rest` is above zero the
+ * sweep is at the start of `line` and not sounding.
+ */
 export interface Raster {
   across: number;
   line: number;
+  rest: number;
+}
+
+/** How a sweep moves: seconds per line, lines to a face, and the silence between lines. */
+export interface SweepPace {
+  /** Seconds for one line, left to right. */
+  lineSeconds: number;
+  /** Lines from the top of the face to the bottom, both included. */
+  lines: number;
+  /** Seconds of silence between one line and the next. 0 runs them together. */
+  restSeconds: number;
+  /** Which way the lines run; see `oriented`. "right" reads rows left to right, top down. */
+  direction: Direction;
+}
+
+/** The first line of a face: top left, not yet started. */
+export const START: Raster = { across: 0, line: 0, rest: 0 };
+
+/** How far down the face the next line is, so that `lines` of them span it. */
+export function lineStep(pace: SweepPace): number {
+  return 1 / Math.max(1, pace.lines - 1);
 }
 
 /**
- * Moves the sweep on by `dt` seconds: along the line at one line per
- * `lineSeconds`, and on to the next line down, `lineStep` of the face
- * further, when the current one runs off the right edge. The bottom line
- * wraps back to the top, so the sweep loops until stopped. Returns the new
- * position rather than mutating, so a frame that is dropped changes nothing.
+ * Moves the sweep on by `dt` seconds: through any rest first, then along the
+ * line at one line per `lineSeconds`, and on to the next line down when the
+ * current one runs off the right edge, resting there for `restSeconds` if
+ * the pace has any. The bottom line wraps back to the top, so the sweep
+ * loops until stopped. Returns the new position rather than mutating, so a
+ * frame that is dropped changes nothing. A line's overshoot is carried into
+ * the next line when there is no rest, and dropped when there is: the rest
+ * is the gap, and a line always starts from its own left edge after one.
  */
-export function advance(raster: Raster, dt: number, lineSeconds: number, lineStep: number): Raster {
-  let across = raster.across + dt / lineSeconds;
-  let line = raster.line;
+export function advance(raster: Raster, dt: number, pace: SweepPace): Raster {
+  let { across, line, rest } = raster;
+  let left = dt;
+  if (rest > 0) {
+    const used = Math.min(rest, left);
+    rest -= used;
+    left -= used;
+    if (rest > 0) return { across, line, rest };
+  }
+  across += left / pace.lineSeconds;
+  const step = lineStep(pace);
   while (across >= 1) {
     across -= 1;
-    line += lineStep;
+    line += step;
     // The last line is the one at the very bottom; a step past it starts over.
     if (line > 1 + 1e-9) line = 0;
+    if (pace.restSeconds > 0) return { across: 0, line, rest: pace.restSeconds };
   }
-  return { across, line };
+  return { across, line, rest };
 }

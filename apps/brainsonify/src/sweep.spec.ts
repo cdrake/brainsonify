@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { advance, cutFace, facePoint, type Vec3 } from "./sweep";
+import { START, advance, cutFace, facePoint, lineStep, oriented, type Vec3 } from "./sweep";
 
 const close = (a: ArrayLike<number>, b: ArrayLike<number>) => {
   expect(a.length).toBe(b.length);
@@ -70,35 +70,92 @@ describe("facePoint", () => {
     expect(start[0]).toBe(0);
     expect(start[2]).toBe(1);
   });
+
+  it("reads columns from the top left corner downward when the direction is down", () => {
+    const face = cutFace([0, 1, 0, 0], CENTER);
+    close(facePoint(face, 0, 0, "down"), [0, 0.5, 1]);
+    close(facePoint(face, 1, 0, "down"), [0, 0.5, 0]);
+    close(facePoint(face, 0, 1, "down"), [1, 0.5, 1]);
+  });
+});
+
+describe("oriented", () => {
+  it("leaves the page alone when reading to the right", () => {
+    expect(oriented(0.2, 0.7, "right")).toEqual([0.2, 0.7]);
+  });
+
+  it("runs each line the cardinal way: right, left, down, up", () => {
+    expect(oriented(1, 0, "right")).toEqual([1, 0]);
+    expect(oriented(1, 0, "left")).toEqual([0, 0]);
+    expect(oriented(1, 0, "down")).toEqual([0, 1]);
+    expect(oriented(1, 0, "up")).toEqual([0, 0]);
+  });
+
+  it("covers the face in the same order whichever way a line reads", () => {
+    // Rows step top down, columns step left to right, in both directions.
+    expect(oriented(0, 1, "right")[1]).toBe(1);
+    expect(oriented(0, 1, "left")[1]).toBe(1);
+    expect(oriented(0, 1, "down")[0]).toBe(1);
+    expect(oriented(0, 1, "up")[0]).toBe(1);
+  });
+
+  it("keeps every line the full width of the face", () => {
+    for (const direction of ["right", "left", "down", "up"] as const) {
+      const [x0, y0] = oriented(0, 0.5, direction);
+      const [x1, y1] = oriented(1, 0.5, direction);
+      expect(Math.hypot(x1 - x0, y1 - y0)).toBeCloseTo(1, 9);
+    }
+  });
 });
 
 describe("advance", () => {
+  const pace = { lineSeconds: 4, lines: 5, restSeconds: 0, direction: "right" as const };
+
+  it("spaces the lines so the top and bottom of the face are both read", () => {
+    expect(lineStep(pace)).toBe(0.25);
+    expect(lineStep({ ...pace, lines: 1 })).toBe(1);
+  });
+
   it("moves along the line at the given pace", () => {
-    close(Object.values(advance({ across: 0, line: 0 }, 1, 4, 0.25)), [0.25, 0]);
+    const next = advance(START, 1, pace);
+    expect(next).toEqual({ across: 0.25, line: 0, rest: 0 });
   });
 
   it("steps down a line when it runs off the right edge", () => {
-    close(Object.values(advance({ across: 0.9, line: 0 }, 0.8, 4, 0.25)), [0.1, 0.25]);
+    const next = advance({ across: 0.9, line: 0, rest: 0 }, 0.8, pace);
+    expect(next.across).toBeCloseTo(0.1, 9);
+    expect(next.line).toBe(0.25);
   });
 
   it("wraps from the bottom line back to the top", () => {
-    const bottom = advance({ across: 0.9, line: 1 }, 0.8, 4, 0.25);
-    expect(bottom.line).toBe(0);
+    expect(advance({ across: 0.9, line: 1, rest: 0 }, 0.8, pace).line).toBe(0);
   });
 
   it("reaches the bottom line itself before wrapping", () => {
-    let raster = { across: 0, line: 0 };
+    let raster = START;
     const lines: number[] = [];
     for (let i = 0; i < 5; i++) {
-      raster = advance(raster, 4, 4, 0.25);
+      raster = advance(raster, 4, pace);
       lines.push(raster.line);
     }
     close(lines, [0.25, 0.5, 0.75, 1, 0]);
   });
 
+  it("rests between lines when the pace asks for it, and starts the next from its left edge", () => {
+    const resting = { ...pace, restSeconds: 0.5 };
+    const atEnd = advance({ across: 0.9, line: 0, rest: 0 }, 0.8, resting);
+    expect(atEnd).toEqual({ across: 0, line: 0.25, rest: 0.5 });
+    const stillResting = advance(atEnd, 0.2, resting);
+    expect(stillResting).toEqual({ across: 0, line: 0.25, rest: 0.3 });
+    // The rest ends partway through a frame; the remainder moves the line.
+    const moving = advance(stillResting, 0.7, resting);
+    expect(moving.rest).toBe(0);
+    expect(moving.across).toBeCloseTo(0.1, 9);
+  });
+
   it("leaves the input alone", () => {
-    const before = { across: 0.5, line: 0.5 };
-    advance(before, 1, 1, 0.1);
-    expect(before).toEqual({ across: 0.5, line: 0.5 });
+    const before = { across: 0.5, line: 0.5, rest: 0 };
+    advance(before, 1, pace);
+    expect(before).toEqual({ across: 0.5, line: 0.5, rest: 0 });
   });
 });
