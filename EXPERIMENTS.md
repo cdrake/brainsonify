@@ -286,7 +286,7 @@ your head", and that a listener has no way to check it.
 
 ## 05 — Depth
 
-`?experiment=05-depth` · `672eb3b` · **default**
+`?experiment=05-depth` · `672eb3b`
 
 ### What it maps
 
@@ -357,7 +357,7 @@ _Not yet run with listeners._
 
 ## 07 — Texture
 
-`?experiment=07-texture` · `206792f` · **default**
+`?experiment=07-texture` · `ec159e5`
 
 ### What it maps
 
@@ -422,6 +422,8 @@ _Not yet run with listeners._
 ---
 
 ## 08 — Regions
+
+`?experiment=08-regions` · `ec159e5`
 
 Condition 07, with the region under the pointer named out loud when the
 pointer enters it. Everything else is unchanged: texture for intensity, the
