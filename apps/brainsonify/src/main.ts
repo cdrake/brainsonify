@@ -1,4 +1,4 @@
-import { Niivue, cmapper } from "@niivue/niivue";
+import { Niivue, SLICE_TYPE, cmapper } from "@niivue/niivue";
 
 import {
   DEFAULT_BOUNDS,
@@ -32,6 +32,7 @@ import {
 import { bonenessAt, densestVoxel, reach, type BoneMap, type Grid } from "./boneness";
 import type { BoneReply, BoneRequest } from "./boneness.worker";
 import { VoxelSampler, type Sample } from "./sampler";
+import { advance, cutFace, facePoint, type Raster } from "./sweep";
 import { KeyPlayer, browserSpeech } from "./soundkey";
 import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
 
@@ -94,6 +95,16 @@ let atlasPending = false;
 let atlasFits = true;
 
 /**
+ * Whether the radar sweep is currently driving the crosshair and the sound on
+ * its own. Declared up here, ahead of the sweep itself, because entering a
+ * condition needs to know: the sweep stops when a visitor moves to a
+ * condition that does not offer it.
+ */
+let sweeping = false;
+/** Identifies one sweep run, so a stopped run's own stale rAF loop knows to stop rather than keep going. */
+let sweepToken = 0;
+
+/**
  * How bone-like every voxel is, or null when there is none for this volume yet.
  *
  * Precomputed once per volume rather than per hover: the filter is a second of
@@ -136,6 +147,11 @@ function activate(experiment: Experiment, pushHistory: boolean): void {
   applyChannels(experiment.channels);
   if (experiment.taps) controls.setTaps(experiment.taps.fastest);
   if (experiment.mode) controls.setMode(experiment.mode);
+  if (experiment.clip) nv.setClipPlane(experiment.clip);
+  // The sweep belongs to the conditions that offer it; a run left going
+  // across a switch would keep sounding a condition the visitor has left.
+  el("sweepRow").hidden = !experiment.sweep;
+  if (!experiment.sweep && sweeping) stopSweep();
   key.cancel();
   callout.leave();
   sonifier.silence();
@@ -216,6 +232,20 @@ function playKey(): void {
  */
 let spike: { from: [number, number, number]; to: [number, number, number] } | null = null;
 
+/**
+ * Where the currently sampled voxel is, in world millimeters. Unlike
+ * `spike`, this is not tied to any one channel -- it exists in every
+ * condition, since it answers a question a sighted technician always has
+ * during a session: where on screen is the sound the listener is hearing
+ * actually coming from. Set from two sources: an ordinary hover, or the
+ * radar sweep below driving the crosshair across the cut face on its own.
+ * Drawn as a single line across every tile that shows it (see
+ * `drawScanLineOverlay`) rather than a crosshair-shaped pair, so it reads
+ * from across a room as one clear line, the way a radar sweep reads as one
+ * line and not a plus sign.
+ */
+let scanPoint: [number, number, number] | null = null;
+
 function onSample(sample: Sample | null): void {
   // A hover means the listener wants the real thing; the key gets out of
   // the way rather than fighting it for the voice.
@@ -226,6 +256,10 @@ function onSample(sample: Sample | null): void {
     sonifier.silence();
     if (spike) {
       spike = null;
+      scheduleOverlayDraw();
+    }
+    if (scanPoint) {
+      scanPoint = null;
       scheduleOverlayDraw();
     }
     return;
@@ -250,14 +284,16 @@ function onSample(sample: Sample | null): void {
   else callout.leave();
   const bone = boneMap ? bonenessAt(boneMap, ...sample.vox) : null;
 
+  scanPoint = sample.mm;
+
   const spikeVox = active.channels.bone && boneMap ? densestVoxel(boneMap, ...sample.vox) : null;
   const nextSpike = spikeVox
     ? { from: sample.mm, to: mmOf(spikeVox) }
     : null;
-  if (nextSpike || spike) {
-    spike = nextSpike;
-    scheduleOverlayDraw();
-  }
+  spike = nextSpike;
+  // scanPoint moves on every live sample, so this now runs every hover
+  // regardless of whether the spike line itself changed.
+  scheduleOverlayDraw();
 
   // Both conditions drive the same tap layer; which signal is behind it is the
   // whole difference between them. While the map is still building there is
@@ -297,7 +333,7 @@ function onSample(sample: Sample | null): void {
   );
 }
 
-/* ---------------- spike overlay ---------------- */
+/* ---------------- overlays: spike + scan line ---------------- */
 
 /** World millimeters for a full-resolution voxel index, via the same round-trip `sampler.ts` uses. */
 function mmOf(vox: [number, number, number]): [number, number, number] {
@@ -307,6 +343,9 @@ function mmOf(vox: [number, number, number]): [number, number, number] {
 
 /** Distinct from the crosshair's own blue, so the two are never mistaken for each other. */
 const SPIKE_COLOR = [1, 0.6, 0.15, 0.9];
+/** Distinct from both the crosshair's blue and the spike's orange. */
+const SCAN_LINE_COLOR = [1, 0.15, 0.85, 0.85];
+const SCAN_LINE_WIDTH = 1;
 
 let overlayQueued = false;
 
@@ -321,6 +360,7 @@ function scheduleOverlayDraw(): void {
     overlayQueued = false;
     nv.drawScene();
     drawSpikeOverlay();
+    drawScanLineOverlay();
   });
 }
 
@@ -365,12 +405,13 @@ function projectToTile(mm: [number, number, number], tile: (typeof nv.screenSlic
  * Draws a line from the sampled voxel to the densest bone the probe actually
  * found, on every 2D tile that shows it.
  *
- * 2D tiles only (`axCorSag > 2` is the render tile). Drawing on the render
- * tile too would need its own camera's model-view-projection matrix, which
- * NiiVue builds fresh inside its own draw call and does not hand back out;
- * reconstructing it is more reverse-engineering than a first pass is worth.
- * The 2D tiles stay visible during a render hover too, so the line is not
- * lost, only not drawn on top of the render itself.
+ * 2D tiles only (`axCorSag > 2` is the render tile) -- kept that way even
+ * though `drawScanLineOverlay` below shows a render-tile projection is in
+ * fact reachable (`nv.calculateMvpMatrix` hands back the same matrix
+ * `draw3D` builds for itself); the spike is a bone-channel aid, not the
+ * general "where is the sound" indicator that line earns its extra cost
+ * for. The 2D tiles stay visible during a render hover too, so the line is
+ * not lost, only not drawn on top of the render itself.
  *
  * Drawn as a follow-up call after `nv.drawScene()` rather than from inside
  * it, so this line survives every redraw *this app* triggers. It does not
@@ -390,12 +431,78 @@ function drawSpikeOverlay(): void {
   }
 }
 
+/**
+ * Projects a world mm point onto the 3D render tile's own screen rectangle,
+ * through NiiVue's actual render camera rather than an approximation:
+ * `nv.calculateMvpMatrix` (marked `@internal` in its own types, but public,
+ * and exactly what `draw3D` calls to build the matrix for this same frame)
+ * rebuilt from `nv.scene.renderAzimuth`/`renderElevation` and the render
+ * tile's own `leftTopWidthHeight` -- the same three inputs `draw3D` used
+ * moments earlier inside `nv.drawScene()`. The multiply and perspective
+ * divide are done by hand rather than pulling in `gl-matrix`: the app has
+ * no other use for a matrix library, and the read is eight multiplies.
+ * Null when the point falls behind the camera (`cw <= 0`) or outside the
+ * tile's own view frustum, the render-tile equivalent of `projectToTile`
+ * returning null for a point off a 2D tile's field of view.
+ */
+function projectRenderPoint(
+  mm: [number, number, number],
+  tile: (typeof nv.screenSlices)[number],
+): [number, number] | null {
+  const [mvp] = nv.calculateMvpMatrix(null, tile.leftTopWidthHeight, nv.scene.renderAzimuth, nv.scene.renderElevation);
+  const [x, y, z] = mm;
+  const cx = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+  const cy = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+  const cw = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
+  if (cw <= 0) return null;
+  const ndcX = cx / cw;
+  const ndcY = cy / cw;
+  if (ndcX < -1 || ndcX > 1 || ndcY < -1 || ndcY > 1) return null;
+
+  const [left, top, width, height] = tile.leftTopWidthHeight;
+  return [left + (ndcX * 0.5 + 0.5) * width, top + (1 - (ndcY * 0.5 + 0.5)) * height];
+}
+
+/**
+ * Draws one full horizontal line through the sampled point's own height, on
+ * every tile that shows it -- the 2D tiles via `projectToTile`, the render
+ * tile via `projectRenderPoint`. One line, not a crosshair pair: this reads
+ * as a radar-style sweep line, at a glance, from across the room -- which a
+ * pair of crossing lines reads as a target reticle instead. Horizontal
+ * because the sweep below reads the face in lines, left to right, and then
+ * steps down to the next: the line is the line being read. While the sweep
+ * runs it is drawn only as far as the sweep has got, growing from the left
+ * edge like the beam of a scanner, so a technician can see where along the
+ * line the sound is coming from -- the spike only marks the point when there
+ * is bone within reach, and soft tissue would otherwise leave no mark at
+ * all. An ordinary hover draws the same single line, full width, at
+ * whatever height it is currently over, so the line means the same thing
+ * whether the sweep or the pointer put it there.
+ */
+function drawScanLineOverlay(): void {
+  if (!scanPoint) return;
+  for (const tile of nv.screenSlices) {
+    const point =
+      tile.axCorSag === SLICE_TYPE.RENDER ? projectRenderPoint(scanPoint, tile) : projectToTile(scanPoint, tile);
+    if (!point) continue;
+    const [x, y] = point;
+    const [left, , width] = tile.leftTopWidthHeight;
+    const right = sweeping ? x : left + width;
+    nv.drawLine([left, y, right, y], SCAN_LINE_WIDTH, SCAN_LINE_COLOR);
+  }
+}
+
 const canvas = el<HTMLCanvasElement>("gl");
-const track = (e: PointerEvent) =>
+const track = (e: PointerEvent) => {
+  // The sweep below is driving the crosshair on its own; a stray hover
+  // fighting it for the same sample would make both illegible.
+  if (sweeping) return;
   sampler.sample(e.offsetX, e.offsetY, controls.sonify3d, controls.surfaceDepth, onSample);
+};
 
 const crosshairStep = el<HTMLSelectElement>("crosshairStep");
 const crosshairStatus = el("crosshairStatus");
+const sweepBtn = el<HTMLButtonElement>("sweepBtn");
 
 function nudgeCrosshair(axis: number, direction: number): void {
   const position = nv.scene.crosshairPos;
@@ -416,6 +523,94 @@ function centerCrosshair(): void {
   sampler.sampleFraction(position, onSample);
   crosshairStatus.textContent = "Crosshair centered.";
 }
+
+/* ---------------- radar sweep ---------------- */
+
+/**
+ * Seconds for one line of the face, left to right, and how far down the
+ * face the next line is, as a fraction of it. Together they set how long a
+ * whole face takes: at 4 s and 0.05 that is twenty lines and eighty seconds.
+ * First guesses, tunable here without touching the loop itself; nothing
+ * has been listened to at any other setting yet.
+ */
+const SWEEP_LINE_SECONDS = 4;
+const SWEEP_LINE_STEP = 0.05;
+
+/** Where on the face the sweep has got to. Starts at the top left, the way a page is read. */
+let raster: Raster = { across: 0, line: 0 };
+
+/**
+ * One frame of the sweep: moves along the current line by real elapsed
+ * time (not a fixed step per frame, so a line takes `SWEEP_LINE_SECONDS`
+ * regardless of frame rate), steps down to the next line when this one runs
+ * off the right edge, wraps to the top after the bottom one, and samples
+ * there -- the exact call `nudgeCrosshair` already makes by hand, just timed
+ * and automatic instead of one press at a time.
+ *
+ * The face is read afresh every frame from NiiVue's own clip plane rather
+ * than once at the start, so the sweep follows the plane when the wheel
+ * nudges its depth or `c` jumps it to another preset mid-run: the sweep
+ * reads whatever is cut right now, the way the pointer would.
+ *
+ * The crosshair is moved to the sampled point, so the blue crosshair on
+ * every tile follows the sweep and the sampled voxel is the one under it.
+ * The sample goes through `onSample` like any hover, so the bone spike's
+ * reach is in play: a line across soft tissue still taps where bone sits
+ * within the `Spike` distance behind the face.
+ *
+ * Deliberately does not call `nv.drawScene()` itself, unlike
+ * `nudgeCrosshair`: `onSample` below always calls `scheduleOverlayDraw()`
+ * for a live sample, which does its own `nv.drawScene()` immediately
+ * followed by the overlay lines, as one atomic redraw. A second, independent
+ * `drawScene()` call here would race that one every single frame -- one of
+ * the two draws wins each tick depending on ordering, so the scan line gets
+ * painted and then immediately overdrawn away before the browser ever shows
+ * it, which reads as a flicker rather than a steady line.
+ */
+function sweepFrame(token: number, lastTime: number): void {
+  requestAnimationFrame((now) => {
+    if (!sweeping || token !== sweepToken) return;
+    const dt = (now - lastTime) / 1000;
+    raster = advance(raster, dt, SWEEP_LINE_SECONDS, SWEEP_LINE_STEP);
+    const position = nv.scene.crosshairPos;
+    const point = facePoint(cutFace(nv.scene.clipPlane, position), raster.across, raster.line);
+    position[0] = point[0];
+    position[1] = point[1];
+    position[2] = point[2];
+    sampler.sampleFraction(position, onSample);
+    sweepFrame(token, now);
+  });
+}
+
+function startSweep(): void {
+  if (sweeping) return;
+  sweeping = true;
+  const token = ++sweepToken;
+  // Every run starts at the top left, so a listener always hears a face
+  // from its beginning rather than from wherever the last run was stopped.
+  raster = { across: 0, line: 0 };
+  sweepBtn.textContent = "Stop radar sweep";
+  sweepBtn.setAttribute("aria-pressed", "true");
+  crosshairStatus.textContent = "Radar sweep started.";
+  sweepFrame(token, performance.now());
+}
+
+/**
+ * Stops the sweep and silences, the same way a pointer leaving the canvas
+ * does (`onSample(null)`) -- stopping is "nothing is under the pointer now"
+ * for the sweep too, not a pause that leaves the last sweep tone hanging.
+ */
+function stopSweep(): void {
+  if (!sweeping) return;
+  sweeping = false;
+  sweepToken++;
+  sweepBtn.textContent = "Start radar sweep";
+  sweepBtn.setAttribute("aria-pressed", "false");
+  crosshairStatus.textContent = "Radar sweep stopped.";
+  onSample(null);
+}
+
+sweepBtn.addEventListener("click", () => (sweeping ? stopSweep() : startSweep()));
 
 const centerButton = document.querySelector<HTMLButtonElement>('[data-crosshair-action="center"]');
 if (!centerButton) throw new Error('missing center crosshair button');
@@ -443,7 +638,9 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-crossha
 
 canvas.addEventListener("pointermove", track);
 canvas.addEventListener("pointerenter", track);
-canvas.addEventListener("pointerleave", () => onSample(null));
+canvas.addEventListener("pointerleave", () => {
+  if (!sweeping) onSample(null);
+});
 
 /* ---------------- bone map ---------------- */
 
@@ -592,6 +789,7 @@ nv.onAzimuthElevationChange = () => {
 function refreshRange(): void {
   const vol = nv.volumes[0];
   if (!vol) return;
+  if (active.clip) nv.setClipPlane(active.clip);
 
   let lo = vol.cal_min ?? NaN;
   let hi = vol.cal_max ?? NaN;

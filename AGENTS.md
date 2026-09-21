@@ -78,9 +78,24 @@ and should say what volume they were measured on.
 Design reasoning and instrumented measurement are not evidence, and entries should
 not blur the two.
 
-**Write in Chris's register.** Plain declarative prose. Understated. No marketing
-language, no "exciting", no "leverage", no bulleted summaries where a paragraph
-works. "The retreat turned out to be productive" is the tone.
+**Write the way Chris writes.** The journal is in his voice, the same one he
+uses when he talks to an agent. First person; "we" for anything done together.
+Short plain sentences, mostly lowercase, no fuss. Say what we wanted, what we
+did, what happened, what was noticed. This is how he writes:
+
+> okay, another great idea that David came up with is to have a sound key that
+> explains what the different sounds mean. I thought this could play when the
+> user clicks Enable Sound.
+
+> there was a nicer voice. what happened?
+
+> ah, I see. it is the built in browser for vs code. the nice voice can be heard
+> in chrome.
+
+No marketing language, no "exciting", no "leverage", no bulleted summaries
+where a paragraph works. The whole journal was put into this voice on
+4 September 2026 at Chris's request, reasoning unchanged; that was a one-off,
+and the rule against rewriting entries stands.
 
 **Date entries correctly.** Check the actual date rather than assuming, in the
 timezone the work happened in.

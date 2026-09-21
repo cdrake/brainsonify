@@ -439,3 +439,17 @@ describe("formatTaps", () => {
     expect(formatTaps(0)).toBe("silent");
   });
 });
+
+describe("radar sweep", () => {
+  it("ships its row hidden, so only a condition that offers the sweep shows it", () => {
+    const row = document.getElementById("sweepRow") as HTMLElement;
+    expect(row.hidden).toBe(true);
+    const button = row.querySelector<HTMLButtonElement>("#sweepBtn");
+    expect(button?.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("is offered by the latest condition and by no earlier one", () => {
+    const offering = EXPERIMENTS.filter((e) => e.sweep).map((e) => e.id);
+    expect(offering).toEqual(["10-sweep"]);
+  });
+});

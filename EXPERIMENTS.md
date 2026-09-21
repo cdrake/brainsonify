@@ -14,6 +14,9 @@ panel links to the earlier ones.
 | 05 | Depth | [`?experiment=05-depth`](https://cdrake.github.io/brainsonify/?experiment=05-depth) | + tap brightness ← anterior–posterior |
 | 06 | Height | [`?experiment=06-height`](https://cdrake.github.io/brainsonify/?experiment=06-height) | + loudness window ← inferior–superior |
 | 07 | Texture | [`?experiment=07-texture`](https://cdrake.github.io/brainsonify/?experiment=07-texture) | voice ← white noise, brightness ← intensity (replaces pitch) |
+| 08 | Regions | [`?experiment=08-regions`](https://cdrake.github.io/brainsonify/?experiment=08-regions) | + the AAL region under the pointer is spoken |
+| 09 | Coronal cut | [`?experiment=09-coronal`](https://cdrake.github.io/brainsonify/?experiment=09-coronal) | + opens already cut to the medial coronal plane |
+| 10 | Radar sweep | [`?experiment=10-sweep`](https://cdrake.github.io/brainsonify/?experiment=10-sweep) | + a sweep reads the cut face on its own, line by line |
 
 The registry that drives all of this is `apps/brainsonify/src/experiments.ts`.
 It is the single source of truth: the switcher links, the default condition, and
@@ -470,3 +473,157 @@ _Not yet run with listeners._
   the first time it speaks. Whether it should still be announced is open.
 - A dropped-in file is assumed to be in MNI space. There is no check, and a
   scan that is not will be labelled with confidence.
+
+---
+
+## 09 — Coronal cut
+
+`?experiment=09-coronal` · commit: working
+
+Condition 08, with one change to how a session starts rather than to what
+anything sounds like: the scan opens already cut to the medial slice of the
+coronal plane instead of whole. Texture for intensity, the bone rhythm with
+its front-back brightness, loudness for height, and the spoken region name
+are all unchanged from 08.
+
+### What it maps
+
+Nothing new sonically — no channel is added or altered. What changes is the
+starting state of NiiVue's own clip plane, set once on load via its public
+`setClipPlane([depth, azimuth, elevation])` API to `[0, 0, 0]`: depth zero is
+the midline itself, and azimuth 0 / elevation 0 is the same plane NiiVue's
+own POSTERIOR preset uses. A visitor lands here already; pressing `c` once by
+hand would have gotten them to the same place anyway. After that, the plane
+is theirs to move: the mouse wheel over the 3D render nudges its depth, and
+`c` cycles NiiVue's own six anatomical presets and off, exactly as it always
+has. Nothing about wheel or keyboard handling is touched.
+
+### Why a fixed start, and not free 3D hovering alone
+
+Every earlier condition opens on the whole, uncut volume, and left it to
+whoever is at the mouse to discover that a clip plane exists at all — it is
+a NiiVue feature, not something this app surfaces on its own. For a sighted
+technician guiding a listener who cannot see the screen, starting whole and
+figuring out clipping live during a session is one more thing to manage
+while also narrating position. Opening pre-cut to a plane that is already a
+recognizable anatomical landmark — straight down the middle, front from back
+— gives the technician a known place to start describing from, and a
+`TECHNICIAN.md` guide at the repo root now documents the rest of that
+workflow: what to click before the listener sits down, how the wheel and `c`
+differ, and how to narrate a pass.
+
+### Why its own condition, and not a change to 08
+
+The first attempt at this folded the fixed start into every condition's
+shared `refreshRange()`, which would have moved 01 through 08 out from under
+themselves — conditions that had already been described, and in 08's case
+run, on the assumption of an uncut open. Keeping each prior condition exactly
+as it was is the same reason 02 through 08 each exist as their own entry
+instead of overwriting the one before: the log is the record of what was
+tried, not just of what is current.
+
+### What to listen for
+
+Whether starting already cut changes how quickly a first-time listener
+orients, compared to 08's uncut open, given the same technician narration.
+Whether the fixed coronal start is in fact the anatomical plane a technician
+reaches for first, or whether sagittal or axial would be a more natural
+landing point for most of what gets demonstrated.
+
+### Result
+
+_Not yet run with listeners._
+
+### Still open
+
+- The medial coronal plane was picked because it is NiiVue's own POSTERIOR
+  preset at depth zero, not because it was tested against sagittal or axial
+  as a starting cut. Whether front-to-back is the most useful first
+  orientation, versus left-right or top-to-bottom, is untested.
+- `TECHNICIAN.md` has not been run with an actual sighted technician guiding
+  an actual visually-impaired listener; it is written from reading NiiVue's
+  own controls, not from watching a session.
+- The pre-existing `Clip` slider in the side panel is untouched and still
+  camera-relative, now sitting alongside a second, plane-relative way to cut
+  the volume. Whether having both is confusing in practice, or whether the
+  slider should be hidden while a fixed clip plane is active, is open.
+
+## 10 — Radar sweep
+
+`?experiment=10-sweep` · commit: working · **default**
+
+Condition 09, with one addition to how a session is driven rather than to
+what anything sounds like: a **Start radar sweep** button that reads the cut
+face on its own. Texture for intensity, the bone rhythm with its front-back
+brightness, loudness for height, the spoken region name and the medial
+coronal opening cut are all unchanged from 09.
+
+### What it maps
+
+Nothing new sonically — no channel is added or altered. What changes is who
+is moving. Pressed, the sweep walks the face of the clip plane the way a page
+is read: left to right along one line, then the next line down, and from the
+bottom line back to the top, looping until pressed again. Every point it
+lands on is sampled through the same path a crosshair step uses and sounded
+through the same path a hover is, so the bone spike's reach is in play the
+whole way: a line across soft tissue still taps where bone sits within the
+`Spike` distance behind the face. The crosshair follows the sweep on every
+tile, and the magenta scan line is drawn only as far along the current line
+as the sweep has got, so a technician can see where the sound is coming from
+even where there is no bone for the spike to mark. Hovering is ignored while
+it runs.
+
+The face is read from NiiVue's own clip plane afresh every frame, so the
+wheel and `c` still work mid-sweep and the sweep goes with the plane: nudge
+the coronal cut deeper and the next line is read off the new depth; press
+`c` and the sweep reads the sagittal or axial face instead. On a sagittal
+cut a line runs back to front, since it has no left-right of its own; on an
+axial cut the lines run front to back, with the front at the top. With no
+plane set at all the sweep reads the coronal plane through the crosshair.
+
+The pace is set by two constants in `main.ts`: 4 seconds per line and a
+step of 5% of the face between lines, which is twenty lines and eighty
+seconds for a whole face. Those are first guesses. Nothing has been listened
+to at any other setting.
+
+### Why a sweep, and why its own condition
+
+Every earlier condition puts the listener's hand on the mouse, or a
+technician's. Both make the listener responsible for where the sound comes
+from as well as what it means, and a first-time listener has no map to aim
+with. A sweep takes the aiming away: the whole face arrives in a fixed order
+at a fixed pace, and the listener's only job is to notice what changes from
+line to line. Whether that is easier or just slower is the question.
+
+It is its own condition for the reason 09 is: 01 through 09 were described,
+and in 08's case run, without a sweep button in the panel, and the button
+appears only here, so none of them moves.
+
+### What to listen for
+
+Whether the skull reads as a shape. On a coronal face the vault is a ring, so
+a line near the top should tap twice, close together, and a line through the
+middle of the head should tap once near each end with soft tissue between.
+Whether the ventricles, the corpus callosum and the temporal lobes register
+as changes in the texture from one line to the next, and at what pace they
+stop registering. Whether a listener can say, unprompted, roughly how far
+down the face the sweep is.
+
+### Result
+
+_Not yet run with listeners._
+
+### Still open
+
+- 4 seconds a line and twenty lines to a face are guesses. A line takes as
+  long as it takes to hear, and a face should not take so long that the top
+  of it is forgotten by the bottom. Both want tuning by ear, and may want to
+  be controls rather than constants.
+- A line is a run of single voxels, heard one after another. Whether a line
+  of tissue should instead be heard all at once, as one sound, is a design
+  question that this condition does not answer; see NOTES.md Entry 13 for
+  the options.
+- The sweep covers the middle unit square of a tilted plane rather than its
+  whole extent, so on the camera-relative `Clip` slider's plane it can read
+  air, or nothing, at the ends of a line. The six anatomical presets are the
+  intended use.

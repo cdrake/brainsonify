@@ -44,6 +44,22 @@
     </div>
     <fieldset class="crosshair" aria-labelledby="crosshairHeading">
       <legend id="crosshairHeading">Crosshair position</legend>
+      <div id="sweepRow" hidden>
+        <div class="row">
+          <button type="button" id="sweepBtn" aria-pressed="false">Start radar sweep</button>
+        </div>
+        <p class="note">
+          Reads the cut face on its own, looping: left to right along one
+          line, then the next line down, the way a page is read. The bone
+          spike reaches off the face as it goes, so bone just behind the cut
+          still taps. A single line marks the current line on every tile,
+          growing from the left as the sweep crosses it, the way a radar
+          sweep is one line rather than a target reticle. Move the plane
+          with the wheel or <kbd>c</kbd> and the sweep follows. Hovering is
+          ignored while it runs; press again to stop and hand control back
+          to the pointer.
+        </p>
+      </div>
       <div class="row">
         <label for="crosshairStep">Step size</label>
         <select id="crosshairStep">

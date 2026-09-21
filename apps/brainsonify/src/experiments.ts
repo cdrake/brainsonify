@@ -78,7 +78,37 @@ export interface Experiment {
    * across would silently change what is being compared.
    */
   taps?: TapRange;
+  /**
+   * `[depth, azimuth, elevation]` for NiiVue's own built-in clip plane, if
+   * this condition wants to open already cut rather than whole. Not a
+   * channel -- it changes what is in reach of the pointer, not what a voxel
+   * sounds like -- so it lives here next to `mode`/`taps` instead of in
+   * `Channels`. A visitor can still move the plane themselves afterwards,
+   * same as any other condition: the mouse wheel over the 3D render nudges
+   * its depth, and `c` cycles NiiVue's own anatomical presets. This only
+   * sets where it starts.
+   */
+  clip?: [number, number, number];
+  /**
+   * Whether this condition offers the radar sweep: a button that reads the
+   * cut face on its own, one line at a time from left to right and top to
+   * bottom, looping, with the pointer ignored while it runs. Like `clip`,
+   * not a channel -- it changes who is doing the moving, not what a voxel
+   * sounds like. The sweep reads whatever plane NiiVue is currently cut on,
+   * so it follows the wheel and `c` like everything else.
+   */
+  sweep?: boolean;
 }
+
+/**
+ * The medial slice of the coronal plane: depth 0 is the midline itself, and
+ * azimuth 0 / elevation 0 is NiiVue's own POSTERIOR preset (see
+ * CLIP_PLANE_PRESETS in its KeyboardController) -- the same plane a visitor
+ * lands on by pressing `c` once by hand. Named here, rather than inline on
+ * the experiment below, so a future condition that wants the same starting
+ * cut is not stuck re-deriving it.
+ */
+export const CORONAL_MEDIAL: [number, number, number] = [0, 0, 0];
 
 export const EXPERIMENTS: readonly Experiment[] = [
   {
@@ -160,6 +190,31 @@ export const EXPERIMENTS: readonly Experiment[] = [
     channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
     taps: BONE_TAPS,
     mode: "texture",
+  },
+  {
+    id: "09-coronal",
+    number: "09",
+    name: "Coronal cut",
+    summary:
+      "Keeps everything 08 maps, and opens already cut to the medial slice of the coronal plane instead of whole: a fixed anatomical starting point for a sighted technician to guide a listener from, moving the cut with NiiVue's own mouse wheel and `c` presets rather than free 3D hovering alone.",
+    commit: "working",
+    channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
+    taps: BONE_TAPS,
+    mode: "texture",
+    clip: CORONAL_MEDIAL,
+  },
+  {
+    id: "10-sweep",
+    number: "10",
+    name: "Radar sweep",
+    summary:
+      "Keeps 09's coronal cut and everything it maps, and adds a sweep that reads the cut face on its own: left to right along one line, then the next line down, looping, with the bone spike's reach in play the whole way -- so a listener can sit back and take in a whole plane instead of hunting for it with the pointer.",
+    commit: "working",
+    channels: { stereo: true, rhythm: false, bone: true, depth: true, height: true, atlas: true },
+    taps: BONE_TAPS,
+    mode: "texture",
+    clip: CORONAL_MEDIAL,
+    sweep: true,
   },
 ];
 

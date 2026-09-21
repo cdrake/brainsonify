@@ -81,7 +81,9 @@ links to the earlier ones, and each has a stable URL:
 ?experiment=05-depth     + tap brightness carries front-back
 ?experiment=06-height    + loudness carries inferior-superior
 ?experiment=07-texture   white noise: brightness carries intensity, not pitch
-?experiment=08-regions   + the AAL region under the pointer is spoken     (default)
+?experiment=08-regions   + the AAL region under the pointer is spoken
+?experiment=09-coronal   + opens already cut to the medial coronal plane
+?experiment=10-sweep     + a radar sweep reads the cut face on its own       (default)
 ```
 
 Switching does not reload: a volume you dropped in survives the change, which is
@@ -122,6 +124,22 @@ registry that drives the switcher, the default, and the visible controls.
   rotation instead of swinging round to the far side. A ray that passes only
   through cut-away space reports id 253 rather than a volume hit, so hovering the
   opened cavity is correctly silent.
+- **The radar sweep.** Where a condition offers it, **Start radar sweep** reads
+  the cut face without a pointer: left to right along one line, then the next
+  line down, wrapping from the bottom back to the top until stopped. `sweep.ts`
+  takes NiiVue's own `scene.clipPlane` — `[nx, ny, nz, depth]`, the plane
+  `dot(n, p − 0.5) + depth = 0` in fraction space, which is what its render
+  shader clips against — and builds a frame on it: the in-plane direction
+  closest to inferior is "down", and "across" is perpendicular to that, signed
+  towards anatomical right (or, on a sagittal cut, towards the front). An axial
+  cut has no inferior direction in it, so there posterior is "down" and the
+  front is at the top. With no clip plane set the sweep reads the coronal plane
+  through the crosshair. The face is re-read every frame, so the wheel and `c`
+  move the sweep along with the plane. Each point goes through the same
+  `sampleFraction` a crosshair step uses and through the same `onSample` a
+  hover does, so every channel, the bone spike's reach included, is in play.
+  The crosshair follows, and the magenta scan line is drawn only as far as the
+  sweep has got along the current line. Hovering is ignored while it runs.
 - **Finding bone without intensity.** Cortical bone is a signal void on a T1 —
   the darkest thing in the head — so nothing about its intensity identifies it.
   What is distinctive is its shape: a thin dark sheet lying parallel to the
@@ -244,6 +262,7 @@ registry that drives the switcher, the default, and the visible controls.
 | Sound key | Replays the spoken key to the active condition's sounds; it also plays whenever sound is enabled |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
+| Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |
 
 Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
 demo volumes are fetched from `niivue.github.io` at runtime and are not stored
