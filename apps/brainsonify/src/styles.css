@@ -22,13 +22,18 @@ body {
   color: #e6e8ea;
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
 }
 
 /* ---------------- stage ---------------- */
 
-#stage { position: relative; min-width: 0; }
+/* min-height 0 and overflow hidden matter: NiiVue sizes the canvas backing
+   store to the stage, and a canvas's intrinsic size is its backing store, so
+   without them a grid row's automatic minimum lets the stage grow to whatever
+   the canvas last was and never shrink back when the window does. */
+#stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 canvas { width: 100%; height: 100%; display: block; background: #000; }
 
 #drop {
@@ -48,11 +53,19 @@ body.dragging #drop { opacity: 1; }
 
 /* ---------------- panel ---------------- */
 
+/* position: relative makes the panel the containing block for its
+   visually-hidden live regions. They are absolutely positioned, and without
+   it they sit at their in-flow spot measured from the page, past the panel's
+   clip, which gave the whole page a phantom scroll as tall as the panel. */
 aside {
+  position: relative;
   background: #14171c;
   border-left: 1px solid #232830;
   padding: 16px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 h1 { font-size: 15px; margin: 0 0 9px; font-weight: 650; }
 .sub { font-size: 12px; color: #8b94a0; margin: 0 0 16px; }
@@ -137,15 +150,25 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
 /* ---------------- experiment switcher ---------------- */
 
-#experiments { display: flex; gap: 6px; margin-bottom: 9px; }
+/* A wrapping grid rather than one flex row: eleven tiles never fit across a
+   320px panel, and a tile that cannot shrink to its text would overrun it. The
+   column minimum holds the longest current name on one line, three columns to
+   the panel; a name that outgrows it wraps at a space, and a single word that
+   outgrows it breaks rather than spills. */
+#experiments {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 6px;
+  margin-bottom: 9px;
+}
 
 #experiments a {
-  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 6px 8px;
+  padding: 6px 7px;
+  overflow-wrap: anywhere;
   border: 1px solid #2e3644;
   border-radius: 7px;
   background: #181d25;
@@ -181,5 +204,6 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 code { background: #1b2029; padding: 1px 4px; border-radius: 4px; font-size: 11px; }
 
 @media (max-width: 760px) {
-  body { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; }
+  body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 55vh minmax(0, 1fr); }
+  aside { border-left: 0; border-top: 1px solid #232830; }
 }

@@ -39,6 +39,12 @@ plane straight down the middle, front from back, at the midline. That's the
 starting point every session begins from, so you don't have to set it up by
 hand.
 
+The screen shows four tiles: three flat slices and the 3D render, which
+is where the cut face is. They rearrange to fit the window — side by side
+when it is wide, stacked when it is tall, two by two otherwise — so the
+render is not always bottom right, but it is always there. If a listener's
+setup is a wide, short window, expect it to be the rightmost tile.
+
 The render is a `<canvas>`, and browsers only send it keyboard shortcuts
 once you've clicked it — **click once on the 3D render before you try `c`
 or arrow keys.** The mouse wheel does not need that click; it works as soon

@@ -1126,3 +1126,52 @@ that's a condition; if not, it stays a knob.
 
 - listen to 11 with the lines running each way.
 - a condition for columns if they earn one.
+
+## Entry 16 — 21 September 2026
+
+### formatting: the render always on screen, and the switcher off the edge
+
+the page had got messy at some window shapes. the eleven switcher tiles
+sat in one flex row across a 300px panel, and since each one was allowed
+to shrink below its text, every name overran its tile and the last tile
+overran the panel. and NiiVue was on its auto setting for the render tile,
+which drops the render whenever three planar tiles fill a row, so on a
+wide, short window the one tile a session is run from was gone.
+
+the switcher is a wrapping grid now, three columns to a 320px panel, with a
+column minimum that fits the longest name on one line. a longer name wraps
+at a space, and a single word that outgrows the column breaks rather than
+spills. the panel itself no longer scrolls sideways.
+
+the render is set to always show. NiiVue then chooses row, column or grid
+by comparing its three planar layouts only, and bolts the render on
+afterwards, so for a stage between about one and a half and two times as
+wide as tall it picks a row of four where a grid gives bigger tiles. we
+make that choice ourselves from the stage's aspect ratio: a row past
+twice as wide as tall, a column past twice as tall as wide, a grid
+between. worked through with the MNI152 extents the crossovers land in the
+same places as for square tiles, so the rule is those two numbers and
+nothing about the volume. it runs on a resize observer on the stage, after
+NiiVue's own.
+
+two things found on the way. the stage could grow taller than the window
+and never shrink back: a canvas's intrinsic size is its backing store,
+NiiVue sizes the backing store to the stage, and a grid row's automatic
+minimum let the stage follow. min-height zero on the stage and panel, and
+a minmax row, stop it. and the whole page could scroll by about a panel's
+height with nothing to see: the visually hidden live regions are
+absolutely positioned, the panel was not positioned, so they sat at their
+in-flow spot measured from the page, past the panel's clip. the panel is
+position relative now and they stay inside it.
+
+on checking: the headed tab the extension drives reports itself hidden, so
+neither animation frames nor resize observers fire in it. layouts were
+checked with a same-origin iframe inside the tab, reloaded at each size,
+and the three forced layouts were checked by setting the option by hand.
+the observer path itself has only run in the tests' heads and mine; worth
+a look with a real window resize.
+
+### next
+
+- resize a real window through the three layouts and watch the render.
+- listen to 11 with the lines running each way.

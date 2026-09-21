@@ -62,6 +62,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `apps/brainsonify/src/boneness.ts` | Hessian sheetness + surface alignment → how bone-like a voxel is |
 | `apps/brainsonify/src/boneness.worker.ts` | Runs that map off the main thread, once per volume |
 | `apps/brainsonify/src/sampler.ts` | Pointer position → voxel intensity, 2D and 3D |
+| `apps/brainsonify/src/layout.ts` | Row, grid or column for the four tiles, from the stage's aspect ratio; the render is always one of them |
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
 | `apps/brainsonify/src/soundkey.ts` | Plays the key: says each label, then drives the voice through its sweep |
 | `apps/brainsonify/src/atlas.ts` | The AAL atlas: world position to region name, spoken on entry |

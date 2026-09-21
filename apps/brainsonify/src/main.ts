@@ -1,4 +1,4 @@
-import { Niivue, SLICE_TYPE, cmapper } from "@niivue/niivue";
+import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER, SLICE_TYPE, cmapper } from "@niivue/niivue";
 
 import {
   DEFAULT_BOUNDS,
@@ -31,6 +31,7 @@ import {
 } from "./experiments";
 import { bonenessAt, densestVoxel, reach, type BoneMap, type Grid } from "./boneness";
 import type { BoneReply, BoneRequest } from "./boneness.worker";
+import { type PlanarLayout, planarLayout } from "./layout";
 import { VoxelSampler, type Sample } from "./sampler";
 import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
 import { KeyPlayer, browserSpeech } from "./soundkey";
@@ -68,8 +69,35 @@ const nv = new Niivue({
   backColor: [0, 0, 0, 1],
   crosshairColor: [0.15, 0.6, 1, 1],
   show3Dcrosshair: true,
+  // The render tile is where the cut face is, so it is the tile a session
+  // is run from. Left on AUTO, NiiVue drops it whenever the canvas is wide
+  // and short enough that three planar tiles fill a row; ALWAYS keeps it
+  // in the layout at every aspect ratio, smaller when it must be.
+  multiplanarShowRender: SHOW_RENDER.ALWAYS,
 });
 nv.attachTo("gl");
+
+const LAYOUTS: Record<PlanarLayout, MULTIPLANAR_TYPE> = {
+  row: MULTIPLANAR_TYPE.ROW,
+  grid: MULTIPLANAR_TYPE.GRID,
+  column: MULTIPLANAR_TYPE.COLUMN,
+};
+
+/**
+ * Lays the tiles out for the stage's shape: a row when it is wide, a column
+ * when it is tall, a grid otherwise. NiiVue's own AUTO decides from the three
+ * planar tiles alone (see layout.ts), so the choice is made here instead,
+ * whenever the stage changes size. NiiVue's own resize observer was attached
+ * first, so it has already resized the canvas by the time this one runs, and
+ * the queued redraw picks up the new layout.
+ */
+const stage = el("stage");
+new ResizeObserver(() => {
+  const layout = LAYOUTS[planarLayout(stage.clientWidth, stage.clientHeight)];
+  if (nv.opts.multiplanarLayout === layout) return;
+  nv.opts.multiplanarLayout = layout;
+  scheduleOverlayDraw();
+}).observe(stage);
 
 const sampler = new VoxelSampler(nv);
 let range: IntensityRange = DEFAULT_RANGE;
