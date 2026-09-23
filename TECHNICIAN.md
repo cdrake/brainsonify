@@ -67,16 +67,22 @@ fine control — small, continuous moves, good for "a little further" during
 a hover.
 
 **Press `c`** to jump to the next whole plane. It cycles through six fixed
-cuts and then off, in this exact order, and wraps back to the start:
+cuts and then off, in this exact order, and wraps back to the start. Each
+is named for the side it takes off, and the 3D render turns to look at the
+cut from that side, so the face is what you see and what the pointer reads:
 
-1. Left — hides the right hemisphere, shows the left
-2. Right — hides the left hemisphere, shows the right
-3. Posterior — hides the front, shows the back (this is the starting cut, so pressing `c` for the first time in a session moves past it, not onto it)
-4. Anterior — hides the back, shows the front
-5. Inferior — hides the top, shows the underside
-6. Superior — hides the bottom, shows the top
-7. Off — nothing clipped, the whole head/brain visible
+1. Left — takes off the left hemisphere, faced from the left
+2. Right — takes off the right hemisphere, faced from the right
+3. Posterior — takes off the back, faced from behind (this is the starting cut, so pressing `c` for the first time in a session moves past it, not onto it)
+4. Anterior — takes off the front, faced from the front
+5. Inferior — takes off the underside, faced from below
+6. Superior — takes off the top, faced from above
+7. Off — nothing clipped, the whole head/brain visible; the camera stays where it was
 8. back to Left, and the cycle repeats
+
+The knob's next plane (`n`) walks the same ring and turns the camera the
+same way. If you have dragged the render to some other angle, the next
+whole plane snaps it back to face the cut.
 
 Every one of these opens already sitting at its own midline (`c` always
 lands you back at depth zero on the new axis), so after a `c` press the
@@ -177,6 +183,26 @@ size, and the focused parameter's value; glance at it when a listener asks
 what turning will do. The step-size select beside the crosshair buttons is
 for those buttons only; the knob's step size is set with `s`.
 
+## Letting an agent drive
+
+An agent connected over MCP can do the region step for you: `go_to_region`
+puts the crosshair on a region's centroid, cuts a plane through it so the
+region is on the exposed face, turns the render to look at that face from
+the side the cut took off, sounds the voxel there and announces the
+place the way the knob does. For that to work the app must be open with
+`?agent` in its address (the dev server does it without), the MCP server
+must be running (`bun run mcp`), and the scan must be the MNI152 demo or
+another MNI-space volume. The line under the crosshair buttons says whether
+the server was reached.
+
+Warn the listener before an agent moves them, the same as you would before
+moving them yourself: the announcement says where they are now, not that
+something is about to happen. An agent keeps the plane you have cut unless
+it asks for another, so set the orientation first if it matters, and leave
+the **Clip** slider at zero while an agent is driving, since above zero a
+camera turn re-cuts the plane the slider's way. `where_am_i` is the agent's
+version of pressing the knob and changes nothing.
+
 ## Quick troubleshooting
 
 No sound at all: check **Enable sound** actually shows "Sound on" (it
@@ -195,3 +221,11 @@ The region name is missing or says "off: not an MNI scan": the atlas only
 labels scans that are already in MNI space, like the MNI152 demo. A
 whole-head or individually scanned volume won't have region names, which
 is expected, not a bug — everything else still works.
+
+The line under the crosshair buttons says "agent server not reached": start
+the server with `bun run mcp` if it isn't running; the app keeps retrying on
+its own and the line changes when it gets through. The browser console has
+one line naming the addresses it tried. If the line says connected but an
+agent's call moves nothing on screen, another open tab of the app answered
+instead — the newest tab to connect is the one that answers — so reload the
+tab you're watching.

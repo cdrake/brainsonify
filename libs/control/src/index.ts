@@ -46,3 +46,17 @@ export {
   STEP_MULTIPLIER,
 } from "./surface";
 export type { Axis, KnobMode, KnobScene, StepSize, SurfaceOptions } from "./surface";
+
+export {
+  PLANE_ALIASES,
+  PLANE_ANGLES,
+  PLANE_OFF,
+  cameraForPlane,
+  clipNormal,
+  depthThrough,
+  matchRegion,
+  regionMentions,
+  resolvePlane,
+  viewDirection,
+} from "./agent";
+export type { AgentMethod, AgentRequest, AgentResponse, Nameable, RegionSummary } from "./agent";

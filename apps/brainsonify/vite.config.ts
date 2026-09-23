@@ -26,6 +26,19 @@ export default defineConfig({
     watch: false,
   },
 
-  server: { port: 4200, host: "localhost" },
+  server: {
+    port: 4200,
+    host: "localhost",
+    // The agent socket on the page's own origin, for browsers that allow a
+    // page one origin only (Claude's built-in browser pane). The server
+    // itself listens on :4242 under the path /app.
+    proxy: {
+      "/agent": {
+        target: "ws://127.0.0.1:4242",
+        ws: true,
+        rewrite: (path) => path.replace(/^\/agent/, "/app"),
+      },
+    },
+  },
   preview: { port: 4300, host: "localhost" },
 });
