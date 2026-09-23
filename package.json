@@ -4,11 +4,15 @@
   "private": true,
   "description": "Non-visual exploration of volumetric medical images: hover an MRI, hear the tissue underneath.",
   "license": "BSD-2-Clause",
-  "workspaces": ["apps/*", "libs/*"],
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ],
   "scripts": {
     "dev": "nx dev brainsonify",
     "build": "nx build brainsonify",
     "preview": "nx preview brainsonify",
+    "mcp": "nx serve mcp",
     "test": "nx run-many -t test",
     "typecheck": "nx run-many -t typecheck",
     "graph": "nx graph"

@@ -1175,3 +1175,460 @@ a look with a real window resize.
 
 - resize a real window through the three layouts and watch the render.
 - listen to 11 with the lines running each way.
+
+## Entry 17 — 21 September 2026
+
+### the control api lands as a library
+
+the control api written outside the repo is in as libs/control: a schema
+of the eighteen panel parameters, a state store that validates, clamps,
+emits events and keeps twenty steps of undo, and the public index. the
+plan documents that came with it are in docs/control. nothing in the app
+uses it yet; that is the next phase, with the virtual controller.
+
+two things changed on the way in. the controller imported the Experiment
+type from the sonification lib, where it does not live; it is the app's
+registry type. a library must not reach into the app, so the controller
+names only the two fields it reads, mode and taps, as an ExperimentPreset,
+and the app's experiments satisfy it structurally. and the library's
+configs mirror sonification's rather than the ones drafted alongside the
+code: that draft pointed at a tsconfig.spec.json this workspace does not
+have, and nx here infers the test target from vitest.config.ts.
+
+the strict settings turned up two real bugs as well as type errors. the
+single-parameter path passed the previous value where the state listener
+expects the previous state, and undo passed the state after the undo as
+the one before it. both fixed; undo now also tells the per-parameter
+listeners. an empty test run passes for now so the workspace stays green
+until the specs are written.
+
+### next
+
+- specs for schema, state and controller.
+- the virtual controller, then wire the panel through the api.
+
+
+---
+
+## Entry 18 — 21 September 2026
+
+### the knob, and a keyboard standing in for it
+
+the app is used by two people at once: a visually impaired listener and a
+sighted technician, with some back and forth between them. that settled
+the shape of the controller before any code. the listener gets one knob
+and turns it; the technician gets buttons that change what turning does.
+the ControlSurface in libs/control is that arrangement with nothing
+physical in it, and the app has a keyboard driving it now. the physical
+device is an elecrow crowpanel 2.1" rotary display; it presents itself
+as a bluetooth keyboard and sends the same keys, so the browser never
+knows which one it is talking to. docs/control/CROWPANEL.md is the target
+for the firmware.
+
+### decisions
+
+pressing the knob never changes anything. it says where the crosshair is,
+region first when the atlas fits, or what the focused parameter reads. a
+shared device needs one gesture the listener can make freely, whenever
+they lose track, without undoing anything, and that is it. the change
+gestures are all the technician's.
+
+every button press is announced, into the crosshair live region and out
+loud while sound is on, the same rule the region callout keeps. the
+listener otherwise has no way to know that the knob now does something
+else. numeric nudges stay silent: the sound is the feedback. on and off
+and list settings are spoken, since those have no sound of their own.
+
+the key table is the protocol. one table in the app, keys chosen around
+the ones niivue reads on a focused canvas so a key never does two things
+depending on focus, and a spec that checks the two sets do not overlap.
+the physical panel sends the same keys. the numbers 1 to 5 are one button
+per mode, 0 cycles for when the numbers are out of reach.
+
+ble hid keyboard first, before serial or gatt. it needs no browser code
+and no pairing gesture in the page. serial and gatt are only worth it if
+pairing is a problem in the room or the round display should show what
+the app says.
+
+the schema was corrected to the panel rather than the panel to the
+schema. the draft that came in with the library had a sensitivity
+parameter the panel does not have, and ranges and defaults the panel
+does not use; the panel is what has been listened to. a spec now reads
+index.html and checks every range, step, default and option against the
+schema, so they cannot drift again. the default state is derived from
+the schema rather than written out a second time.
+
+the panel and the api hold the same values and follow each other, one
+hop each way: a value already held is not written again, so neither
+direction loops. the panel stays the source of the html; the api is a
+second view of it.
+
+### implementation notes
+
+the api rejects a value outside its range rather than clamping it; the
+clamp in setParameter is never reached. left as is, since the surface
+clamps before it calls.
+
+the running dev server predated the path alias for @brainsonify/control
+in tsconfig.base.json, and vite-tsconfig-paths reads that file at
+startup, so main.ts failed to load with a resolve error while the
+production build passed. a second server on another port picked it up.
+the one on 4200 needs a restart.
+
+the knob's status line went stale after a silent numeric turn, since it
+was only refreshed on an announcement. it follows the api's state
+change now, so a hand on a slider updates it too.
+
+checked headed in chrome: turns move the crosshair and the plane, modes
+and focus announce, the sliders follow the knob and the knob line follows
+the sliders, keys inside a form control are ignored. not yet listened to
+with sound on.
+
+### open questions
+
+- two step-size controls now exist: the select beside the crosshair
+  buttons and the knob's own. is that one too many, or is it right that
+  the technician's buttons and the listener's knob have separate sizes?
+- a large step on a parameter is ten schema steps, which on a 0.05-step
+  slider is half its range. is that ever what a technician wants?
+
+### next
+
+- restart the dev server on 4200.
+- listen to a session with the knob and sound on: does the spoken mode
+  change land over the tone, and is the press readout the right length?
+- firmware: the crowpanel as a ble keyboard sending the table in
+  CROWPANEL.md.
+
+## Entry 19 — 23 September 2026
+
+### an agent that can take the listener somewhere
+
+the readme has said since the start that the interaction has no way to
+navigate to a named structure. this entry is the first way, though not the
+one a listener can use alone: an agent connected over mcp asks for a region
+by name, and the app puts the crosshair on its centroid and cuts the volume
+with a plane through that point. the technician's hand on the panel, done
+by a program.
+
+### shape
+
+one bun process in apps/mcp. it serves the mcp endpoint over streamable
+http on /mcp and holds a websocket on /app that the browser opens. the
+server knows nothing about anatomy: a tool call is one json request written
+to the tab and one json response read back, matched by id. everything that
+needs the volume, the atlas or the listener happens in the browser, where
+those already are. the newest tab to connect wins, since that is the one
+the person is looking at, and calls left waiting on an older tab fail
+rather than hang.
+
+three tools. list_regions, go_to_region and where_am_i. where_am_i is the
+knob press for an agent: it changes nothing and says where things are.
+
+the app side is a controller like the keyboard one, in
+controllers/agent.ts, attached in dev always and otherwise by ?agent in the
+address. it retries the socket with a backoff up to half a minute, so the
+two processes can start in either order.
+
+the part both ends share, and the arithmetic, is in libs/control/src/agent.ts
+with no niivue or dom in it: the messages on the wire, matching a region by
+label or spoken name, and the depth that puts a plane through a point.
+
+### decisions
+
+the crosshair goes to the centroid, as asked, but not blindly. a curved
+region's mean can lie outside it. the label under the centroid is checked,
+and when it is not the region's own, the nearest voxel that is becomes the
+landing and the reply says so. across all 116 aal regions five snapped:
+both olfactory, both cerebellum 7b, and right frontal superior. the rest
+land on their own mean.
+
+the plane keeps the orientation already cut when there is one and falls
+back to coronal when there is none. a first visit gets a face to land on;
+a later one does not throw away the orientation the technician chose. an
+agent can name a side or a slice explicitly instead.
+
+the depth comes from niivue's own convention rather than trial. the shader
+keeps a clip plane as dot(normal, p - 0.5) + depth = 0 in fraction space,
+and the normal is sph2cartDeg of the azimuth plus 180, which is why the
+plane named posterior has a normal pointing anterior and why the sweep's
+coronal default already used 0.5 - crosshair y. the depth through a point
+is the negative of its signed distance from the middle along that normal.
+checked in the browser after a sagittal cut through the left anterior
+cingulum: the residual was exactly zero, and the crosshair sat on the
+exposed face in the render.
+
+navigation is refused on a scan that is not in mni space. the atlas would
+name regions that are not there, and an agent would believe it.
+
+the announcement goes through the same path as the knob's, factored into
+one announce function: the live region for the screen reader, the voice
+while sound is on. the agent's arrival sounds like the technician's move,
+which is the point.
+
+the server is bound to loopback only. the socket moves the crosshair of
+whoever is listening, and that is not something to put on the network.
+
+### implementation notes
+
+the atlas grew regions() and nearestIn(). the centroid pass is one walk
+over the volume, kept for the session; nearest is a full scan and only
+runs when a centroid has missed, which a navigation can afford.
+
+bun keeps packages under node_modules/.bun/<pkg>@<ver>/ rather than
+hoisted, which is where to look when reading a dependency's source.
+
+the mcp sdk's WebStandardStreamableHTTPServerTransport takes a fetch
+Request and returns a Response, which fits Bun.serve without an adapter.
+stateless mode, a fresh McpServer per request over the one shared bridge,
+as the sdk documents for http without sessions.
+
+the app's WHOLE_PLANES table now derives from PLANE_ANGLES in the control
+lib, so the knob's ring and the agent's plane names are one list.
+
+checked headed in chrome with curl against the endpoint: tools list,
+where_am_i, list_regions with a filter, go_to_region for every region
+with no errors, an unknown name refused in words, and the axial and
+sagittal planes landing where they should. the dev server on 4200 was
+not running; a fresh one is.
+
+> _To fill in: what it is like to be taken somewhere with sound on. does
+> the announcement land over the tone, and is the sample at the centroid a
+> useful first sound, or should the arrival play the key?_
+
+the claude desktop app refuses a custom connector over plain http, so it
+goes through mcp-remote as a stdio server in claude_desktop_config.json,
+with the full path to npx since the app has no shell path. driven over
+stdio from a script the bridge initialised, listed the tools and moved the
+crosshair to the right hippocampus. not yet tried from cowork itself.
+
+> _To fill in: a real agent client attached, and whether the tool
+> descriptions are enough for it to pick a plane sensibly._
+
+### open questions
+
+- the clip slider still ties the plane to the camera when it is above
+  zero, so a camera turn after a navigation re-cuts the plane. should a
+  navigation zero the slider, or should the slider learn to keep a plane
+  through the crosshair?
+- the centroid is the mean in the atlas grid, not the medoid or the point
+  deepest inside the region. for a thin cortical region the mean sits in
+  the middle of a curved sheet and the nearest-voxel snap picks an edge.
+  is that where a listener wants to arrive?
+- should an agent be able to move the crosshair by millimetres, or step
+  through a region's extent, or is naming the region the whole of its job?
+
+### next
+
+- listen to a navigation with sound on.
+- attach claude code to the endpoint and try the tools as an agent would.
+- the physical knob, still.
+
+---
+
+## Entry 20 — 23 September 2026
+
+### the tiles that cropped, and a socket that could not leave its origin
+
+two things from trying the agent through a browser that is not a plain
+window: the tab claude in chrome drives, and the pane inside the desktop
+app. both looked like the app was broken. neither was quite that.
+
+### the crop
+
+the 2d tiles came up cropped after a fresh load, at 1440x900, at
+1200x1408, at about 800 wide: each slice drawn for a bigger stage than the
+one it sat in and cut off at the tile edge. resizing the window once put
+it right. the tile math was never wrong. niivue sizes the canvas's drawing
+buffer only from its resize observer, and it wraps that callback in
+requestAnimationFrame. a page the browser counts as hidden gets no
+animation frames and no resize notifications at all, and the tab claude in
+chrome drives reports itself hidden even while it is plainly on screen. so
+the buffer stayed at whatever size the canvas had when it was attached,
+before the pane had settled, the tiles were laid out for that size, and
+css stretched the picture into the stage. a later resize fixed it only
+when a frame happened to run.
+
+confirmed by faking stage sizes in that tab: the stage changed, the buffer
+did not, until a screenshot forced a frame and everything snapped into
+place. a screenshot as a side effect was not on my list.
+
+### decisions
+
+- the app sizes the buffer itself, synchronously. the layout observer that
+  already picked row, grid or column now also compares the buffer to the
+  stage times the pixel ratio, and when they differ calls niivue's
+  resizeListener, which does the resize niivue would have done, without
+  waiting for a frame. it runs from the resize observer and the window's
+  resize event as before, on visibilitychange, after every volume load,
+  and at the top of the two agent calls that draw. an agent that asks
+  where it is, or goes somewhere, is about to have its picture looked at;
+  that is when the fit has to be right.
+- resizeListener is marked internal in niivue's typings but it is exported
+  and typed, and it is the very function niivue calls from its own
+  observer. calling it is a smaller change than copying the pixel-ratio
+  and viewport dance next to it. if an upgrade hides it the typecheck
+  will say so.
+
+### ruled out
+
+- waiting for niivue's own path with a forced frame. a hidden document
+  never gets one, so there is nothing to wait for.
+- patching niivue, or handing it different observer options. the observer
+  is fine whenever frames run; the wrong assumption is that they will.
+- a layout that sidesteps the buffer size. every 2d tile is laid out in
+  buffer pixels. there is no such layout.
+
+### the socket
+
+the desktop app's pane lets a page talk to its own origin and nothing
+else, so the socket to 4242 was refused before it left. the dev server now
+proxies /agent to the server's /app, and the controller tries the page's
+own origin first, then the direct address, alternating with the same
+backoff as before. the ?agent= override still names one address and tries
+only that. one console line when the server is reached and one when the
+retry settles at thirty seconds; the browser prints its own line per
+refused attempt and a page cannot suppress that.
+
+checked from claude in chrome: connected through the proxy, where_am_i and
+go_to_region landed in the tab, direct mode through ?agent= still
+connects, and with the server stopped the warning came once and the tab
+reconnected by itself after a restart, on the direct address as it
+happened, since that was the next in turn.
+
+> _To fill in: the same page opened in the desktop app's pane, which is
+> where the socket was first refused. the chrome tab stands in for it here
+> because it is hidden the same way; the pane has not been tried since._
+
+### open questions
+
+- three tabs were connected at once during this, two of them forgotten in
+  other browsers, and the newest one answered. a tool call that lands in
+  a tab nobody is looking at is a confusing failure. should the server say
+  which tab it is talking to, or should a tab announce when another takes
+  over?
+- is sizing before every agent draw the right shape regardless of the
+  pane, since a headless viewer has the same problem?
+
+### next
+
+- open it in the desktop app's pane and look.
+- the physical knob, still.
+
+---
+
+## Entry 21 — 23 September 2026
+
+### saying the regions the way an anatomist would
+
+the spoken names were built from the AAL labels by spelling out the
+abbreviations in the order the label has them: Frontal_Inf_Tri_L came out
+as "Left frontal inferior triangular". an anatomist says "left inferior
+frontal gyrus, triangular part", and the generated names dropped "gyrus"
+everywhere, which is the word that tells a listener what kind of thing
+they are in. so the names are now a hand-written table, one entry per
+stem, expanded to both sides, with the vermis on its own since it has no
+side.
+
+### decisions
+
+- a table, not a smarter generator. the label order and the english
+  order disagree region by region (Frontal_Sup_Medial is "superior
+  frontal gyrus, medial part"; Temporal_Pole_Sup is "temporal pole,
+  superior part") and there are only 116 of them. a table can be read
+  and corrected by someone who knows the anatomy and not the code.
+- the generated name stays, twice over. it is the fallback for any label
+  the table does not know, so a different atlas or a renamed label still
+  gets said, and it is kept on each region as an alias, so an agent that
+  learnt "left frontal inferior triangular" from an earlier list still
+  lands. list_regions does not report the alias; the agent gets the
+  table's name and the label.
+- lowercase, as spoken, apart from names that are names: Heschl's,
+  Rolandic. the old names capitalised the first word. the name is heard
+  far more than it is read.
+
+### ruled out
+
+- keeping the AAL paper's exact strings ("Inferior parietal, but
+  supramarginal and angular gyri"). they are written for a table, not
+  for an ear. "inferior parietal lobule" says the same thing in the time
+  a listener has.
+
+> _To fill in: a few names are choices rather than the one standard
+> form: "calcarine cortex" for Calcarine, "globus pallidus" for Pallidum,
+> "temporal pole, superior part" for Temporal_Pole_Sup. worth a pass by
+> someone who says these aloud for a living._
+
+### next
+
+- hear a full sweep with the new names and see whether the longer ones
+  get cut short by the next region at the current dwell.
+
+## Entry 22 — 23 September 2026
+
+### turning to face the cut
+
+go_to_region Hippocampus_R plane=right cut the right side off through the
+hippocampus, and the render kept looking from the left, where the default
+camera sits. from there the left side is intact and the face with the
+region on it is round the back. the cut was right; nobody had turned the
+camera. so now the camera turns to face the cut, in go_to_region and in
+the two manual whole-plane moves, the knob's `n` and NiiVue's own `c`
+over the render. turning the plane off leaves the camera alone.
+
+which angles face a cut was the whole of the work. NiiVue's shader keeps
+the side the plane's normal points to, so the face looks back along the
+normal, and the camera that sees it square on is the one whose view
+direction is the normal. NiiVue builds its view from a mirrored x, a tilt
+of 270 minus the elevation and a turn of the azimuth minus 180; the
+inverse of that on the screen's depth axis comes out as a compass bearing
+tilted by the elevation, and matching it term by term against the clip
+normal gives the plane's own elevation and its azimuth turned the other
+way. right (azimuth 90) is faced from 270. the same rule is now in the
+control lib as cameraForPlane, with viewDirection beside it so the test
+can check the two agree for any angles, not just the six.
+
+### checked on screen
+
+- right through the hippocampus: sagittal face square on, nose to the
+  right, as a view from the right should be. a depth pick at the
+  crosshair read 28, -20, -11, right hippocampus, which is on the face.
+  before the turn it would have been left scalp.
+- superior: axial face from above, front at the top. picks along the face
+  read z = -12 with the plane at -11, so the pick lands on the face and
+  not on the far side.
+- posterior: coronal face from behind.
+- `c` twice from there: left then right, each faced from its own side.
+
+### decisions
+
+- the camera turns before the plane is cut. a camera turn fires
+  onAzimuthElevationChange, and with the clip slider above zero that
+  re-cuts the plane the slider's way; cutting second means the plane
+  through the crosshair wins. the slider still re-cuts on the next camera
+  drag, as before.
+- NiiVue cuts on `c` from its keyup listener, not keydown. found that out
+  the first time the key did nothing for the camera: my listener ran on
+  keydown, read the old plane and faced that. now it is a keyup listener
+  added after NiiVue's, so it runs after the cut.
+- manual plane changes turn too. the plane exists to expose a face, and a
+  depth pick only reaches the face from the side the cut took off; from
+  the kept side the pointer reads the outside. a technician who has
+  dragged the render to some angle gets snapped back on the next whole
+  plane, which seemed the smaller surprise.
+- the technician doc's list of what `c` shows was the wrong way round: it
+  said left "hides the right hemisphere, shows the left", and on screen
+  the left preset takes the left off and shows the right hemisphere's
+  medial face. rewritten to name the side taken off and the side faced
+  from.
+
+> _To fill in: whether a listener wants to hear that the view turned. the
+> announcement says where the crosshair is; the camera is a sighted
+> thing, so for now it is not said._
+
+### open questions
+
+- the clip slider ties its plane to the camera as azimuth plus 180 and
+  the elevation negated. by the rule above the plane that faces a camera
+  is azimuth negated, elevation kept; the two agree only for side views.
+  not checked on screen, and the slider's own workflow was not touched.

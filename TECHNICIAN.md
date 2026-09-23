@@ -67,16 +67,22 @@ fine control — small, continuous moves, good for "a little further" during
 a hover.
 
 **Press `c`** to jump to the next whole plane. It cycles through six fixed
-cuts and then off, in this exact order, and wraps back to the start:
+cuts and then off, in this exact order, and wraps back to the start. Each
+is named for the side it takes off, and the 3D render turns to look at the
+cut from that side, so the face is what you see and what the pointer reads:
 
-1. Left — hides the right hemisphere, shows the left
-2. Right — hides the left hemisphere, shows the right
-3. Posterior — hides the front, shows the back (this is the starting cut, so pressing `c` for the first time in a session moves past it, not onto it)
-4. Anterior — hides the back, shows the front
-5. Inferior — hides the top, shows the underside
-6. Superior — hides the bottom, shows the top
-7. Off — nothing clipped, the whole head/brain visible
+1. Left — takes off the left hemisphere, faced from the left
+2. Right — takes off the right hemisphere, faced from the right
+3. Posterior — takes off the back, faced from behind (this is the starting cut, so pressing `c` for the first time in a session moves past it, not onto it)
+4. Anterior — takes off the front, faced from the front
+5. Inferior — takes off the underside, faced from below
+6. Superior — takes off the top, faced from above
+7. Off — nothing clipped, the whole head/brain visible; the camera stays where it was
 8. back to Left, and the cycle repeats
+
+The knob's next plane (`n`) walks the same ring and turns the camera the
+same way. If you have dragged the render to some other angle, the next
+whole plane snaps it back to face the cut.
 
 Every one of these opens already sitting at its own midline (`c` always
 lands you back at depth zero on the new axis), so after a `c` press the
@@ -138,6 +144,65 @@ or faster, and say what you changed. **Lines run** picks which way each
 line is read: left to right, right to left, top to bottom, or bottom to
 top. Say which way the lines now run, since the sound alone does not.
 
+## The knob
+
+The knob is the listener's; its buttons are yours. Until the rotary panel
+arrives, the knob is the keyboard: `↑` and `↓` turn it, `Enter` presses it,
+and the number keys and a few letters are the buttons. The panel will send
+these same keys over Bluetooth, so nothing in this section changes when it
+does.
+
+What a turn does depends on the mode, and the mode is yours to set:
+
+- `1` moves the crosshair left and right, `2` back and front, `3` down and up
+- `4` slides the cut plane along its own axis — the same move as the wheel
+  over the render — and says "No plane is cut" if there is nothing to slide
+- `5` sets a panel parameter; `[` and `]` pick which one, in the panel's own
+  top-to-bottom order
+- `0` steps to the next mode when the numbers are out of reach
+- `s` cycles the step size: fine, medium, large
+- `Home` centers the crosshair; `n` jumps to the next whole plane, the same
+  cycle as `c`, and the two stay in step
+
+Every one of those is said out loud while sound is on — "Knob moves the cut
+plane." — so you don't have to announce the change itself, but you should
+still say why: "I'm handing you the cut plane now, turn it to go deeper."
+Turning a slider value with the knob is silent, the sound is the feedback;
+switching an on/off or a list setting is spoken.
+
+Pressing the knob changes nothing. It says where the crosshair is — region
+first on an MNI scan, then left/right, front/back and height — or, in
+parameter mode, what that parameter reads. Tell the listener that up front:
+it is the one thing they can do freely, whenever they lose track, without
+undoing anything.
+
+The keys work from anywhere on the page except inside a slider, list or
+button, so click on empty space before handing over. The **Knob:** line
+under the crosshair buttons shows what the knob does right now, its step
+size, and the focused parameter's value; glance at it when a listener asks
+what turning will do. The step-size select beside the crosshair buttons is
+for those buttons only; the knob's step size is set with `s`.
+
+## Letting an agent drive
+
+An agent connected over MCP can do the region step for you: `go_to_region`
+puts the crosshair on a region's centroid, cuts a plane through it so the
+region is on the exposed face, turns the render to look at that face from
+the side the cut took off, sounds the voxel there and announces the
+place the way the knob does. For that to work the app must be open with
+`?agent` in its address (the dev server does it without), the MCP server
+must be running (`bun run mcp`), and the scan must be the MNI152 demo or
+another MNI-space volume. The line under the crosshair buttons says whether
+the server was reached.
+
+Warn the listener before an agent moves them, the same as you would before
+moving them yourself: the announcement says where they are now, not that
+something is about to happen. An agent keeps the plane you have cut unless
+it asks for another, so set the orientation first if it matters, and leave
+the **Clip** slider at zero while an agent is driving, since above zero a
+camera turn re-cuts the plane the slider's way. `where_am_i` is the agent's
+version of pressing the knob and changes nothing.
+
 ## Quick troubleshooting
 
 No sound at all: check **Enable sound** actually shows "Sound on" (it
@@ -156,3 +221,11 @@ The region name is missing or says "off: not an MNI scan": the atlas only
 labels scans that are already in MNI space, like the MNI152 demo. A
 whole-head or individually scanned volume won't have region names, which
 is expected, not a bug — everything else still works.
+
+The line under the crosshair buttons says "agent server not reached": start
+the server with `bun run mcp` if it isn't running; the app keeps retrying on
+its own and the line changes when it gets through. The browser console has
+one line naming the addresses it tried. If the line says connected but an
+agent's call moves nothing on screen, another open tab of the app answered
+instead — the newest tab to connect is the one that answers — so reload the
+tab you're watching.

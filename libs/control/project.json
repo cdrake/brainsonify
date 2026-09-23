@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "control",
+  "projectType": "library",
+  "sourceRoot": "libs/control/src",
+  "tags": ["scope:shared", "type:core"],
+  "targets": {
+    "typecheck": {
+      "command": "tsc --noEmit -p tsconfig.json",
+      "options": { "cwd": "{projectRoot}" },
+      "cache": true
+    }
+  }
+}

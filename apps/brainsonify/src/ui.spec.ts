@@ -14,6 +14,7 @@ import {
   formatHeight,
   formatPan,
   formatTaps,
+  spokenPosition,
 } from "./ui";
 
 /**
@@ -469,5 +470,55 @@ describe("radar sweep", () => {
     expect(controls.sweepPace).toEqual({ lineSeconds: 8, lines: 5, restSeconds: 0, direction: "up" });
     controls.setSweepPace({ lineSeconds: 4, lines: 21, restSeconds: 3, direction: "left" });
     expect(controls.sweepPace).toEqual({ lineSeconds: 4, lines: 21, restSeconds: 3, direction: "left" });
+  });
+});
+
+describe("Controls as the control API sees them", () => {
+  it("snapshots every control by its API id", () => {
+    const values = new Controls().snapshot();
+    expect(values.lowHz).toBe(110);
+    expect(values.mode).toBe("tone");
+    expect(values.render3d).toBe(true);
+    expect(values.tapsOnly).toBe(false);
+    expect(Object.keys(values)).toHaveLength(19);
+  });
+
+  it("applies values into the panel and fires input on what changed", () => {
+    const controls = new Controls();
+    const fired: string[] = [];
+    for (const id of ["vol", "mode", "tapsOnly", "fLo"]) {
+      document.getElementById(id)!.addEventListener("input", () => fired.push(id));
+    }
+    controls.apply({ volume: 0.7, mode: "noise", tapsOnly: true, lowHz: 110 });
+    expect(controls.values.volume).toBe(0.7);
+    expect(controls.values.mode).toBe("noise");
+    expect(controls.tapsOnly).toBe(true);
+    expect(fired).toEqual(["vol", "mode", "tapsOnly"]);
+    expect(document.getElementById("volV")!.textContent).toBe("0.70");
+  });
+
+  it("ignores an id it does not have", () => {
+    expect(() => new Controls().apply({ nope: 1 })).not.toThrow();
+  });
+
+  it("tells a listener the whole panel on any change, by hand or by code", () => {
+    const controls = new Controls();
+    const seen: Array<Record<string, unknown>> = [];
+    controls.onChange((values) => seen.push(values));
+    const gate = document.getElementById("gate") as HTMLInputElement;
+    gate.value = "0.2";
+    gate.dispatchEvent(new Event("input"));
+    controls.setTaps(20);
+    expect(seen).toHaveLength(2);
+    expect(seen[0].gate).toBe(0.2);
+    expect(seen[1].taps).toBe(20);
+  });
+});
+
+describe("spokenPosition", () => {
+  it("says the side and the distance, or center", () => {
+    expect(spokenPosition(-0.2, "left", "right")).toBe("left 20 percent");
+    expect(spokenPosition(0.5, "back", "front")).toBe("front 50 percent");
+    expect(spokenPosition(0.004, "down", "up")).toBe("center");
   });
 });

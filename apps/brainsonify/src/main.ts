@@ -1,6 +1,21 @@
 import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER, SLICE_TYPE, cmapper } from "@niivue/niivue";
 
 import {
+  ControlAPI,
+  ControlSurface,
+  PLANE_ANGLES,
+  PLANE_OFF,
+  cameraForPlane,
+  clipNormal,
+  depthThrough,
+  matchRegion,
+  regionMentions,
+  resolvePlane,
+  type ControlState,
+  type KnobScene,
+} from "@brainsonify/control";
+
+import {
   DEFAULT_BOUNDS,
   DEFAULT_RANGE,
   DEFAULT_TAPS,
@@ -23,6 +38,8 @@ import {
 
 import "./styles.css";
 import { RegionCallout, loadAtlas, type Atlas } from "./atlas";
+import { AgentController, type AgentScene, agentUrls } from "./controllers/agent";
+import { VirtualController } from "./controllers/virtual";
 import {
   EXPERIMENTS,
   experimentHref,
@@ -35,7 +52,7 @@ import { type PlanarLayout, planarLayout } from "./layout";
 import { VoxelSampler, type Sample } from "./sampler";
 import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
 import { KeyPlayer, browserSpeech } from "./soundkey";
-import { Controls, ExperimentNav, Readout, applyChannels, el } from "./ui";
+import { Controls, ExperimentNav, Readout, applyChannels, el, spokenPosition } from "./ui";
 
 /**
  * Clip depth is a signed distance from the center of the volume: NiiVue treats
@@ -83,21 +100,39 @@ const LAYOUTS: Record<PlanarLayout, MULTIPLANAR_TYPE> = {
   column: MULTIPLANAR_TYPE.COLUMN,
 };
 
-/**
- * Lays the tiles out for the stage's shape: a row when it is wide, a column
- * when it is tall, a grid otherwise. NiiVue's own AUTO decides from the three
- * planar tiles alone (see layout.ts), so the choice is made here instead,
- * whenever the stage changes size. NiiVue's own resize observer was attached
- * first, so it has already resized the canvas by the time this one runs, and
- * the queued redraw picks up the new layout.
- */
 const stage = el("stage");
-new ResizeObserver(() => {
+const canvas = el<HTMLCanvasElement>("gl");
+
+/**
+ * Sizes the canvas to the stage and lays the tiles out for its shape: a row
+ * when it is wide, a column when it is tall, a grid otherwise. NiiVue's own
+ * AUTO decides from the three planar tiles alone (see layout.ts), so the
+ * choice is made here instead.
+ *
+ * The sizing is done here too, rather than left to NiiVue. NiiVue resizes
+ * the canvas's drawing buffer only from its resize observer, and only on the
+ * next animation frame; a page that is not visible (a browser pane kept in
+ * the background) gets neither, so the buffer stays at the size measured
+ * when the canvas was attached, the tiles are laid out for that size, and
+ * the browser stretches the picture into the stage: a cropped slice. Sizing
+ * synchronously, and checking again before anything is drawn for someone,
+ * means the buffer matches the stage whether or not a frame ever ran.
+ */
+function fitCanvas(): void {
+  const dpr = window.devicePixelRatio || 1;
   const layout = LAYOUTS[planarLayout(stage.clientWidth, stage.clientHeight)];
-  if (nv.opts.multiplanarLayout === layout) return;
+  const fitted =
+    canvas.width === Math.floor(canvas.offsetWidth * dpr) &&
+    canvas.height === Math.floor(canvas.offsetHeight * dpr) &&
+    nv.opts.multiplanarLayout === layout;
+  if (fitted) return;
   nv.opts.multiplanarLayout = layout;
+  nv.resizeListener();
   scheduleOverlayDraw();
-}).observe(stage);
+}
+new ResizeObserver(fitCanvas).observe(stage);
+window.addEventListener("resize", fitCanvas);
+document.addEventListener("visibilitychange", fitCanvas);
 
 const sampler = new VoxelSampler(nv);
 let range: IntensityRange = DEFAULT_RANGE;
@@ -113,7 +148,8 @@ let lutPeak = 0;
 let active: Experiment = resolveExperiment(location.search);
 
 let atlas: Atlas | null = null;
-let atlasPending = false;
+/** The fetch in flight, shared by whoever asks while it is, and dropped when it fails so a retry is possible. */
+let atlasLoading: Promise<Atlas> | null = null;
 /**
  * Whether the loaded scan is in the atlas's space. The MNI152 demo is. The
  * whole-head T1 is one person in scanner space and is not, so looking it up
@@ -531,7 +567,6 @@ function drawScanLineOverlay(): void {
   }
 }
 
-const canvas = el<HTMLCanvasElement>("gl");
 const track = (e: PointerEvent) => {
   // The sweep below is driving the crosshair on its own; a stray hover
   // fighting it for the same sample would make both illegible.
@@ -543,11 +578,17 @@ const crosshairStep = el<HTMLSelectElement>("crosshairStep");
 const crosshairStatus = el("crosshairStatus");
 const sweepBtn = el<HTMLButtonElement>("sweepBtn");
 
-function nudgeCrosshair(axis: number, direction: number): void {
+/** Moves the crosshair along one axis by a signed fraction of the volume, and sounds where it lands. */
+function moveCrosshair(axis: number, delta: number): void {
   const position = nv.scene.crosshairPos;
-  position[axis] = Math.min(1, Math.max(0, position[axis] + direction * Number(crosshairStep.value)));
+  position[axis] = Math.min(1, Math.max(0, position[axis] + delta));
   nv.drawScene();
   sampler.sampleFraction(position, onSample);
+}
+
+/** The panel's buttons: one step of the chosen size in one direction. */
+function nudgeCrosshair(axis: number, direction: number): void {
+  moveCrosshair(axis, direction * Number(crosshairStep.value));
   const axisName = ["left/right", "back/forward", "down/up"][axis];
   const directionName = direction < 0 ? axisName.split("/")[0] : axisName.split("/")[1];
   crosshairStatus.textContent = `Crosshair moved ${directionName}.`;
@@ -691,6 +732,249 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-crossha
   });
 }
 
+/* ---------------- the knob ---------------- */
+
+/**
+ * The panel and the control API hold the same values, each following the
+ * other. A hand on a slider reaches the API through the panel's change
+ * listener; the knob reaches the panel through the API's. Neither loops:
+ * a value already held is not written again, so each direction ends after
+ * one hop.
+ */
+const api = new ControlAPI(controls.snapshot() as Partial<ControlState>);
+controls.onChange((values) => api.setState(values as Partial<ControlState>));
+api.onStateChange((event) => {
+  const changed: Record<string, number | string | boolean> = {};
+  for (const id of event.changedParameters) {
+    changed[id] = event.currentState[id as keyof ControlState];
+  }
+  controls.apply(changed);
+});
+
+/**
+ * The whole planes `c` cycles through, in NiiVue's own order, so the knob's
+ * "next plane" and a `c` on the canvas walk the same ring. The current one
+ * is read back from the scene rather than remembered, so the two stay in
+ * step however the plane was last moved.
+ */
+const WHOLE_PLANES: ReadonlyArray<{ name: string; plane: [number, number, number] }> = [
+  ...PLANE_ANGLES.map(({ name, azimuth, elevation }) => ({
+    name,
+    plane: [0, azimuth, elevation] as [number, number, number],
+  })),
+  { name: "off", plane: [CLIP_OFF, 0, 0] },
+];
+
+function currentPlane(): [number, number, number] {
+  const [depth = CLIP_OFF, azimuth = 0, elevationDeg = 0] = nv.scene.clipPlaneDepthAziElevs[0] ?? [];
+  return [depth, azimuth, elevationDeg];
+}
+
+/**
+ * Turns the render camera to look straight at the face a plane at these
+ * angles exposes. Called *before* the plane is cut: the camera turn fires
+ * `onAzimuthElevationChange`, and when the Clip slider is above zero that
+ * re-cuts the plane the slider's way, which the cut that follows overrides.
+ */
+function facePlane(azimuth: number, elevationDeg: number): void {
+  const camera = cameraForPlane(azimuth, elevationDeg);
+  nv.setRenderAzimuthElevation(camera.azimuth, camera.elevation);
+}
+
+/** Where the render camera is looking from, for a reply. */
+function describeCamera(): { azimuth: number; elevation: number } {
+  return { azimuth: nv.scene.renderAzimuth, elevation: nv.scene.renderElevation };
+}
+
+/** The scene as the control surface sees it: fractions in, words out. */
+const knobScene: KnobScene = {
+  moveCrosshair(axis, delta) {
+    moveCrosshair(axis, delta);
+  },
+  centerCrosshair,
+  movePlane(delta) {
+    const [depth, azimuth, elevationDeg] = currentPlane();
+    if (depth >= PLANE_OFF) return false;
+    // The wheel over the render moves the same number; its own limits are kept.
+    nv.setClipPlane([Math.min(1.5, Math.max(-1.5, depth + delta)), azimuth, elevationDeg]);
+    return true;
+  },
+  nextPlane() {
+    const [depth, azimuth, elevationDeg] = currentPlane();
+    const at =
+      depth >= PLANE_OFF
+        ? WHOLE_PLANES.length - 1
+        : WHOLE_PLANES.findIndex(({ plane }) => plane[1] === azimuth && plane[2] === elevationDeg);
+    const next = WHOLE_PLANES[(at + 1) % WHOLE_PLANES.length];
+    // A whole plane is cut to expose a face; turn to it, so the face is the
+    // near side and a depth pick over the render lands on it. Turning the
+    // plane off leaves the camera where it is.
+    if (next.plane[0] < PLANE_OFF) facePlane(next.plane[1], next.plane[2]);
+    nv.setClipPlane([...next.plane]);
+    return next.name;
+  },
+  describe() {
+    const mm = Array.from(nv.frac2mm(nv.scene.crosshairPos));
+    const where = [
+      spokenPosition(pan(mm[0], bounds.x, 1), "left", "right"),
+      spokenPosition(anteriority(mm[1], bounds.y, 1), "back", "front"),
+      spokenPosition(elevation(mm[2], bounds.z), "down", "up"),
+    ].join(", ");
+    const region = atlas && atlasFits ? atlas.regionAt(mm) : null;
+    return region ? `${region}. ${where}.` : `${where}.`;
+  },
+};
+
+const knobStatus = el("knobStatus");
+const knobSpeech = browserSpeech();
+/**
+ * Tells the listener something changed that they did not do themselves: what
+ * the knob does now, or where an agent has taken them.
+ *
+ * The status line is for the technician's eyes; the live region and the
+ * voice are for the listener, who otherwise has no way to know. Spoken only
+ * while sound is on, the same rule the region callout keeps: silence means
+ * the app was told to be quiet.
+ */
+function announce(text: string): void {
+  crosshairStatus.textContent = text;
+  showKnob();
+  if (sonifier.running) void knobSpeech.say(text);
+}
+const surface = new ControlSurface({ api, scene: knobScene, announce });
+/** The technician's line: what the knob does now, and what its parameter reads. */
+const showKnob = () => {
+  knobStatus.textContent = `${surface.describeMode()} ${surface.describeStep()}`;
+};
+showKnob();
+// A numeric nudge is silent, so the line follows the state as well as the voice.
+api.onStateChange(showKnob);
+new VirtualController(surface).attach();
+
+/* ---------------- agents ---------------- */
+
+/** The plane that is cut now, by the name the knob would say, or "off". */
+function describePlane(): { name: string; depth: number; azimuth: number; elevation: number } {
+  const [depth, azimuth, elevation] = currentPlane();
+  const name =
+    depth >= PLANE_OFF
+      ? "off"
+      : (PLANE_ANGLES.find((p) => p.azimuth === azimuth && p.elevation === elevation)?.name ?? "custom");
+  return { name, depth, azimuth, elevation };
+}
+
+/** The atlas, fetched if it has not been, whatever the condition. Throws in words. */
+async function requireAtlas(): Promise<Atlas> {
+  if (atlas) return atlas;
+  try {
+    return await loadAtlasOnce();
+  } catch {
+    throw new Error("The atlas could not be fetched. Is the machine online?");
+  }
+}
+
+/**
+ * The scene as an agent sees it: names in, a landing out.
+ *
+ * Going to a region does what a technician would do by hand with the panel
+ * and the `c` key, in one move: the crosshair to the region's centroid, the
+ * cut through that same point so the region is on the exposed face, the
+ * voxel there sounded, and the place announced as the knob would announce it.
+ */
+const agentScene: AgentScene = {
+  async listRegions(query) {
+    const loaded = await requireAtlas();
+    const wanted = query?.trim();
+    const regions = wanted ? loaded.regions().filter((r) => regionMentions(r, wanted)) : loaded.regions();
+    return regions.map(({ label, name, centroid, voxels }) => ({ label, name, centroid, voxels }));
+  },
+
+  async goToRegion(query, planeName) {
+    if (!nv.volumes[0]) throw new Error("No volume is loaded yet.");
+    fitCanvas();
+    const loaded = await requireAtlas();
+    if (!atlasFits) {
+      throw new Error("The loaded scan is not in MNI space, so the atlas does not apply to it. Load the MNI152 demo.");
+    }
+    const plane = resolvePlane(planeName, currentPlane());
+    if (!plane) throw new Error(`Unknown plane "${planeName}".`);
+    const region = matchRegion(loaded.regions(), query);
+    if (!region) throw new Error(`No region matches "${query}". Call list_regions to see the names.`);
+
+    // A curved region's mean can lie outside it; land inside rather than on
+    // the neighbour that happens to be there.
+    let target = region.centroid;
+    let snapped = false;
+    if (loaded.valueAt(target) !== region.value) {
+      const inside = loaded.nearestIn(region.value, target);
+      if (inside) {
+        target = inside;
+        snapped = true;
+      }
+    }
+
+    const at = nv.mm2frac([target[0], target[1], target[2]]);
+    const frac: [number, number, number] = [at[0], at[1], at[2]];
+    if (frac.some((f) => f < 0 || f > 1)) {
+      throw new Error(`${region.name} lies outside the loaded volume.`);
+    }
+
+    const normal = clipNormal(plane.azimuth, plane.elevation);
+    const depth = depthThrough(normal, frac);
+    // Face the cut, so the exposed face with the region on it is the near
+    // side rather than hidden behind the part the cut keeps.
+    facePlane(plane.azimuth, plane.elevation);
+    nv.setClipPlane([depth, plane.azimuth, plane.elevation]);
+    const position = nv.scene.crosshairPos;
+    position[0] = frac[0];
+    position[1] = frac[1];
+    position[2] = frac[2];
+    nv.drawScene();
+    sampler.sampleFraction(position, onSample);
+
+    const description = knobScene.describe();
+    announce(description);
+    return {
+      region: { label: region.label, name: region.name, centroid: region.centroid, voxels: region.voxels },
+      landed: { mm: target, frac },
+      snapped,
+      plane: { name: plane.name, depth, azimuth: plane.azimuth, elevation: plane.elevation },
+      camera: describeCamera(),
+      description,
+      sounding: sonifier.running,
+    };
+  },
+
+  whereAmI() {
+    fitCanvas();
+    const frac = nv.scene.crosshairPos;
+    const mm = Array.from(nv.frac2mm(frac)).slice(0, 3);
+    const region = atlas && atlasFits ? atlas.regionAt(mm) : null;
+    return {
+      volume: nv.volumes[0]?.name ?? null,
+      atlas: atlas ? (atlasFits ? "ready" : "not an MNI scan") : "not loaded",
+      crosshair: { mm, frac: Array.from(frac) },
+      region,
+      plane: describePlane(),
+      camera: describeCamera(),
+      description: nv.volumes[0] ? knobScene.describe() : "No volume is loaded yet.",
+      sounding: sonifier.running,
+    };
+  },
+};
+
+// The socket is opened only when asked for: in development always, since
+// that is where an agent is tried out, and otherwise by `?agent` in the
+// address, with an optional address of its own for a server elsewhere.
+const agentParam = new URLSearchParams(location.search).get("agent");
+if (import.meta.env.DEV || agentParam !== null) {
+  const agentStatus = el("agentStatus");
+  new AgentController(agentScene, agentParam ? [agentParam] : agentUrls(), (connected) => {
+    agentStatus.textContent = connected ? "agent server connected" : "agent server not reached";
+    agentStatus.hidden = false;
+  }).attach();
+}
+
 canvas.addEventListener("pointermove", track);
 canvas.addEventListener("pointerenter", track);
 canvas.addEventListener("pointerleave", () => {
@@ -789,20 +1073,29 @@ function resetBoneMap(): void {
  * belongs to no volume, so a new scan does not invalidate it.
  */
 function ensureAtlas(): void {
-  if (!active.channels.atlas || atlas || atlasPending) return;
-  atlasPending = true;
+  if (!active.channels.atlas || atlas || atlasLoading) return;
+  void loadAtlasOnce().catch(() => {});
+}
+
+/** One fetch of the atlas, shared by the condition and any agent that asks during it. */
+function loadAtlasOnce(): Promise<Atlas> {
+  if (atlas) return Promise.resolve(atlas);
+  if (atlasLoading) return atlasLoading;
   readout.region("loading atlas…");
-  loadAtlas().then(
+  atlasLoading = loadAtlas().then(
     (loaded) => {
       atlas = loaded;
-      atlasPending = false;
+      atlasLoading = null;
       readout.region(atlasFits ? null : "off: not an MNI scan");
+      return loaded;
     },
-    () => {
-      atlasPending = false;
+    (error: unknown) => {
+      atlasLoading = null;
       readout.region("atlas failed (offline?)");
+      throw error;
     },
   );
+  return atlasLoading;
 }
 
 /* ---------------- clip plane ---------------- */
@@ -838,12 +1131,23 @@ nv.onAzimuthElevationChange = () => {
   if (controls.clip > 0) applyClip();
 };
 
+// NiiVue's own `c` over the render walks the same six whole planes as the
+// knob's next plane. NiiVue cuts on the key's release, from a listener added
+// at attach, so this one runs after it and turns the camera to whichever
+// plane it just cut, as the knob does.
+canvas.addEventListener("keyup", (event) => {
+  if (event.code !== nv.opts.clipPlaneHotKey) return;
+  const [depth, azimuth, elevationDeg] = currentPlane();
+  if (depth < PLANE_OFF) facePlane(azimuth, elevationDeg);
+});
+
 /* ---------------- volume loading ---------------- */
 
 /** Prefer the display window; fall back to the full data range. */
 function refreshRange(): void {
   const vol = nv.volumes[0];
   if (!vol) return;
+  fitCanvas();
   if (active.clip) nv.setClipPlane(active.clip);
 
   let lo = vol.cal_min ?? NaN;

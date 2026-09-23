@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "mcp",
+  "projectType": "application",
+  "sourceRoot": "apps/mcp/src",
+  "tags": ["scope:app", "type:app"],
+  "targets": {
+    "serve": {
+      "command": "bun run src/server.ts",
+      "options": { "cwd": "{projectRoot}" }
+    },
+    "typecheck": {
+      "command": "tsc --noEmit -p tsconfig.json",
+      "options": { "cwd": "{projectRoot}" },
+      "cache": true
+    }
+  }
+}

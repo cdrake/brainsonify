@@ -33,6 +33,7 @@ Other tasks, all routed through [Nx](https://nx.dev):
 ```bash
 bun run build      # production bundle -> dist/apps/brainsonify
 bun run preview    # serve that bundle at http://localhost:4300
+bun run mcp        # the MCP server agents connect to, on http://127.0.0.1:4242/mcp
 bun run test       # vitest, across every project that has tests
 bun run typecheck  # tsc --noEmit, across every project
 bun run graph      # open the project graph
@@ -45,7 +46,9 @@ cache hit rather than a rebuild.
 
 ```
 apps/brainsonify/   Vite app: NiiVue canvas, pointer sampling, control panel
+apps/mcp/           Bun process: the MCP server agents connect to, bridged to the open tab
 libs/sonification/  Framework-free audio core: intensity -> frequency, Web Audio voice
+libs/control/       Control API: the parameter schema, a state store with events and undo, the knob surface, and what an agent can ask
 ```
 
 The split is deliberate: everything in `libs/sonification` is pure TypeScript with
@@ -65,7 +68,18 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `apps/brainsonify/src/layout.ts` | Row, grid or column for the four tiles, from the stage's aspect ratio; the render is always one of them |
 | `apps/brainsonify/src/ui.ts` | Control panel and live readout |
 | `apps/brainsonify/src/soundkey.ts` | Plays the key: says each label, then drives the voice through its sweep |
-| `apps/brainsonify/src/atlas.ts` | The AAL atlas: world position to region name, spoken on entry |
+| `apps/brainsonify/src/atlas.ts` | The AAL atlas: world position to region name, spoken on entry; each region's centroid and nearest voxel |
+| `apps/brainsonify/src/region-names.ts` | The spoken name of every AAL region in anatomical English, `left inferior frontal gyrus, triangular part`; a label not in the table gets a name generated from its parts |
+| `libs/control/src/schema.ts` | The panel's parameters: range, step, default and spoken name for each |
+| `libs/control/src/controller.ts` | `ControlAPI`: a validated state store with change events and undo |
+| `libs/control/src/surface.ts` | `ControlSurface`: one knob, its modes and step sizes, and what it says |
+| `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
+| `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
+| `libs/control/src/agent.ts` | What an agent can ask: the messages on the wire, region matching, and the plane through a point |
+| `apps/brainsonify/src/controllers/agent.ts` | The agent controller: a socket to the MCP server, answering each tool call from the scene |
+| `apps/mcp/src/bridge.ts` | Holds the one connected tab and matches each tool call to its answer |
+| `apps/mcp/src/server.ts` | The MCP server: three tools over streamable HTTP, and the socket the app keeps open |
+| `apps/brainsonify/src/panel.spec.ts` | Guards that the schema and the panel in `index.html` agree |
 | `apps/brainsonify/src/main.ts` | Wiring, volume loading, drag and drop |
 
 ## Experiments
@@ -253,6 +267,35 @@ registry that drives the switcher, the default, and the visible controls.
   explores at. The taps get the same treatment, since 1800 Hz sits near the peak
   of the ear's sensitivity and a tap at full scale was some 13 dB louder than a
   low tone at full scale.
+- **The knob.** The app is built for two people at once: a listener who turns
+  one knob and hears the result, and a technician who presses buttons that
+  change what turning does. `ControlSurface` in `libs/control` is that
+  arrangement with nothing physical in it. A turn moves the crosshair along
+  one axis, slides the cut plane along its own axis (the wheel's move over
+  the render), or nudges the focused panel parameter. The buttons pick the
+  mode, the step size (fine, medium, large: 1, 5 and 10 percent of the volume
+  for the crosshair and the plane, 1, 5 and 10 schema steps for a parameter),
+  the focused parameter in the panel's order, center the crosshair, or jump to
+  the next whole plane in the same cycle as `c`, read back from the scene so
+  the two stay in step; either one also turns the render camera to face the
+  new cut, since the face is only on the near side from there. Pressing the knob never changes anything: it says
+  where the crosshair is, region first when the atlas fits, or what the
+  focused parameter reads. A shared device needs one gesture the listener can
+  make freely, and that is it. Every button press is announced into the
+  crosshair live region and, while sound is on, out loud, since a listener
+  otherwise has no way to know the knob now does something else; numeric
+  nudges are silent, because the sound is the feedback. The virtual controller
+  is a keyboard: `controllers/keys.ts` is the whole protocol, chosen around the
+  keys NiiVue already reads on a focused canvas, and a physical rotary panel
+  presenting itself as a Bluetooth keyboard sends the same keys
+  ([docs/control/CROWPANEL.md](docs/control/CROWPANEL.md)). The panel and the
+  control API hold the same values and each follows the other: a slider
+  reaches the API through the panel's change listener, the knob reaches the
+  sliders through the API's, and a value already held is not written again,
+  so neither direction loops. `panel.spec.ts` checks the schema against
+  `index.html` so the two cannot drift. The knob's step size is separate from
+  the step select beside the crosshair buttons: that select belongs to the
+  buttons, the knob's belongs to the knob.
 
 ## Controls
 
@@ -278,6 +321,7 @@ registry that drives the switcher, the default, and the visible controls.
 | Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |
 | Line / Lines / Rest | The sweep's pace: seconds per line, lines to a face, and the silence between lines, up to 3 s; each sweep condition sets its own on entry |
 | Lines run | Which cardinal direction each line is read in: left to right, right to left, top to bottom, bottom to top; rows always step top down and columns left to right |
+| Knob | `↑` `↓` turn, `Enter` press and hear where you are; `1`–`5` pick what a turn moves (left/right, back/front, down/up, cut plane, parameter), `0` the next mode; `[` `]` the parameter, `s` the step size, `Home` centers, `n` the next whole plane. Works anywhere on the page outside a form control |
 
 Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
 demo volumes are fetched from `niivue.github.io` at runtime and are not stored
@@ -285,6 +329,97 @@ in this repo: MNI152, which is skull-stripped, and a whole-head T1 that keeps
 scalp, marrow and the skull's signal void — the wider opacity range the rhythm
 channel is meant to carry, and the only one of the two with a skull for the bone
 channel to find.
+
+## Agents
+
+An agent reaches the app through an [MCP](https://modelcontextprotocol.io)
+server, so it can take a listener to a named structure without a hand on the
+panel. `bun run mcp` starts one Bun process on the loopback address, port
+4242, serving two things: `/mcp`, the streamable HTTP endpoint an agent's
+client connects to, and `/app`, a WebSocket the browser keeps open. The
+server holds no anatomy of its own. Each tool call is written to the
+connected tab as one JSON request and answered with one JSON response, and
+with no tab connected the tool fails with a message saying what to open.
+The newest tab to connect is the one that answers, so a reload replaces
+itself.
+
+The app opens the socket in development always, and otherwise when `?agent`
+is in the address (`?agent=ws://host:port/app` names a server elsewhere).
+Left to itself it tries two addresses in turn: `/agent` on the page's own
+origin first, which the dev server proxies to the server's `/app` (see
+`server.proxy` in `vite.config.ts`), so a browser that lets a page reach one
+origin only, such as the pane inside Claude's desktop app, still gets
+through; then the server directly on port 4242, for a build served without
+the proxy. A page opened from a file has no origin and goes direct. A line
+under the crosshair buttons says whether the server was reached, and the
+socket is retried with a backoff that settles at half a minute, so the order
+the two are started in does not matter. The console gets one line when the
+server is reached and one when the retry settles without it; the browser's
+own line per refused attempt is not the app's.
+
+Three tools:
+
+| Tool | What it does |
+|---|---|
+| `list_regions` | Every AAL region with its label, spoken name, centroid in MNI millimetres and voxel count; `query` filters by label or name |
+| `go_to_region` | Moves the crosshair to a region's centroid, cuts the volume with a plane through that point, sounds the voxel there and announces the place; `plane` is one of the six sides (`left`, `right`, `posterior`, `anterior`, `inferior`, `superior`), a slice name (`coronal`, `sagittal`, `axial`), or `current` |
+| `where_am_i` | The crosshair in millimetres and fractions, the region there, which plane is cut, whether sound is on, and what the listener would hear |
+
+Going to a region is what a technician would do by hand, in one move. The
+region is matched by label or spoken name, exactly first and then by
+containment, case and underscores aside; the name generated from the label
+(`Left frontal inferior triangular`), which the tools used before the
+table, is kept as an alias so it still matches. Its centroid is the mean of its
+voxels in the atlas grid, taken once per session and turned to millimetres
+through the atlas's own affine; when that mean falls outside the region, as a
+curved one's can, the region's nearest voxel is used instead and the reply
+says `snapped`. The crosshair goes to that point through NiiVue's `mm2frac`.
+The cut keeps the orientation already on screen when one is cut and falls
+back to coronal when none is, so a first visit gets a face to land on and a
+later one keeps the technician's choice. Its depth is the one that puts the
+plane through the landing point: NiiVue keeps a clip plane as
+`dot(normal, p − 0.5) + depth = 0` in fraction space, with the normal derived
+from the azimuth turned half a turn, so the depth is the negative of the
+point's signed distance from the middle along that normal. The render camera
+is turned to face the cut before it is made: NiiVue's shader keeps the side
+the plane's normal points to, so the exposed face looks back along the
+normal, and the camera that sees it square on is the one whose view
+direction *is* the normal. Worked through NiiVue's model matrix
+(`cameraForPlane`, checked against `viewDirection` in the tests) that is the
+plane's own elevation and its azimuth turned the other way, so a cut from
+the right, azimuth 90, is faced from azimuth 270. Without the turn the
+default left-lateral camera sees the intact left side and the face with the
+region on it is round the back, and a depth pick over the render lands on
+scalp rather than on the face. The turn comes first because it fires
+`onAzimuthElevationChange`, and the cut that follows overrides whatever the
+Clip slider made of that. The reply carries the camera angles as well as
+the plane's. The voxel under
+the crosshair is then sampled the way a crosshair button samples it, and the
+place is announced through the same path as the knob: into the live region,
+and out loud while sound is on. Navigation needs the loaded scan to be in
+MNI space; on the whole-head T1 the tool declines rather than name regions
+that are not there. The **Clip** slider still ties the plane to the camera
+when it is above zero, so a camera turn after a navigation re-cuts the plane
+the slider's way.
+
+An agent that speaks MCP over HTTP attaches with the endpoint address; for
+Claude Code that is
+`claude mcp add --transport http brainsonify http://127.0.0.1:4242/mcp`.
+The Claude desktop app only takes a custom connector over HTTPS, so it
+reaches the server through the `mcp-remote` bridge instead, as a local
+server in `claude_desktop_config.json`:
+
+```json
+"mcpServers": {
+  "brainsonify": {
+    "command": "/opt/homebrew/bin/npx",
+    "args": ["-y", "mcp-remote", "http://127.0.0.1:4242/mcp"]
+  }
+}
+```
+
+The full path to `npx` matters: the app is launched without a shell, so it
+does not have Homebrew on its `PATH`.
 
 ## Deployment
 
@@ -295,8 +430,9 @@ so the bundle works from any subpath without hardcoding the repo name.
 ## Status
 
 Spike. The mapping is unvalidated — no condition in [EXPERIMENTS.md](EXPERIMENTS.md)
-has been run with listeners yet — and the interaction still has no way to
-navigate to a named structure, which is the harder and more interesting problem.
+has been run with listeners yet. An agent can now take the listener to a named
+structure over MCP; the listener still has no way to ask for one themselves,
+which is the harder and more interesting problem.
 
 ## Credits
 

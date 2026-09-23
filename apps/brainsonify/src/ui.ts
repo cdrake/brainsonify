@@ -31,7 +31,35 @@ export class Controls {
   private sweepRest = el<HTMLInputElement>("sweepRest");
   private sweepDir = el<HTMLSelectElement>("sweepDir");
 
+  /**
+   * Every control by its control-API id, which is the schema's name for it
+   * rather than the element's (`fLo` on the page is `lowHz` to the API).
+   */
+  private readonly byId: Readonly<Record<string, HTMLInputElement | HTMLSelectElement>>;
+  private listeners: Array<(values: PanelValues) => void> = [];
+
   constructor() {
+    this.byId = {
+      mode: this.mode,
+      render3d: this.render3d,
+      sweepLine: this.sweepLine,
+      sweepLines: this.sweepLines,
+      sweepRest: this.sweepRest,
+      sweepDir: this.sweepDir,
+      depth: this.depth,
+      clip: this.clipDepth,
+      lowHz: this.lowHz,
+      octaves: this.octaves,
+      gate: this.gate,
+      volume: this.volume,
+      width: this.width,
+      spread: this.spread,
+      taps: this.taps,
+      spike: this.spikeReach,
+      rate: this.rate,
+      tapsOnly: this.only,
+      glide: this.glide,
+    };
     const inputs = [
       this.mode,
       this.lowHz,
@@ -54,6 +82,38 @@ export class Controls {
     ];
     for (const input of inputs) input.addEventListener("input", () => this.syncLabels());
     this.syncLabels();
+  }
+
+  /** Every control's value by its control-API id, as the panel has it now. */
+  snapshot(): PanelValues {
+    const values: PanelValues = {};
+    for (const [id, input] of Object.entries(this.byId)) values[id] = readControl(input);
+    return values;
+  }
+
+  /**
+   * Writes values into the panel, by control-API id, the way a hand on the
+   * slider would: each control that actually changes gets an `input` event,
+   * so everything listening to the panel (labels, the clip plane, the bone
+   * probe) follows. A value the panel already shows is left alone.
+   */
+  apply(values: PanelValues): void {
+    for (const [id, value] of Object.entries(values)) {
+      const input = this.byId[id];
+      if (!input) continue;
+      if (readControl(input) === value) continue;
+      if (input instanceof HTMLInputElement && input.type === "checkbox") {
+        input.checked = Boolean(value);
+      } else {
+        input.value = String(value);
+      }
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  /** Called with the whole panel whenever any control changes, by hand or by code. */
+  onChange(listener: (values: PanelValues) => void): void {
+    this.listeners.push(listener);
   }
 
   get values() {
@@ -154,7 +214,31 @@ export class Controls {
     el("sweepLineV").textContent = `${pace.lineSeconds.toFixed(2)} s`;
     el("sweepLinesV").textContent = String(pace.lines);
     el("sweepRestV").textContent = pace.restSeconds > 0 ? `${pace.restSeconds.toFixed(2)} s` : "none";
+    if (this.listeners.length > 0) {
+      const snapshot = this.snapshot();
+      for (const listener of this.listeners) listener(snapshot);
+    }
   }
+}
+
+/** The panel's values by control-API id: a number for a slider, a string for a select, a boolean for a checkbox. */
+export type PanelValues = Record<string, number | string | boolean>;
+
+function readControl(input: HTMLInputElement | HTMLSelectElement): number | string | boolean {
+  if (input instanceof HTMLSelectElement) return input.value;
+  if (input.type === "checkbox") return input.checked;
+  return Number(input.value);
+}
+
+/**
+ * A position on one axis as it should be said: "center", or the side and
+ * how far, "left 20 percent". The printed forms above abbreviate to a
+ * letter, which reads fine in a table and badly out loud.
+ */
+export function spokenPosition(value: number, low: string, high: string): string {
+  const magnitude = Math.round(Math.abs(value) * 100);
+  if (magnitude === 0) return "center";
+  return `${value < 0 ? low : high} ${magnitude} percent`;
 }
 
 /** Everything the panel says about the voxel under the pointer. */
