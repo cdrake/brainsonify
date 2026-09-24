@@ -1690,6 +1690,10 @@ the 1.0 controller.
 - NiiVue's `c` is on keydown now, from a window listener that only fires with
   the pointer over the canvas. our keyup listener still runs after it and
   still turns the camera. it follows the same rules now.
+- `v` stopped changing views. 1.0 ships `isViewModeHotKeyEnabled` off, and
+  a press then only logs NiiVue's version, so nothing looked wrong except
+  that the view stayed put. it is switched on in the constructor now. like
+  `c`, it only answers with the pointer over the canvas.
 
 ### changed behavior, not fixed
 
