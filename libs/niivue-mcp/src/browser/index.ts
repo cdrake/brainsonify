@@ -10,4 +10,4 @@ export { AGENT_PATH, AGENT_URL, AgentClient, RETRY_MS, TAB_ID_KEY, agentUrls, se
 export type { ClientOptions } from "./client";
 
 export { SCREENSHOT_WIDTH, coreHandlers, looksMni, nameFromUrl, planeIsCut, sceneState } from "./scene";
-export type { AtlasLike, AtlasRegion, Handler, Handlers, LoadedVolume, NiiVueHost, View } from "./scene";
+export type { AtlasLike, AtlasRegion, Handler, Handlers, LoadedVolume, NiiVueHost, Triple, View } from "./scene";

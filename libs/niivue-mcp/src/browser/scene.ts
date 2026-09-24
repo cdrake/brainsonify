@@ -23,22 +23,25 @@ import type { PlaneState, RegionSummary, TabState } from "../protocol";
 import { ambiguityMessage, findRegion, regionMentions } from "../regions";
 
 /** The part of a NiiVue instance the core drives. NiiVue 1.0 satisfies it as is. */
+/** Three numbers by index: a plain array, a typed array, or gl-matrix's vec3. */
+export type Triple = { [index: number]: number; readonly length: number };
+
 export interface View {
   canvas: HTMLCanvasElement | null;
   volumes: ReadonlyArray<{ name: string }>;
   azimuth: number;
   elevation: number;
-  /** The crosshair as fractions of the volume; moved by writing its three slots. */
-  crosshairPos: Float32Array | number[];
+  /** The crosshair as fractions of the volume; moved by writing its three slots. gl-matrix's vec3 fits. */
+  crosshairPos: Triple;
   /** The crosshair in world millimetres. */
-  getCrosshairPos(): number[] | Float32Array;
+  getCrosshairPos(): Triple;
   getClipPlaneDepthAziElev(index: number): [number, number, number];
   setClipPlane(plane: number[]): void;
   loadVolumes(volumes: Array<{ url: string; name?: string; colormap?: string }>): Promise<unknown>;
   drawScene(): unknown;
   model: {
-    mm2scene(mm: number[]): number[] | Float32Array;
-    scene2mm(frac: number[]): number[] | Float32Array;
+    mm2scene(mm: number[]): Triple;
+    scene2mm(frac: number[]): Triple;
   };
 }
 

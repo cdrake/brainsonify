@@ -1,42 +1,89 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { serve, type AgentScene } from "./agent";
+import { brainsonifyHandlers, brainsonifyState, type SoundHost } from "./agent";
 
-const scene = (): AgentScene => ({
-  listRegions: vi.fn(async (query?: string) => [
-    { label: `Match_${query ?? "all"}`, name: "x", centroid: [0, 0, 0] as [number, number, number], voxels: 1 },
-  ]),
-  goToRegion: vi.fn(async (region: string, plane?: string) => ({ region, plane: plane ?? "current" })),
-  whereAmI: vi.fn(() => ({ here: true })),
-});
+function sound(running = false): SoundHost & { mode: string } {
+  const host = {
+    running,
+    mode: "tone",
+    sounding: () => host.running,
+    setSound: vi.fn(async (on: boolean) => (host.running = on)),
+    modes: () => ({
+      modes: [
+        { value: "tone", label: "Pure tone" },
+        { value: "noise", label: "Filtered noise" },
+      ],
+      current: host.mode,
+    }),
+    setMode: vi.fn((mode: string) => void (host.mode = mode)),
+    announce: vi.fn(),
+  };
+  return host;
+}
 
-describe("serve", () => {
-  it("answers each method with the scene's result under the request's id", async () => {
-    const s = scene();
-    expect(await serve(s, { id: 1, method: "list_regions", params: {} })).toEqual({
-      id: 1,
-      result: [{ label: "Match_all", name: "x", centroid: [0, 0, 0], voxels: 1 }],
-    });
-    expect(await serve(s, { id: 2, method: "go_to_region", params: { region: " Insula_L ", plane: "axial" } })).toEqual({
-      id: 2,
-      result: { region: "Insula_L", plane: "axial" },
-    });
-    expect(await serve(s, { id: 3, method: "where_am_i", params: {} })).toEqual({ id: 3, result: { here: true } });
+describe("brainsonifyHandlers", () => {
+  it("turns the sound on and off, and leaves it when it already is", async () => {
+    const s = sound();
+    const handlers = brainsonifyHandlers(s);
+    expect(await handlers.set_sound({ on: true })).toEqual({ sounding: true });
+    expect(await handlers.set_sound({ on: true })).toEqual({ sounding: true });
+    expect(s.setSound).toHaveBeenCalledTimes(1);
+    expect(await handlers.set_sound({ on: false })).toEqual({ sounding: false });
+    expect(s.setSound).toHaveBeenLastCalledWith(false);
   });
 
-  it("turns a missing region, an unknown method, or a throw into an error in words", async () => {
-    const s = scene();
-    expect(await serve(s, { id: 4, method: "go_to_region", params: {} })).toEqual({
-      id: 4,
-      error: "go_to_region needs a region name.",
+  it("says so when the browser will not start audio without a click", async () => {
+    const s = sound();
+    s.setSound = vi.fn(() => new Promise<boolean>(() => {}));
+    const handlers = brainsonifyHandlers(s, 5);
+    await expect(handlers.set_sound({ on: true })).rejects.toThrow("click Enable sound");
+  });
+
+  it("lists the modes with the current one, and sets a known one only", () => {
+    const s = sound(true);
+    const handlers = brainsonifyHandlers(s);
+    expect(handlers.list_modes({})).toEqual({
+      modes: [
+        { value: "tone", label: "Pure tone" },
+        { value: "noise", label: "Filtered noise" },
+      ],
+      current: "tone",
     });
-    expect(await serve(s, { id: 5, method: "shout" as never, params: {} })).toEqual({
-      id: 5,
-      error: "Unknown method shout.",
-    });
-    s.whereAmI = () => {
-      throw new Error("no volume");
+    expect(handlers.set_mode({ mode: "noise" })).toEqual({ mode: "noise", sounding: true });
+    expect(s.setMode).toHaveBeenCalledWith("noise");
+    expect(() => handlers.set_mode({ mode: "kazoo" })).toThrow('Unknown mode "kazoo". One of: tone, noise.');
+  });
+
+  it("announces, and says whether it was spoken aloud", () => {
+    const s = sound();
+    const handlers = brainsonifyHandlers(s);
+    expect(handlers.announce({ text: " Moving to the insula. " })).toEqual({ said: "Moving to the insula.", spoken: false });
+    expect(s.announce).toHaveBeenCalledWith("Moving to the insula.");
+    expect(() => handlers.announce({})).toThrow("needs some text");
+  });
+});
+
+describe("brainsonifyState", () => {
+  it("adds the sound to the scene's state", () => {
+    const view = {
+      canvas: null,
+      volumes: [],
+      azimuth: 0,
+      elevation: 0,
+      crosshairPos: [0.5, 0.5, 0.5],
+      getCrosshairPos: () => [0, 0, 0],
+      getClipPlaneDepthAziElev: () => [2, 0, 0] as [number, number, number],
+      setClipPlane: () => {},
+      loadVolumes: async () => {},
+      drawScene: () => {},
+      model: { mm2scene: (mm: number[]) => mm, scene2mm: (f: number[]) => f },
     };
-    expect(await serve(s, { id: 6, method: "where_am_i", params: {} })).toEqual({ id: 6, error: "no volume" });
+    expect(brainsonifyState({ view }, sound(true))()).toEqual({
+      volume: null,
+      crosshair: null,
+      plane: null,
+      sounding: true,
+      mode: "tone",
+    });
   });
 });
