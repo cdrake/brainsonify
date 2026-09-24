@@ -28,6 +28,11 @@ bun install
 bun run dev        # http://localhost:4200
 ```
 
+Vite caches pre-bundled dependencies in `node_modules/.vite`. When switching
+between branches that pin different NiiVue versions it can keep serving the
+old one (the page then fails to import from `@niivue/niivue`); start with
+`bun run dev -- --force` to rebuild it.
+
 Other tasks, all routed through [Nx](https://nx.dev):
 
 ```bash

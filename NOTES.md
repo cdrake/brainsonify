@@ -1739,3 +1739,98 @@ not checked: a real GPU, WebGPU, sound.
   render and the cut.
 - listen to the whole-head T1 with the clip slider up, since that is
   where the cavity change shows.
+
+## Entry 24 — 23 September 2026
+
+### saying the view and the cut out loud
+
+NiiVue's own keys over the canvas were silent. they changed the picture and
+the listener got nothing. now they go through the same announce path the knob
+uses: `v` says which view it switched to, `c` names the plane it cut. the
+Clip slider says when the cut goes on and when it goes off, and stays quiet
+while it is being dragged, the way a knob nudge is quiet, since the sound is
+the feedback.
+
+### decisions
+
+- the slider only announces the on/off crossing, not every value. a drag is
+  a continuous thing and the sound already tracks it.
+
+> _To fill in: why the slider says "Cut plane: facing you." rather than
+> naming a side the way `c` does. is it because the slider's plane follows
+> the camera and has no fixed side to name?_
+
+> _To fill in: why `c`'s announcement rides my keyup listener while the view
+> announcement rides NiiVue's `sliceTypeChange` event. `clipPlaneChange` is
+> already listened to, for the ring counter — why not announce from there
+> too?_
+
+### open questions
+
+- entry 22 left this open: "whether a listener wants to hear that the view
+  turned. the announcement says where the crosshair is; the camera is a
+  sighted thing, so for now it is not said." `v` and `c` are said now, and
+  the camera turn that follows a cut still is not.
+
+> _To fill in: does that settle entry 22's question, or is the camera turn
+> still deliberately silent while the cut it exposes is spoken?_
+
+- nothing here has been in front of a listener.
+
+## Entry 25 — 23 September 2026
+
+### webgpu and sound, on a real gpu
+
+entry 23 said what was not checked: a real GPU, WebGPU, sound. did those
+tonight, chrome 153 on the mac, apple GPU, the claude-in-chrome extension
+driving a tab on the dev server.
+
+### found before anything rendered
+
+- the page did not boot after switching from `main` to this branch. vite's
+  dependency cache in `node_modules/.vite` still held the 0.69 build (its
+  `_metadata.json` pointed at `@niivue+niivue@0.69.0`), so `atlas.ts` failed
+  on `nii2volume`, which 0.69 does not export. deleting the cache and starting
+  with `bun run dev -- --force` fixed it. it is in the README now. i had
+  assumed vite would notice the lockfile change; it did not.
+- the render pick needs a visible tab. the extension's tab started as a
+  background tab (`document.visibilityState` was `hidden`, no animation
+  frames). hovering a 2D tile still read and sounded, but the render never
+  answered. once the tab was in front it all worked. so 1.0's `depthPick`
+  waits on a frame. not a problem for a listener, who has the tab open, but a
+  trap for anything automated.
+
+### what was checked
+
+- niivue logged `WebGPU via metal-3 maxTexture 2D:16384 3D:2048
+  antiAlias:true`, no fallback warning. the canvas holds a webgpu context and
+  fills the stage, 1736 by 1290 css pixels at a device pixel ratio of 2.
+- sound. the audio context ran at 48 kHz. i put an analyser in front of the
+  destination from the console, so these are levels, not listening. white
+  noise mapping, volume 0.40: thalamus on the coronal tile peak 0.029, rms
+  0.008. white matter on a cut face peak 0.044. air on the plane 0. so the
+  graph is live and the gate holds. nobody has heard it yet.
+- render pick, default view: 48.6 at -53, 38, 11, left inferior frontal
+  gyrus, marked 3D render.
+- `go_to_region Hippocampus_R plane=right` through the mcp server: plane
+  right, camera 270, the render showed the sagittal face from the right with
+  the R cube. the pick at the crosshair read 46.8 at 28, -19, -11, right
+  hippocampus, on the face, since the plane is at x 28. another point on the
+  face read 79.1 at 27, 22, 33. entry 22's turn-to-face-the-cut holds on 1.0
+  and webgpu.
+- `c` with the pointer over the canvas went from right to left, 1.0's ring,
+  camera to 90, L cube, status "Cut plane: left." the counter resync from
+  entry 23 does its job.
+- whole-head T1, clip slider at 50%: "Cut plane: facing you." a pick on the
+  face read 90.0 at -33, -24, 5 and sounded. a pick in the purple beside the
+  head read -34, 73, 59, the same plane, value 0.0, silent. that is entry
+  23's changed behaviour seen on webgpu: the ray lands on the plane, and
+  there it is air, and the gate keeps it quiet.
+- no console errors across any of it.
+
+### open questions
+
+- the cut-away ray is silent because the gate catches air, not because the
+  pick says miss. over tissue on the plane it would sound. entry 23's
+  question stands.
+- these are analyser readings. someone still has to listen.
