@@ -229,5 +229,6 @@ the server with `bun run mcp` if it isn't running; the app keeps retrying on
 its own and the line changes when it gets through. The browser console has
 one line naming the addresses it tried. If the line says connected but an
 agent's call moves nothing on screen, another open tab of the app answered
-instead — the newest tab to connect is the one that answers — so reload the
-tab you're watching.
+instead. The line shows this tab's id; ask the agent to call `list_tabs` and
+then `use_tab` with that id, or close the other tab. With two tabs open and
+none chosen the agent is told to choose rather than guess.

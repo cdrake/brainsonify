@@ -51,9 +51,10 @@ cache hit rather than a rebuild.
 
 ```
 apps/brainsonify/   Vite app: NiiVue canvas, pointer sampling, control panel
-apps/mcp/           Bun process: the MCP server agents connect to, bridged to the open tab
+apps/mcp/           Bun process: the MCP server agents connect to, the NiiVue core plus the sound tools
 libs/sonification/  Framework-free audio core: intensity -> frequency, Web Audio voice
-libs/control/       Control API: the parameter schema, a state store with events and undo, the knob surface, and what an agent can ask
+libs/control/       Control API: the parameter schema, a state store with events and undo, the knob surface
+libs/niivue-mcp/    The generic NiiVue MCP core: tabs, the core tools, plane math, region matching; knows nothing of brainsonify
 ```
 
 The split is deliberate: everything in `libs/sonification` is pure TypeScript with
@@ -80,10 +81,14 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `libs/control/src/surface.ts` | `ControlSurface`: one knob, its modes and step sizes, and what it says |
 | `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
-| `libs/control/src/agent.ts` | What an agent can ask: the messages on the wire, region matching, and the plane through a point |
-| `apps/brainsonify/src/controllers/agent.ts` | The agent controller: a socket to the MCP server, answering each tool call from the scene |
-| `apps/mcp/src/bridge.ts` | Holds the one connected tab and matches each tool call to its answer |
-| `apps/mcp/src/server.ts` | The MCP server: three tools over streamable HTTP, and the socket the app keeps open |
+| `libs/niivue-mcp/src/planes.ts`, `regions.ts`, `names.ts` | Shared by both ends: the plane through a point and the camera that faces it, region matching, the AAL spoken names |
+| `libs/niivue-mcp/src/server/bridge.ts` | Knows the connected tabs by id, routes each tool call to the one that answers, and notices a reload |
+| `libs/niivue-mcp/src/server/tools.ts` | The nine core tools over the bridge, and the `Extension` hook an app registers more through |
+| `libs/niivue-mcp/src/browser/scene.ts` | Answers the core tools from a NiiVue instance, through the hooks a host page provides |
+| `libs/niivue-mcp/src/browser/client.ts` | The page's socket: says hello with a tab id, answers requests, retries |
+| `apps/brainsonify/src/controllers/agent.ts` | What brainsonify adds: the sound tools' handlers, wrapped as a controller |
+| `apps/mcp/src/brainsonify.ts` | The brainsonify extension: `set_sound`, `list_modes`, `set_mode`, `announce` registered on the core |
+| `apps/mcp/src/server.ts` | The MCP server: the core plus that extension, over streamable HTTP |
 | `apps/brainsonify/src/panel.spec.ts` | Guards that the schema and the panel in `index.html` agree |
 | `apps/brainsonify/src/main.ts` | Wiring, volume loading, drag and drop |
 
@@ -359,8 +364,21 @@ client connects to, and `/app`, a WebSocket the browser keeps open. The
 server holds no anatomy of its own. Each tool call is written to the
 connected tab as one JSON request and answered with one JSON response, and
 with no tab connected the tool fails with a message saying what to open.
-The newest tab to connect is the one that answers, so a reload replaces
-itself.
+
+The server is the generic NiiVue core in `libs/niivue-mcp` with
+brainsonify's sound tools registered on it; its own
+[README](libs/niivue-mcp/README.md) covers the tools, the tab routing and
+how to embed it in another NiiVue app, and
+[apps/mcp/README.md](apps/mcp/README.md) covers what brainsonify adds.
+
+Each tab says hello with an id it keeps in `sessionStorage`, so a reload
+comes back as the same tab and a second window as a new one. One tab
+answers on its own; with several open the agent is told to pick one with
+`use_tab`, and `where_am_i` says which tab answered. When the tab an agent
+is driving reloads, the next reply opens with a note saying so and what
+the crosshair, plane and sound were before, since the scene has started
+over. The line under the crosshair buttons shows the tab's id next to
+"agent server connected".
 
 The app opens the socket in development always, and otherwise when `?agent`
 is in the address (`?agent=ws://host:port/app` names a server elsewhere).
@@ -376,7 +394,10 @@ the two are started in does not matter. The console gets one line when the
 server is reached and one when the retry settles without it; the browser's
 own line per refused attempt is not the app's.
 
-Three tools:
+Thirteen tools. From the core: `list_tabs`, `use_tab`, `load_volume`,
+`where_am_i`, `list_regions`, `go_to_region`, `set_clip_plane`,
+`set_camera` and `screenshot`. From brainsonify: `set_sound`, `list_modes`,
+`set_mode` and `announce`. The three a technician leans on:
 
 | Tool | What it does |
 |---|---|
@@ -420,6 +441,9 @@ MNI space; on the whole-head T1 the tool declines rather than name regions
 that are not there. The **Clip** slider still ties the plane to the camera
 when it is above zero, so a camera turn after a navigation re-cuts the plane
 the slider's way.
+
+A region name that fits more than one region, `insula` say, is refused with
+the candidates listed rather than guessed at.
 
 An agent that speaks MCP over HTTP attaches with the endpoint address; for
 Claude Code that is
