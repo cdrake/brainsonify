@@ -1,7 +1,9 @@
-import { NVImage } from "@niivue/niivue";
+import { nii2volume } from "@niivue/niivue";
+import * as nifti from "nifti-reader-js";
 
 import type { RegionSummary } from "@brainsonify/control";
 
+import { mm2vox, vox2mm, voxelValue } from "./geometry";
 import { SPOKEN_NAMES } from "./region-names";
 import type { Speech } from "./soundkey";
 
@@ -211,10 +213,27 @@ export function regionName(names: readonly string[], value: number): string | nu
   return names[value];
 }
 
+/**
+ * Fetches and parses a NIfTI volume without handing it to a viewer.
+ *
+ * NiiVue 1.0 loads volumes only into a view; `nii2volume` is its exported way
+ * to build one from a parsed header and image, which is what the atlas needs:
+ * the affine and the RAS index NiiVue works out, never a texture.
+ */
+async function fetchVolume(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`atlas volume: ${response.status}`);
+  let data = await response.arrayBuffer();
+  if (nifti.isCompressed(data)) data = nifti.decompress(data) as ArrayBuffer;
+  const hdr = nifti.readHeader(data);
+  if (!hdr) throw new Error("atlas volume is not NIfTI");
+  return nii2volume(hdr, nifti.readImage(hdr, data), url);
+}
+
 /** Fetches the atlas and its label table. Rejects when either is unreachable. */
 export async function loadAtlas(): Promise<Atlas> {
   const [image, table] = await Promise.all([
-    NVImage.loadFromUrl({ url: ATLAS.volume }),
+    fetchVolume(ATLAS.volume),
     fetch(ATLAS.labels).then((response) => {
       if (!response.ok) throw new Error(`atlas labels: ${response.status}`);
       return response.json() as Promise<{ labels: string[] }>;
@@ -231,21 +250,20 @@ export async function loadAtlas(): Promise<Atlas> {
 
   // `mm2vox` and `vox2mm` go through the atlas's own affine, so the scan's
   // grid never enters into it. AAL is stored in RAS already, so the voxel
-  // they give is also the native one `getValue` and `img` index.
-  const toMm = (vox: readonly number[]): [number, number, number] => {
-    const mm = image.vox2mm([vox[0], vox[1], vox[2]], matRAS);
-    return [mm[0], mm[1], mm[2]];
-  };
+  // they give is also the native one `voxelValue` and `img` index.
+  const toMm = (vox: readonly number[]): [number, number, number] => vox2mm(matRAS, vox);
   const toVox = (mm: readonly number[]): [number, number, number] | null => {
-    const vox = image.mm2vox([mm[0], mm[1], mm[2]]);
+    const at = mm2vox(matRAS, mm);
+    if (!at) return null;
+    const vox: [number, number, number] = [Math.round(at[0]), Math.round(at[1]), Math.round(at[2])];
     for (let axis = 0; axis < 3; axis++) {
       if (vox[axis] < 0 || vox[axis] >= grid[axis]) return null;
     }
-    return [vox[0], vox[1], vox[2]];
+    return vox;
   };
   const valueAt = (mm: readonly number[]): number => {
     const vox = toVox(mm);
-    return vox ? image.getValue(vox[0], vox[1], vox[2]) : 0;
+    return vox ? (voxelValue(image, vox[0], vox[1], vox[2]) ?? 0) : 0;
   };
 
   let regions: Region[] | null = null;
@@ -270,8 +288,9 @@ export async function loadAtlas(): Promise<Atlas> {
       return regions;
     },
     nearestIn(value, mm) {
-      const from = image.mm2vox([mm[0], mm[1], mm[2]], true);
-      const vox = nearestVoxel(img, grid, value, [from[0], from[1], from[2]]);
+      const from = mm2vox(matRAS, mm);
+      if (!from) return null;
+      const vox = nearestVoxel(img, grid, value, from);
       return vox ? toMm(vox) : null;
     },
   };

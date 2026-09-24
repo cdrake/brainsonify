@@ -1632,3 +1632,205 @@ can check the two agree for any angles, not just the six.
   the elevation negated. by the rule above the plane that faces a camera
   is azimuth negated, elevation kept; the two agree only for side views.
   not checked on screen, and the slider's own workflow was not touched.
+
+---
+
+## Entry 23 — 23 September 2026
+
+### onto NiiVue 1.0 (1.0.0-rc.14)
+
+NiiVue cut 1.0.0-rc.14 from niivue/mono today and we moved brainsonify onto
+it, on its own branch, `feat/niivue-1.0`. it is a release candidate on npm's
+`next` tag; `latest` is still 0.69.0.
+
+> _To fill in: why now, on a release candidate, rather than waiting for 1.0
+> itself._
+
+1.0 is a rewrite, not a bump. the first typecheck said 13 errors, but that was
+only because `Niivue` had become `NiiVue` and every `nv.` behind it was `any`.
+with the name fixed it was 63. almost all of it was the app reaching into
+things 0.69 left lying about: `scene`, `screenSlices`, `uiData`,
+`calculateMvpMatrix`, `drawLine`, `getValue`, `cmapper`. none of those are on
+the 1.0 controller.
+
+### what replaced what
+
+- hover on a 2D tile is `clientToCanvas`, `hitTest`, `canvasToMM`.
+- the render pick is the view's `depthPick`, which is what NiiVue's own
+  double-click calls. it has its own pass and gives back mm or null. the
+  whole dance of hiding the 3D crosshair, redrawing and comparing
+  `crosshairPos` references is gone. the crosshair is not in the pick pass
+  any more, so there is nothing to hide, and a miss is a null.
+- voxel reads, mm/voxel, and the colormap table are in a new
+  `geometry.ts`, because 1.0 has them but does not export them. each one
+  copies the NiiVue code it replaces: `getValue` from 0.69 (clamped, scaled),
+  `lutrgba8` and `mat4.invert` from 1.0.
+- the surface search walks the ray through the pixel, unprojected through
+  the render tile's MVP, instead of `calculateRayDirection`, which is gone.
+- the atlas loads with nifti-reader-js and NiiVue's exported `nii2volume`.
+  1.0 only loads volumes into a view.
+- the spike and scan line are on a second canvas over NiiVue's.
+
+### found the hard way
+
+- NiiVue swaps the canvas. with no WebGPU it falls back to WebGL2 by cloning
+  the canvas and replacing it, because a canvas that has held a WebGPU
+  context cannot take a WebGL2 one. `main.ts` held the old element, so hover,
+  resize and the overlay all listened to a canvas that was no longer in the
+  page. the page drew fine and nothing responded. now the canvas is always
+  looked up through `nv.canvas`, and the pointer listeners are on the stage.
+- `nv.devicePixelRatio` is -1 when NiiVue is left to choose. multiplying by
+  it sent every hover off the canvas. `clientToCanvas` does the conversion
+  properly.
+- the overlay hook (`registerOverlayRenderer`) looked like the right home for
+  the lines, but it hands over a raw WebGPU pass, and the WebGL2 view never
+  calls it. so the lines are redrawn a frame after NiiVue's frames and after
+  its camera, resize and clip events. they follow a rotate now, which in 0.69
+  they did not.
+- NiiVue's `c` is on keydown now, from a window listener that only fires with
+  the pointer over the canvas. our keyup listener still runs after it and
+  still turns the camera. it follows the same rules now.
+- `v` stopped changing views. 1.0 ships `isViewModeHotKeyEnabled` off, and
+  a press then only logs NiiVue's version, so nothing looked wrong except
+  that the view stayed put. it is switched on in the constructor now. like
+  `c`, it only answers with the pointer over the canvas.
+- `c` walks a different ring in 1.0: off, posterior, right, left, anterior,
+  inferior, superior. the knob's next plane still walked the old one, left
+  first, so the two went out of step. and `c` steps its own counter
+  (`currentClipPlaneIndex`) rather than reading the plane, so a plane set any
+  other way left the next `c` stepping on from wherever `c` last was. the
+  knob follows NiiVue's order now, and every `clipPlaneChange` puts the
+  counter back on the plane that is cut.
+
+### changed behavior, not fixed
+
+- a ray that goes only through cut-away space is no longer a miss. 1.0
+  falls back to the point where the ray meets the clip plane. in 0.69 it
+  came back as id 253 and the opened cavity was silent. now it sounds the
+  voxel on the plane, which is mostly background and gated off, but not
+  always.
+- the pick refines to single steps after its 1.9-voxel march and packs a
+  real depth, where 0.69 packed 8 bits per axis. so the surface it finds
+  should be tighter than the one `Surface` was tuned against.
+
+### checked on screen
+
+headless chrome with SwiftShader, so WebGL2, MNI152 demo, condition 11:
+2D hover read 25.4 at -7, -17, 23. the render read 54.4 marked "3D render".
+the scan line was drawn on all four tiles and moved with a drag. `c` cut
+coronal, sagittal from the left, sagittal from the right, and the camera
+turned to 0, 270, 90. a pick on the sagittal cut read 2, -19, 5, right
+thalamus. no console errors apart from the agent socket, which has no
+server in dev, and the favicon.
+
+not checked: a real GPU, WebGPU, sound.
+
+### open questions
+
+- should a pick that lands on the clip plane with nothing behind it be
+  silent, as it was?
+- is the `Surface` default still right now the pick is tighter?
+- does anything look different on WebGPU, which is what most visitors'
+  browsers will pick?
+
+### next
+
+- open the branch in chrome on a real GPU, with sound, and hover the
+  render and the cut.
+- listen to the whole-head T1 with the clip slider up, since that is
+  where the cavity change shows.
+
+## Entry 24 — 23 September 2026
+
+### saying the view and the cut out loud
+
+NiiVue's own keys over the canvas were silent. they changed the picture and
+the listener got nothing. now they go through the same announce path the knob
+uses: `v` says which view it switched to, `c` names the plane it cut. the
+Clip slider says when the cut goes on and when it goes off, and stays quiet
+while it is being dragged, the way a knob nudge is quiet, since the sound is
+the feedback.
+
+### decisions
+
+- the slider only announces the on/off crossing, not every value. a drag is
+  a continuous thing and the sound already tracks it.
+
+> _To fill in: why the slider says "Cut plane: facing you." rather than
+> naming a side the way `c` does. is it because the slider's plane follows
+> the camera and has no fixed side to name?_
+
+> _To fill in: why `c`'s announcement rides my keyup listener while the view
+> announcement rides NiiVue's `sliceTypeChange` event. `clipPlaneChange` is
+> already listened to, for the ring counter — why not announce from there
+> too?_
+
+### open questions
+
+- entry 22 left this open: "whether a listener wants to hear that the view
+  turned. the announcement says where the crosshair is; the camera is a
+  sighted thing, so for now it is not said." `v` and `c` are said now, and
+  the camera turn that follows a cut still is not.
+
+> _To fill in: does that settle entry 22's question, or is the camera turn
+> still deliberately silent while the cut it exposes is spoken?_
+
+- nothing here has been in front of a listener.
+
+## Entry 25 — 23 September 2026
+
+### webgpu and sound, on a real gpu
+
+entry 23 said what was not checked: a real GPU, WebGPU, sound. did those
+tonight, chrome 153 on the mac, apple GPU, the claude-in-chrome extension
+driving a tab on the dev server.
+
+### found before anything rendered
+
+- the page did not boot after switching from `main` to this branch. vite's
+  dependency cache in `node_modules/.vite` still held the 0.69 build (its
+  `_metadata.json` pointed at `@niivue+niivue@0.69.0`), so `atlas.ts` failed
+  on `nii2volume`, which 0.69 does not export. deleting the cache and starting
+  with `bun run dev -- --force` fixed it. it is in the README now. i had
+  assumed vite would notice the lockfile change; it did not.
+- the render pick needs a visible tab. the extension's tab started as a
+  background tab (`document.visibilityState` was `hidden`, no animation
+  frames). hovering a 2D tile still read and sounded, but the render never
+  answered. once the tab was in front it all worked. so 1.0's `depthPick`
+  waits on a frame. not a problem for a listener, who has the tab open, but a
+  trap for anything automated.
+
+### what was checked
+
+- niivue logged `WebGPU via metal-3 maxTexture 2D:16384 3D:2048
+  antiAlias:true`, no fallback warning. the canvas holds a webgpu context and
+  fills the stage, 1736 by 1290 css pixels at a device pixel ratio of 2.
+- sound. the audio context ran at 48 kHz. i put an analyser in front of the
+  destination from the console, so these are levels, not listening. white
+  noise mapping, volume 0.40: thalamus on the coronal tile peak 0.029, rms
+  0.008. white matter on a cut face peak 0.044. air on the plane 0. so the
+  graph is live and the gate holds. nobody has heard it yet.
+- render pick, default view: 48.6 at -53, 38, 11, left inferior frontal
+  gyrus, marked 3D render.
+- `go_to_region Hippocampus_R plane=right` through the mcp server: plane
+  right, camera 270, the render showed the sagittal face from the right with
+  the R cube. the pick at the crosshair read 46.8 at 28, -19, -11, right
+  hippocampus, on the face, since the plane is at x 28. another point on the
+  face read 79.1 at 27, 22, 33. entry 22's turn-to-face-the-cut holds on 1.0
+  and webgpu.
+- `c` with the pointer over the canvas went from right to left, 1.0's ring,
+  camera to 90, L cube, status "Cut plane: left." the counter resync from
+  entry 23 does its job.
+- whole-head T1, clip slider at 50%: "Cut plane: facing you." a pick on the
+  face read 90.0 at -33, -24, 5 and sounded. a pick in the purple beside the
+  head read -34, 73, 59, the same plane, value 0.0, silent. that is entry
+  23's changed behaviour seen on webgpu: the ray lands on the plane, and
+  there it is air, and the gate keeps it quiet.
+- no console errors across any of it.
+
+### open questions
+
+- the cut-away ray is silent because the gate catches air, not because the
+  pick says miss. over tissue on the plane it would sound. entry 23's
+  question stands.
+- these are analyser readings. someone still has to listen.

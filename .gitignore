@@ -5,3 +5,9 @@ dist/
 vite.config.*.timestamp*
 .DS_Store
 *.log
+.env*
+!.env.example
+coverage/
+Thumbs.db
+*.swp
+.idea/
