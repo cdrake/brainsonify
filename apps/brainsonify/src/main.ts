@@ -1,4 +1,4 @@
-import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER, SLICE_TYPE, cmapper } from "@niivue/niivue";
+import { MULTIPLANAR_TYPE, NiiVue, SHOW_RENDER, SLICE_TYPE, lookupColorMap } from "@niivue/niivue";
 
 import {
   ControlAPI,
@@ -50,6 +50,7 @@ import { bonenessAt, densestVoxel, reach, type BoneMap, type Grid } from "./bone
 import type { BoneReply, BoneRequest } from "./boneness.worker";
 import { type PlanarLayout, planarLayout } from "./layout";
 import { VoxelSampler, type Sample } from "./sampler";
+import { colormapLut, projectToCanvas, vox2mm } from "./geometry";
 import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
 import { KeyPlayer, browserSpeech } from "./soundkey";
 import { Controls, ExperimentNav, Readout, applyChannels, el, spokenPosition } from "./ui";
@@ -82,26 +83,39 @@ const sonifier = new Sonifier();
 const key = new KeyPlayer(sonifier, el("keyCaption"), browserSpeech());
 const callout = new RegionCallout(browserSpeech());
 
-const nv = new Niivue({
-  backColor: [0, 0, 0, 1],
+const nv = new NiiVue({
+  backgroundColor: [0, 0, 0, 1],
   crosshairColor: [0.15, 0.6, 1, 1],
-  show3Dcrosshair: true,
+  is3DCrosshairVisible: true,
   // The render tile is where the cut face is, so it is the tile a session
   // is run from. Left on AUTO, NiiVue drops it whenever the canvas is wide
   // and short enough that three planar tiles fill a row; ALWAYS keeps it
   // in the layout at every aspect ratio, smaller when it must be.
-  multiplanarShowRender: SHOW_RENDER.ALWAYS,
+  showRender: SHOW_RENDER.ALWAYS,
+  // NiiVue 1.0 ships the v key (cycle axial, coronal, sagittal, multiplanar,
+  // render) switched off, and a press then only logs the version.
+  isViewModeHotKeyEnabled: true,
 });
 nv.attachTo("gl");
 
-const LAYOUTS: Record<PlanarLayout, MULTIPLANAR_TYPE> = {
+const LAYOUTS: Record<PlanarLayout, number> = {
   row: MULTIPLANAR_TYPE.ROW,
   grid: MULTIPLANAR_TYPE.GRID,
   column: MULTIPLANAR_TYPE.COLUMN,
 };
 
 const stage = el("stage");
-const canvas = el<HTMLCanvasElement>("gl");
+/**
+ * NiiVue's canvas, looked up each time rather than kept. Attaching can swap
+ * in a fresh element: a canvas that has held a WebGPU context cannot take a
+ * WebGL2 one, so where WebGPU is missing NiiVue falls back by cloning the
+ * canvas and replacing it, and a reference taken earlier is left detached.
+ * Pointer listeners go on the stage for the same reason; the canvas fills it,
+ * and nothing else in it takes the pointer.
+ */
+function glCanvas(): HTMLCanvasElement {
+  return nv.canvas ?? el<HTMLCanvasElement>("gl");
+}
 
 /**
  * Sizes the canvas to the stage and lays the tiles out for its shape: a row
@@ -121,13 +135,14 @@ const canvas = el<HTMLCanvasElement>("gl");
 function fitCanvas(): void {
   const dpr = window.devicePixelRatio || 1;
   const layout = LAYOUTS[planarLayout(stage.clientWidth, stage.clientHeight)];
+  const canvas = glCanvas();
   const fitted =
     canvas.width === Math.floor(canvas.offsetWidth * dpr) &&
     canvas.height === Math.floor(canvas.offsetHeight * dpr) &&
-    nv.opts.multiplanarLayout === layout;
+    nv.multiplanarType === layout;
   if (fitted) return;
-  nv.opts.multiplanarLayout = layout;
-  nv.resizeListener();
+  nv.multiplanarType = layout;
+  nv.resize();
   scheduleOverlayDraw();
 }
 new ResizeObserver(fitCanvas).observe(stage);
@@ -190,10 +205,9 @@ let boneToken = 0;
 let bonePending = false;
 
 // Dev-only handles so the picking and audio paths can be poked from a console:
-// `nv.selectedObjectId` should read 254 (VOLUME_ID) after hovering tissue on
-// the render, and flipping `nv.opts.show3Dcrosshair` reproduces the shadowed
-// pick the sampler works around. The tap layer schedules ahead on the audio
-// clock, so `sonifier.rate` is the only way to see it responding to a hover.
+// `await nv.view.depthPick(x, y)` is the pick the render hover makes, in
+// canvas pixels. The tap layer schedules ahead on the audio clock, so
+// `sonifier.rate` is the only way to see it responding to a hover.
 if (import.meta.env.DEV) {
   Object.assign(window, { nv, sonifier });
 }
@@ -400,138 +414,128 @@ function onSample(sample: Sample | null): void {
 
 /* ---------------- overlays: spike + scan line ---------------- */
 
-/** World millimeters for a full-resolution voxel index, via the same round-trip `sampler.ts` uses. */
+/** World millimeters for a full-resolution voxel index, via the same affine `sampler.ts` uses. */
 function mmOf(vox: [number, number, number]): [number, number, number] {
-  const mm = nv.frac2mm(nv.vox2frac(vox));
-  return [mm[0], mm[1], mm[2]];
+  const matRAS = nv.volumes[0]?.matRAS;
+  return matRAS ? vox2mm(matRAS, vox) : [0, 0, 0];
 }
 
 /** Distinct from the crosshair's own blue, so the two are never mistaken for each other. */
-const SPIKE_COLOR = [1, 0.6, 0.15, 0.9];
+const SPIKE_COLOR = "rgba(255, 153, 38, 0.9)";
 /** Distinct from both the crosshair's blue and the spike's orange. */
-const SCAN_LINE_COLOR = [1, 0.15, 0.85, 0.85];
+const SCAN_LINE_COLOR = "rgba(255, 38, 217, 0.85)";
 const SCAN_LINE_WIDTH = 1;
+
+const overlay = el<HTMLCanvasElement>("overlay");
+const overlayContext = overlay.getContext("2d");
 
 let overlayQueued = false;
 
 /**
- * Redraws on the next frame rather than synchronously, so a fast sweep across
- * a tile costs one redraw per frame rather than one per pointer event.
+ * Asks NiiVue for a frame and redraws the lines over it. NiiVue coalesces
+ * its own frames, and so does this, so a fast sweep across a tile costs one
+ * redraw per frame rather than one per pointer event.
  */
 function scheduleOverlayDraw(): void {
-  if (overlayQueued) return;
-  overlayQueued = true;
-  requestAnimationFrame(() => {
-    overlayQueued = false;
-    nv.drawScene();
-    drawSpikeOverlay();
-    drawScanLineOverlay();
-  });
+  nv.drawScene();
+  queueOverlay();
 }
 
 /**
- * Projects a world point onto one 2D tile's own plane, ignoring how far out
- * of that tile's currently-shown slice the point actually sits.
+ * Redraws the lines once NiiVue has drawn its next frame.
  *
- * NiiVue's own `frac2canvasPos` refuses a point more than ~2mm from the slice
- * a tile is currently showing — the right call for its own click-to-measure
- * ruler, where both ends are meant to be on one slice, but wrong here: the
- * whole reason to draw this line is that the probe found bone somewhere the
- * sampled slice does not show. The math below is the same affine map
- * `frac2canvasPos` uses (`leftTopMM`/`fovMM`/`leftTopWidthHeight` off
- * `nv.screenSlices`), just without its distance-to-slice check — an
- * orthographic projection onto the tile's plane, a shadow rather than a
- * literal point. Null only when the point falls outside the tile's own
- * field of view, not when it is merely on a different slice.
+ * Two animation frames out, not one: NiiVue renders from an animation frame
+ * of its own, and whether that one was queued before or after this depends on
+ * who asked first. A frame later, the tiles' cameras are the ones just drawn
+ * with whichever order it was.
  */
-function projectToTile(mm: [number, number, number], tile: (typeof nv.screenSlices)[number]): [number, number] | null {
-  // Coronal and sagittal tiles show a different pair of world axes than
-  // their own screen X/Y; axial needs no swizzle.
-  const [x, y] =
-    tile.axCorSag === 1 ? [mm[0], mm[2]] : tile.axCorSag === 2 ? [mm[1], mm[2]] : [mm[0], mm[1]];
+function queueOverlay(): void {
+  if (overlayQueued) return;
+  overlayQueued = true;
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      overlayQueued = false;
+      drawOverlays();
+    }),
+  );
+}
 
-  const fracX = (x - tile.leftTopMM[0]) / tile.fovMM[0];
-  const fracY = (y - tile.leftTopMM[1]) / tile.fovMM[1];
-  if (fracX < 0 || fracX > 1 || fracY < 0 || fracY > 1) return null;
+/** One tile of the frame NiiVue just drew. */
+type Tile = ReturnType<typeof nv.getScreenTiles>[number];
 
-  const ltwh = [...tile.leftTopWidthHeight];
-  let mirror = false;
-  if (ltwh[2] < 0) {
-    mirror = true;
-    ltwh[0] += ltwh[2];
-    ltwh[2] = -ltwh[2];
+/**
+ * Where a world point lands on a tile, through the camera NiiVue drew that
+ * tile with. The 2D tiles are orthographic, so a point off the slice a tile
+ * shows still lands on it, as a shadow on the tile's plane rather than a
+ * literal point. That is what the spike needs: the whole reason to draw it is
+ * that the probe found bone somewhere the sampled slice does not show. Null
+ * when the point is off the tile, or behind the render camera.
+ */
+function project(mm: [number, number, number], tile: Tile): [number, number] | null {
+  if (!tile.mvpMatrix || !tile.leftTopWidthHeight) return null;
+  return projectToCanvas(mm, tile.mvpMatrix, tile.leftTopWidthHeight);
+}
+
+function strokeLine(ctx: CanvasRenderingContext2D, from: [number, number], to: [number, number]): void {
+  ctx.beginPath();
+  ctx.moveTo(from[0], from[1]);
+  ctx.lineTo(to[0], to[1]);
+  ctx.stroke();
+}
+
+/**
+ * Redraws both lines over the frame NiiVue has just finished.
+ *
+ * They go on a transparent canvas stacked over NiiVue's rather than into
+ * NiiVue's own frame. 1.0 has no line call, and its overlay hook hands over a
+ * raw WebGPU pass (and is not called at all on WebGL2), which is a lot of
+ * pipeline for two lines.
+ */
+function drawOverlays(): void {
+  if (!overlayContext) return;
+  const canvas = glCanvas();
+  if (overlay.width !== canvas.width || overlay.height !== canvas.height) {
+    overlay.width = canvas.width;
+    overlay.height = canvas.height;
   }
-  const screenFracX = mirror ? 1 - fracX : fracX;
-  const screenFracY = 1 - fracY;
-  return [ltwh[0] + screenFracX * ltwh[2], ltwh[1] + screenFracY * ltwh[3]];
+  overlayContext.clearRect(0, 0, overlay.width, overlay.height);
+  const tiles = nv.getScreenTiles();
+  drawSpikeOverlay(overlayContext, tiles);
+  drawScanLineOverlay(overlayContext, tiles);
+}
+
+// Frames NiiVue draws on its own account move the tiles too: a drag to
+// rotate or zoom, a resize, a cut. Following them keeps the lines on the
+// picture rather than left where it was.
+for (const type of ["azimuthElevationChange", "change", "canvasResize", "clipPlaneChange"] as const) {
+  nv.addEventListener(type, queueOverlay);
 }
 
 /**
  * Draws a line from the sampled voxel to the densest bone the probe actually
  * found, on every 2D tile that shows it.
  *
- * 2D tiles only (`axCorSag > 2` is the render tile) -- kept that way even
- * though `drawScanLineOverlay` below shows a render-tile projection is in
- * fact reachable (`nv.calculateMvpMatrix` hands back the same matrix
- * `draw3D` builds for itself); the spike is a bone-channel aid, not the
- * general "where is the sound" indicator that line earns its extra cost
- * for. The 2D tiles stay visible during a render hover too, so the line is
- * not lost, only not drawn on top of the render itself.
- *
- * Drawn as a follow-up call after `nv.drawScene()` rather than from inside
- * it, so this line survives every redraw *this app* triggers. It does not
- * survive a redraw NiiVue triggers on its own — dragging to rotate or
- * zoom — since nothing here runs again until the next sampled voxel. That is
- * a real, accepted gap: the overlay is a hover aid, and hovering is exactly
- * what puts it back.
+ * 2D tiles only, though the render tile can be projected onto as well (the
+ * scan line below is): the spike is a bone-channel aid, not the general
+ * "where is the sound" indicator that line is. The 2D tiles stay visible
+ * during a render hover too, so the line is not lost, only not drawn on top
+ * of the render itself.
  */
-function drawSpikeOverlay(): void {
+function drawSpikeOverlay(ctx: CanvasRenderingContext2D, tiles: readonly Tile[]): void {
   if (!spike) return;
-  for (const tile of nv.screenSlices) {
-    if (tile.axCorSag > 2) continue;
-    const a = projectToTile(spike.from, tile);
-    const b = projectToTile(spike.to, tile);
-    if (!a || !b) continue;
-    nv.drawLine([a[0], a[1], b[0], b[1]], 2, SPIKE_COLOR);
+  ctx.strokeStyle = SPIKE_COLOR;
+  ctx.lineWidth = 2;
+  for (const tile of tiles) {
+    if (tile.axCorSag === SLICE_TYPE.RENDER) continue;
+    const a = project(spike.from, tile);
+    const b = project(spike.to, tile);
+    if (a && b) strokeLine(ctx, a, b);
   }
 }
 
 /**
- * Projects a world mm point onto the 3D render tile's own screen rectangle,
- * through NiiVue's actual render camera rather than an approximation:
- * `nv.calculateMvpMatrix` (marked `@internal` in its own types, but public,
- * and exactly what `draw3D` calls to build the matrix for this same frame)
- * rebuilt from `nv.scene.renderAzimuth`/`renderElevation` and the render
- * tile's own `leftTopWidthHeight` -- the same three inputs `draw3D` used
- * moments earlier inside `nv.drawScene()`. The multiply and perspective
- * divide are done by hand rather than pulling in `gl-matrix`: the app has
- * no other use for a matrix library, and the read is eight multiplies.
- * Null when the point falls behind the camera (`cw <= 0`) or outside the
- * tile's own view frustum, the render-tile equivalent of `projectToTile`
- * returning null for a point off a 2D tile's field of view.
- */
-function projectRenderPoint(
-  mm: [number, number, number],
-  tile: (typeof nv.screenSlices)[number],
-): [number, number] | null {
-  const [mvp] = nv.calculateMvpMatrix(null, tile.leftTopWidthHeight, nv.scene.renderAzimuth, nv.scene.renderElevation);
-  const [x, y, z] = mm;
-  const cx = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
-  const cy = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
-  const cw = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
-  if (cw <= 0) return null;
-  const ndcX = cx / cw;
-  const ndcY = cy / cw;
-  if (ndcX < -1 || ndcX > 1 || ndcY < -1 || ndcY > 1) return null;
-
-  const [left, top, width, height] = tile.leftTopWidthHeight;
-  return [left + (ndcX * 0.5 + 0.5) * width, top + (1 - (ndcY * 0.5 + 0.5)) * height];
-}
-
-/**
- * Draws one line through the sampled point, on every tile that shows it --
- * the 2D tiles via `projectToTile`, the render tile via
- * `projectRenderPoint`. One line, not a crosshair pair: this reads as a
+ * Draws one line through the sampled point, on every tile that shows it,
+ * the render tile included. One line, not a crosshair pair: this reads as a
  * radar-style sweep line, at a glance, from across the room -- which a
  * pair of crossing lines reads as a target reticle instead. The line is the
  * line being read: while the sweep runs it is drawn from where the current
@@ -544,26 +548,23 @@ function projectRenderPoint(
  * the line means the same thing whether the sweep or the pointer put it
  * there.
  */
-function drawScanLineOverlay(): void {
+function drawScanLineOverlay(ctx: CanvasRenderingContext2D, tiles: readonly Tile[]): void {
   if (!scanPoint) return;
-  for (const tile of nv.screenSlices) {
-    const point =
-      tile.axCorSag === SLICE_TYPE.RENDER ? projectRenderPoint(scanPoint, tile) : projectToTile(scanPoint, tile);
-    if (!point) continue;
+  ctx.strokeStyle = SCAN_LINE_COLOR;
+  ctx.lineWidth = SCAN_LINE_WIDTH;
+  for (const tile of tiles) {
+    const point = project(scanPoint, tile);
+    if (!point || !tile.leftTopWidthHeight) continue;
     const [x, y] = point;
     if (sweeping && sweepLineStart) {
       // The line being read, from where it began to where the sweep has
       // got: along whichever cardinal direction the lines run.
-      const from =
-        tile.axCorSag === SLICE_TYPE.RENDER
-          ? projectRenderPoint(sweepLineStart, tile)
-          : projectToTile(sweepLineStart, tile);
-      if (from) nv.drawLine([from[0], from[1], x, y], SCAN_LINE_WIDTH, SCAN_LINE_COLOR);
+      const from = project(sweepLineStart, tile);
+      if (from) strokeLine(ctx, from, point);
       continue;
     }
     const [left, , width] = tile.leftTopWidthHeight;
-    const right = sweeping ? x : left + width;
-    nv.drawLine([left, y, right, y], SCAN_LINE_WIDTH, SCAN_LINE_COLOR);
+    strokeLine(ctx, [left, y], [sweeping ? x : left + width, y]);
   }
 }
 
@@ -571,7 +572,7 @@ const track = (e: PointerEvent) => {
   // The sweep below is driving the crosshair on its own; a stray hover
   // fighting it for the same sample would make both illegible.
   if (sweeping) return;
-  sampler.sample(e.offsetX, e.offsetY, controls.sonify3d, controls.surfaceDepth, onSample);
+  sampler.sample(e.clientX, e.clientY, controls.sonify3d, controls.surfaceDepth, onSample);
 };
 
 const crosshairStep = el<HTMLSelectElement>("crosshairStep");
@@ -580,7 +581,7 @@ const sweepBtn = el<HTMLButtonElement>("sweepBtn");
 
 /** Moves the crosshair along one axis by a signed fraction of the volume, and sounds where it lands. */
 function moveCrosshair(axis: number, delta: number): void {
-  const position = nv.scene.crosshairPos;
+  const position = nv.crosshairPos;
   position[axis] = Math.min(1, Math.max(0, position[axis] + delta));
   nv.drawScene();
   sampler.sampleFraction(position, onSample);
@@ -595,7 +596,7 @@ function nudgeCrosshair(axis: number, direction: number): void {
 }
 
 function centerCrosshair(): void {
-  const position = nv.scene.crosshairPos;
+  const position = nv.crosshairPos;
   position[0] = 0.5;
   position[1] = 0.5;
   position[2] = 0.5;
@@ -660,10 +661,10 @@ function sweepFrame(token: number, lastTime: number): void {
       sweepLineStart = null;
       if (!sweepResting) onSample(null);
     } else {
-      const position = nv.scene.crosshairPos;
-      const face = cutFace(nv.scene.clipPlane, position);
+      const position = nv.crosshairPos;
+      const face = cutFace(clipPlaneVector(), position);
       const point = facePoint(face, raster.across, raster.line, pace.direction);
-      const start = nv.frac2mm(facePoint(face, 0, raster.line, pace.direction));
+      const start = nv.model.scene2mm(facePoint(face, 0, raster.line, pace.direction));
       sweepLineStart = [start[0], start[1], start[2]];
       position[0] = point[0];
       position[1] = point[1];
@@ -766,24 +767,45 @@ const WHOLE_PLANES: ReadonlyArray<{ name: string; plane: [number, number, number
 ];
 
 function currentPlane(): [number, number, number] {
-  const [depth = CLIP_OFF, azimuth = 0, elevationDeg = 0] = nv.scene.clipPlaneDepthAziElevs[0] ?? [];
-  return [depth, azimuth, elevationDeg];
+  return nv.getClipPlaneDepthAziElev(0);
+}
+
+/**
+ * The cutting plane as the render shader sees it, `[nx, ny, nz, -depth]` in
+ * fraction space: what `cutFace` reads the sweep's face from.
+ */
+function clipPlaneVector(): number[] {
+  const at = nv.activeClipPlaneIndex * 4;
+  return nv.model.clipPlanes.slice(at, at + 4);
+}
+
+/**
+ * Whether two planes' angles name the same plane. NiiVue 1.0 keeps a plane
+ * as its normal and works the angles back out of it when asked, so a plane
+ * set at an azimuth of 270 can come back as -90, give or take rounding:
+ * comparing the normals is what survives the round trip.
+ */
+function samePlane(a: readonly [number, number], b: readonly [number, number]): boolean {
+  const n = clipNormal(a[0], a[1]);
+  const m = clipNormal(b[0], b[1]);
+  return n[0] * m[0] + n[1] * m[1] + n[2] * m[2] > 0.9999;
 }
 
 /**
  * Turns the render camera to look straight at the face a plane at these
  * angles exposes. Called *before* the plane is cut: the camera turn fires
- * `onAzimuthElevationChange`, and when the Clip slider is above zero that
+ * `azimuthElevationChange`, and when the Clip slider is above zero that
  * re-cuts the plane the slider's way, which the cut that follows overrides.
  */
 function facePlane(azimuth: number, elevationDeg: number): void {
   const camera = cameraForPlane(azimuth, elevationDeg);
-  nv.setRenderAzimuthElevation(camera.azimuth, camera.elevation);
+  nv.azimuth = camera.azimuth;
+  nv.elevation = camera.elevation;
 }
 
 /** Where the render camera is looking from, for a reply. */
 function describeCamera(): { azimuth: number; elevation: number } {
-  return { azimuth: nv.scene.renderAzimuth, elevation: nv.scene.renderElevation };
+  return { azimuth: nv.azimuth, elevation: nv.elevation };
 }
 
 /** The scene as the control surface sees it: fractions in, words out. */
@@ -804,7 +826,7 @@ const knobScene: KnobScene = {
     const at =
       depth >= PLANE_OFF
         ? WHOLE_PLANES.length - 1
-        : WHOLE_PLANES.findIndex(({ plane }) => plane[1] === azimuth && plane[2] === elevationDeg);
+        : WHOLE_PLANES.findIndex(({ plane }) => samePlane([plane[1], plane[2]], [azimuth, elevationDeg]));
     const next = WHOLE_PLANES[(at + 1) % WHOLE_PLANES.length];
     // A whole plane is cut to expose a face; turn to it, so the face is the
     // near side and a depth pick over the render lands on it. Turning the
@@ -814,7 +836,7 @@ const knobScene: KnobScene = {
     return next.name;
   },
   describe() {
-    const mm = Array.from(nv.frac2mm(nv.scene.crosshairPos));
+    const mm = nv.getCrosshairPos();
     const where = [
       spokenPosition(pan(mm[0], bounds.x, 1), "left", "right"),
       spokenPosition(anteriority(mm[1], bounds.y, 1), "back", "front"),
@@ -913,7 +935,7 @@ const agentScene: AgentScene = {
       }
     }
 
-    const at = nv.mm2frac([target[0], target[1], target[2]]);
+    const at = nv.model.mm2scene([target[0], target[1], target[2]]);
     const frac: [number, number, number] = [at[0], at[1], at[2]];
     if (frac.some((f) => f < 0 || f > 1)) {
       throw new Error(`${region.name} lies outside the loaded volume.`);
@@ -925,7 +947,7 @@ const agentScene: AgentScene = {
     // side rather than hidden behind the part the cut keeps.
     facePlane(plane.azimuth, plane.elevation);
     nv.setClipPlane([depth, plane.azimuth, plane.elevation]);
-    const position = nv.scene.crosshairPos;
+    const position = nv.crosshairPos;
     position[0] = frac[0];
     position[1] = frac[1];
     position[2] = frac[2];
@@ -947,8 +969,8 @@ const agentScene: AgentScene = {
 
   whereAmI() {
     fitCanvas();
-    const frac = nv.scene.crosshairPos;
-    const mm = Array.from(nv.frac2mm(frac)).slice(0, 3);
+    const frac = nv.crosshairPos;
+    const mm = nv.getCrosshairPos();
     const region = atlas && atlasFits ? atlas.regionAt(mm) : null;
     return {
       volume: nv.volumes[0]?.name ?? null,
@@ -975,9 +997,9 @@ if (import.meta.env.DEV || agentParam !== null) {
   }).attach();
 }
 
-canvas.addEventListener("pointermove", track);
-canvas.addEventListener("pointerenter", track);
-canvas.addEventListener("pointerleave", () => {
+stage.addEventListener("pointermove", track);
+stage.addEventListener("pointerenter", track);
+stage.addEventListener("pointerleave", () => {
   if (!sweeping) onSample(null);
 });
 
@@ -999,8 +1021,8 @@ function gridFromVolume(vol: (typeof nv.volumes)[0]): Grid | null {
   // A 4D series has more voxels than one frame; the first frame is what shows.
   if (!(count > 0) || img.length < count) return null;
 
-  const lo = vol.global_min ?? 0;
-  const hi = vol.global_max ?? 1;
+  const lo = vol.globalMin ?? 0;
+  const hi = vol.globalMax ?? 1;
   const span = hi > lo ? hi - lo : 1;
 
   const data = new Float32Array(count);
@@ -1123,20 +1145,34 @@ function applyClip(): void {
   // The plane's normal points *away* from the camera at the camera's own
   // angles, which cuts the far side and leaves the near surface — the part in
   // the way — untouched. Flipping the normal opens the head towards the viewer.
-  nv.setClipPlane([depth, nv.scene.renderAzimuth + 180, -nv.scene.renderElevation]);
+  nv.setClipPlane([depth, nv.azimuth + 180, -nv.elevation]);
 }
 
 el<HTMLInputElement>("clip").addEventListener("input", applyClip);
-nv.onAzimuthElevationChange = () => {
+nv.addEventListener("azimuthElevationChange", () => {
   if (controls.clip > 0) applyClip();
-};
+});
 
-// NiiVue's own `c` over the render walks the same six whole planes as the
-// knob's next plane. NiiVue cuts on the key's release, from a listener added
-// at attach, so this one runs after it and turns the camera to whichever
-// plane it just cut, as the knob does.
-canvas.addEventListener("keyup", (event) => {
-  if (event.code !== nv.opts.clipPlaneHotKey) return;
+/** Whether the pointer is over the canvas, which is when NiiVue listens for its keys. */
+let pointerOnCanvas = false;
+stage.addEventListener("pointerenter", () => (pointerOnCanvas = true));
+stage.addEventListener("pointerleave", () => (pointerOnCanvas = false));
+
+// NiiVue's own `c` over the canvas walks the same six whole planes as the
+// knob's next plane. NiiVue cuts on the key going down, from a window
+// listener that ignores keys typed into a field and keys pressed with the
+// pointer elsewhere; this one follows the same rules on the key's release,
+// after the cut, and turns the camera to whichever plane NiiVue just cut, as
+// the knob does.
+window.addEventListener("keyup", (event) => {
+  if (event.key.toUpperCase() !== "C" || !pointerOnCanvas) return;
+  const target = event.composedPath()[0];
+  if (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+  ) {
+    return;
+  }
   const [depth, azimuth, elevationDeg] = currentPlane();
   if (depth < PLANE_OFF) facePlane(azimuth, elevationDeg);
 });
@@ -1150,15 +1186,17 @@ function refreshRange(): void {
   fitCanvas();
   if (active.clip) nv.setClipPlane(active.clip);
 
-  let lo = vol.cal_min ?? NaN;
-  let hi = vol.cal_max ?? NaN;
+  let lo = vol.calMin ?? NaN;
+  let hi = vol.calMax ?? NaN;
   if (!(hi > lo)) {
-    lo = vol.global_min ?? NaN;
-    hi = vol.global_max ?? NaN;
+    lo = vol.globalMin ?? NaN;
+    hi = vol.globalMax ?? NaN;
   }
   range = hi > lo ? { lo, hi } : DEFAULT_RANGE;
-  bounds = boundsFromFrac((frac) => nv.frac2mm(frac));
-  lut = cmapper.colormap(vol.colormap, vol.colormapInvert);
+  bounds = boundsFromFrac((frac) => nv.model.scene2mm(frac));
+  // An unknown name falls back to gray, as NiiVue's own renderer does.
+  const colormap = lookupColorMap(vol.colormap ?? "gray") ?? lookupColorMap("gray");
+  lut = colormap ? colormapLut(colormap, vol.isColormapInverted) : new Uint8ClampedArray();
   lutPeak = peakAlpha(lut);
   readout.status("ready");
   readout.region(atlasFits ? null : "off: not an MNI scan");
@@ -1167,7 +1205,7 @@ function refreshRange(): void {
 
 async function loadFile(file: File): Promise<void> {
   try {
-    await nv.loadFromFile(file);
+    await nv.loadImage(file);
   } catch {
     await nv.loadVolumes([{ url: URL.createObjectURL(file), name: file.name }]);
   }

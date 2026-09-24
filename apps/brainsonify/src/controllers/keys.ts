@@ -27,9 +27,9 @@ export type Intent =
 /**
  * Keyboard `key` values to intents. Letters are matched lowercase.
  *
- * Chosen around the keys NiiVue already reads on a focused canvas (h, j, k,
- * l, m, c, v, u, d, and the left and right arrows), so a key never does two
- * things depending on where the focus is. The top row is the technician's:
+ * Chosen around the keys NiiVue reads while the pointer is over the canvas
+ * (a, c, d, h, j, k, l, u, v and Escape), so a key never does two things
+ * depending on where the pointer is. The top row is the technician's:
  * a numbered button per mode, and 0 to cycle when the numbers are out of reach.
  */
 export const KEY_MAP: Readonly<Record<string, Intent>> = {

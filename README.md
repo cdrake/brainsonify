@@ -113,21 +113,31 @@ registry that drives the switcher, the default, and the visible controls.
 
 ## How it works
 
-- **2D slices.** `canvasPos2frac` converts pointer position to a fractional
-  volume coordinate, `frac2vox` gives voxel indices, `getValue` reads intensity.
-  The crosshair is not moved.
-- **3D render.** `canvasPos2frac` returns -1 over the render tile, so the app
-  sets `uiData.mouseDepthPicker` and calls `drawScene()`. NiiVue reads the depth
-  buffer during that draw and updates `scene.crosshairPos`, which is then
-  sampled. Throttled to one pick per animation frame, since each pick costs a
-  full redraw.
+- **Pointer to canvas.** `clientToCanvas` turns the pointer's page position
+  into the canvas pixels NiiVue's picking works in, and `hitTest` says which
+  tile that is. The canvas is looked up through `nv.canvas` each time rather
+  than kept: where WebGPU is missing NiiVue falls back to WebGL2 by cloning
+  the canvas and swapping the clone in, which leaves a kept reference
+  detached. Pointer listeners are on the stage the canvas fills, for the same
+  reason.
+- **2D slices.** `canvasToMM` gives the world position under the pointer, the
+  volume's `matRAS` turns it into a voxel, and `voxelValue` in `geometry.ts`
+  reads the intensity (clamped to the grid, with `scl_slope`/`scl_inter`
+  applied, as NiiVue 0.x's `getValue` did; 1.0 has no public equivalent). The
+  crosshair is not moved.
+- **3D render.** Over the render tile the app calls the view's `depthPick`,
+  the same call NiiVue's own double-click makes, which runs a dedicated pick
+  pass and resolves to a world position, or null on a miss. The scene is
+  redrawn after it, since the pass renders into the canvas. Throttled to one
+  pick per animation frame.
 - **Why the render needs a surface search.** The picking shader marches in steps
-  of ~1.9 voxels and stops at the first sample whose colormap alpha exceeds
-  0.01, then encodes that position into 8 bits per axis. The point it hands back
-  is therefore the faint outer rim where tissue merely becomes *visible*, plus a
-  voxel or two of quantisation — hover a bright gyral crown and you can easily
-  read the air in front of it. `Surface` searches that many voxels along the view
-  ray and keeps the strongest value. The search is one-dimensional on purpose:
+  of ~1.9 voxels until a sample's colormap alpha reaches 0.01, then steps back
+  and refines one step at a time. The point it hands back is therefore the
+  faint outer rim where tissue merely becomes *visible* — hover a bright gyral
+  crown and you can easily read the air in front of it. `Surface` searches that many voxels along the view
+  ray and keeps the strongest value. The ray is the one through that pixel,
+  unprojected through the render tile's own camera (`getScreenTiles()` hands
+  out each tile's MVP), and turned into a one-voxel step through `matRAS`. The search is one-dimensional on purpose:
   widening it into a box would blur across the sulci, which are the features this
   whole thing exists to make audible. 2D tiles never do this — they are an exact
   single-voxel read.
@@ -137,13 +147,14 @@ registry that drives the switcher, the default, and the visible controls.
   shader honors clip planes (`clipSampleRange` skips clipped samples) the pick
   then lands on whatever the cut exposes. The plane's normal is the camera's own
   angles flipped, so the opening faces the viewer and keeps facing them through a
-  rotation instead of swinging round to the far side. A ray that passes only
-  through cut-away space reports id 253 rather than a volume hit, so hovering the
-  opened cavity is correctly silent.
+  rotation instead of swinging round to the far side. A ray that finds nothing
+  visible past the cut does not miss: NiiVue falls back to the point where it
+  meets the plane, so hovering the opened cavity sounds the voxel on the plane
+  there, usually background that the gate silences.
 - **The radar sweep.** Where a condition offers it, **Start radar sweep** reads
   the cut face without a pointer: left to right along one line, then the next
   line down, wrapping from the bottom back to the top until stopped. `sweep.ts`
-  takes NiiVue's own `scene.clipPlane` — `[nx, ny, nz, depth]`, the plane
+  takes NiiVue's own clip plane (`model.clipPlanes`) — `[nx, ny, nz, depth]`, the plane
   `dot(n, p − 0.5) + depth = 0` in fraction space, which is what its render
   shader clips against — and builds a frame on it: the in-plane direction
   closest to inferior is "down", and "across" is perpendicular to that, signed
@@ -209,15 +220,14 @@ registry that drives the switcher, the default, and the visible controls.
   it back from an index the widening filter carries alongside the value, the
   same way a chain of sliding-window maximums can carry an argmax. The two
   ends are rarely on the slice a tile is currently showing, so the line is
-  projected onto each tile's plane with the app's own `projectToTile()` rather
-  than NiiVue's `frac2canvasPos`, which refuses anything more than ~2mm off
-  the current slice — the right call for its own click-to-measure ruler, the
-  wrong one for a probe that by design reaches past the slice you are looking
-  at.
-- **Missed picks.** On a miss NiiVue leaves `scene.crosshairPos` untouched rather
-  than signalling failure, so the app compares the object reference across the
-  draw. Without that check, hovering off the head keeps sounding the last voxel
-  that was hit.
+  projected through each tile's own camera: a 2D tile's is orthographic, so a
+  point off the shown slice lands on the tile as its shadow on the tile's
+  plane, which is what a probe that by design reaches past the slice you are
+  looking at needs. The lines are drawn on a transparent canvas stacked over
+  NiiVue's, a frame after each NiiVue frame the app asks for or NiiVue
+  announces (a camera turn, a resize, a cut), so they stay on the picture
+  through a drag to rotate. NiiVue 1.0 has no line call, and its overlay hook
+  runs only on WebGPU.
 - **Audio.** A Web Audio oscillator, band-passed pink noise, or low-passed
   white noise, whose frequency (or cutoff) is set from the normalised
   intensity, with a configurable glide and a gate that silences background
@@ -286,7 +296,7 @@ registry that drives the switcher, the default, and the visible controls.
   otherwise has no way to know the knob now does something else; numeric
   nudges are silent, because the sound is the feedback. The virtual controller
   is a keyboard: `controllers/keys.ts` is the whole protocol, chosen around the
-  keys NiiVue already reads on a focused canvas, and a physical rotary panel
+  keys NiiVue already reads while the pointer is over the canvas, and a physical rotary panel
   presenting itself as a Bluetooth keyboard sends the same keys
   ([docs/control/CROWPANEL.md](docs/control/CROWPANEL.md)). The panel and the
   control API hold the same values and each follows the other: a slider
@@ -373,7 +383,7 @@ table, is kept as an alias so it still matches. Its centroid is the mean of its
 voxels in the atlas grid, taken once per session and turned to millimetres
 through the atlas's own affine; when that mean falls outside the region, as a
 curved one's can, the region's nearest voxel is used instead and the reply
-says `snapped`. The crosshair goes to that point through NiiVue's `mm2frac`.
+says `snapped`. The crosshair goes to that point through NiiVue's `mm2scene`.
 The cut keeps the orientation already on screen when one is cut and falls
 back to coronal when none is, so a first visit gets a face to land on and a
 later one keeps the technician's choice. Its depth is the one that puts the
@@ -391,7 +401,7 @@ the right, azimuth 90, is faced from azimuth 270. Without the turn the
 default left-lateral camera sees the intact left side and the face with the
 region on it is round the back, and a depth pick over the render lands on
 scalp rather than on the face. The turn comes first because it fires
-`onAzimuthElevationChange`, and the cut that follows overrides whatever the
+`azimuthElevationChange`, and the cut that follows overrides whatever the
 Clip slider made of that. The reply carries the camera angles as well as
 the plane's. The voxel under
 the crosshair is then sampled the way a crosshair button samples it, and the

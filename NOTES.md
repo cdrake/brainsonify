@@ -1632,3 +1632,99 @@ can check the two agree for any angles, not just the six.
   the elevation negated. by the rule above the plane that faces a camera
   is azimuth negated, elevation kept; the two agree only for side views.
   not checked on screen, and the slider's own workflow was not touched.
+
+---
+
+## Entry 23 — 23 September 2026
+
+### onto NiiVue 1.0 (1.0.0-rc.14)
+
+NiiVue cut 1.0.0-rc.14 from niivue/mono today and we moved brainsonify onto
+it, on its own branch, `feat/niivue-1.0`. it is a release candidate on npm's
+`next` tag; `latest` is still 0.69.0.
+
+> _To fill in: why now, on a release candidate, rather than waiting for 1.0
+> itself._
+
+1.0 is a rewrite, not a bump. the first typecheck said 13 errors, but that was
+only because `Niivue` had become `NiiVue` and every `nv.` behind it was `any`.
+with the name fixed it was 63. almost all of it was the app reaching into
+things 0.69 left lying about: `scene`, `screenSlices`, `uiData`,
+`calculateMvpMatrix`, `drawLine`, `getValue`, `cmapper`. none of those are on
+the 1.0 controller.
+
+### what replaced what
+
+- hover on a 2D tile is `clientToCanvas`, `hitTest`, `canvasToMM`.
+- the render pick is the view's `depthPick`, which is what NiiVue's own
+  double-click calls. it has its own pass and gives back mm or null. the
+  whole dance of hiding the 3D crosshair, redrawing and comparing
+  `crosshairPos` references is gone. the crosshair is not in the pick pass
+  any more, so there is nothing to hide, and a miss is a null.
+- voxel reads, mm/voxel, and the colormap table are in a new
+  `geometry.ts`, because 1.0 has them but does not export them. each one
+  copies the NiiVue code it replaces: `getValue` from 0.69 (clamped, scaled),
+  `lutrgba8` and `mat4.invert` from 1.0.
+- the surface search walks the ray through the pixel, unprojected through
+  the render tile's MVP, instead of `calculateRayDirection`, which is gone.
+- the atlas loads with nifti-reader-js and NiiVue's exported `nii2volume`.
+  1.0 only loads volumes into a view.
+- the spike and scan line are on a second canvas over NiiVue's.
+
+### found the hard way
+
+- NiiVue swaps the canvas. with no WebGPU it falls back to WebGL2 by cloning
+  the canvas and replacing it, because a canvas that has held a WebGPU
+  context cannot take a WebGL2 one. `main.ts` held the old element, so hover,
+  resize and the overlay all listened to a canvas that was no longer in the
+  page. the page drew fine and nothing responded. now the canvas is always
+  looked up through `nv.canvas`, and the pointer listeners are on the stage.
+- `nv.devicePixelRatio` is -1 when NiiVue is left to choose. multiplying by
+  it sent every hover off the canvas. `clientToCanvas` does the conversion
+  properly.
+- the overlay hook (`registerOverlayRenderer`) looked like the right home for
+  the lines, but it hands over a raw WebGPU pass, and the WebGL2 view never
+  calls it. so the lines are redrawn a frame after NiiVue's frames and after
+  its camera, resize and clip events. they follow a rotate now, which in 0.69
+  they did not.
+- NiiVue's `c` is on keydown now, from a window listener that only fires with
+  the pointer over the canvas. our keyup listener still runs after it and
+  still turns the camera. it follows the same rules now.
+
+### changed behavior, not fixed
+
+- a ray that goes only through cut-away space is no longer a miss. 1.0
+  falls back to the point where the ray meets the clip plane. in 0.69 it
+  came back as id 253 and the opened cavity was silent. now it sounds the
+  voxel on the plane, which is mostly background and gated off, but not
+  always.
+- the pick refines to single steps after its 1.9-voxel march and packs a
+  real depth, where 0.69 packed 8 bits per axis. so the surface it finds
+  should be tighter than the one `Surface` was tuned against.
+
+### checked on screen
+
+headless chrome with SwiftShader, so WebGL2, MNI152 demo, condition 11:
+2D hover read 25.4 at -7, -17, 23. the render read 54.4 marked "3D render".
+the scan line was drawn on all four tiles and moved with a drag. `c` cut
+coronal, sagittal from the left, sagittal from the right, and the camera
+turned to 0, 270, 90. a pick on the sagittal cut read 2, -19, 5, right
+thalamus. no console errors apart from the agent socket, which has no
+server in dev, and the favicon.
+
+not checked: a real GPU, WebGPU, sound.
+
+### open questions
+
+- should a pick that lands on the clip plane with nothing behind it be
+  silent, as it was?
+- is the `Surface` default still right now the pick is tighter?
+- does anything look different on WebGPU, which is what most visitors'
+  browsers will pick?
+
+### next
+
+- open the branch in chrome on a real GPU, with sound, and hover the
+  render and the cut.
+- listen to the whole-head T1 with the clip slider up, since that is
+  where the cavity change shows.
