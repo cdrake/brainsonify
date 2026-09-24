@@ -13,5 +13,8 @@ export default defineConfig({
     include: ["src/**/*.spec.ts"],
     watch: false,
     reporters: ["default"],
+    // The integration spec starts the server and pages as processes.
+    testTimeout: 30000,
+    hookTimeout: 30000,
   },
 });
