@@ -5,7 +5,7 @@
  * of Brainsonify sonification parameters from multiple input sources
  * (keyboard, mouse, hardware controllers), and the control surface that
  * turns one knob and a few buttons into changes to those parameters and
- * to the scene.
+ * to the scene. What an agent can ask lives in `niivue-mcp`.
  */
 
 export { ControlAPI } from "./controller";
@@ -46,17 +46,3 @@ export {
   STEP_MULTIPLIER,
 } from "./surface";
 export type { Axis, KnobMode, KnobScene, StepSize, SurfaceOptions } from "./surface";
-
-export {
-  PLANE_ALIASES,
-  PLANE_ANGLES,
-  PLANE_OFF,
-  cameraForPlane,
-  clipNormal,
-  depthThrough,
-  matchRegion,
-  regionMentions,
-  resolvePlane,
-  viewDirection,
-} from "./agent";
-export type { AgentMethod, AgentRequest, AgentResponse, Nameable, RegionSummary } from "./agent";

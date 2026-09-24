@@ -17,7 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
 
-import { PLANE_ALIASES, PLANE_ANGLES } from "@brainsonify/control";
+import { PLANE_ALIASES, PLANE_ANGLES } from "niivue-mcp";
 
 import { Bridge } from "./bridge";
 

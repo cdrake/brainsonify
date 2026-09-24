@@ -1,41 +1,12 @@
 /**
- * What an agent can ask the scene to do, and the arithmetic behind it.
+ * The planes an agent can ask for, and the arithmetic behind them.
  *
- * An agent reaches the app through the MCP server in `apps/mcp`, which
- * forwards each tool call to the browser over a socket and waits for the
- * answer. This module is the part both ends share: the messages on the wire,
- * the matching of a region name, and the plane that passes through a point.
- * Nothing here touches NiiVue or the DOM, so it is tested as plain functions.
+ * NiiVue keeps a clip plane as a depth and two angles, and a render camera
+ * as two angles; this module is the part both ends of the socket share:
+ * naming a plane, the normal it has, the camera that faces it, and the
+ * depth that puts it through a point. Nothing here touches NiiVue or the
+ * DOM, so it is tested as plain functions.
  */
-
-/** The tools an agent can call, by name. One request per call. */
-export type AgentMethod = "list_regions" | "go_to_region" | "where_am_i";
-
-/** A tool call as it crosses the socket from the server to the browser. */
-export interface AgentRequest {
-  id: number;
-  method: AgentMethod;
-  params: Record<string, unknown>;
-}
-
-/** The browser's answer: exactly one of `result` or `error`. */
-export interface AgentResponse {
-  id: number;
-  result?: unknown;
-  error?: string;
-}
-
-/** One region of the atlas, as `list_regions` reports it. */
-export interface RegionSummary {
-  /** The label as the atlas spells it, `Precentral_L`. */
-  label: string;
-  /** The same, as it is spoken: `left precentral gyrus`. */
-  name: string;
-  /** The mean position of its voxels, in world millimetres. */
-  centroid: [number, number, number];
-  /** How many voxels carry the label. */
-  voxels: number;
-}
 
 /**
  * The whole planes an agent can ask for, as NiiVue's azimuth and elevation.
@@ -170,39 +141,27 @@ export function depthThrough(
   return depth === 0 ? 0 : depth;
 }
 
-/** A region as the matching sees it: its label, its name, and any older names it kept. */
-export interface Nameable {
-  label: string;
-  name: string;
-  aliases?: readonly string[];
+/** The depth that turns the plane off: past `PLANE_OFF`, as the app's own Clip slider sets it. */
+export const PLANE_NONE = 2;
+
+/**
+ * Whether two planes' angles name the same plane. NiiVue 1.0 keeps a plane
+ * as its normal and works the angles back out of it when asked, so a plane
+ * set at an azimuth of 270 can come back as -90, give or take rounding:
+ * comparing the normals is what survives the round trip.
+ */
+export function samePlane(a: readonly [number, number], b: readonly [number, number]): boolean {
+  const n = clipNormal(a[0], a[1]);
+  const m = clipNormal(b[0], b[1]);
+  return n[0] * m[0] + n[1] * m[1] + n[2] * m[2] > 0.9999;
 }
 
 /**
- * The region an agent asked for, by label, spoken name or alias, or null.
- *
- * An exact match on any wins, case aside. Failing that, the first region
- * with one containing the query, so `precentral l` and `left precentral`
- * both find `Precentral_L`. Underscores and spaces are treated as the same,
- * since an agent copying a label out of a list may type either.
+ * The name for the plane NiiVue reports: a side when its angles are one of
+ * the six, `off` past the depth the shader ignores, and `custom` otherwise.
  */
-export function matchRegion<R extends Nameable>(regions: readonly R[], query: string): R | null {
-  const wanted = fold(query);
-  if (!wanted) return null;
-  const exact = regions.find((r) => namesOf(r).some((text) => fold(text) === wanted));
-  if (exact) return exact;
-  return regions.find((r) => regionMentions(r, wanted)) ?? null;
-}
-
-/** Whether the region's label, name or an alias contains the query, case and separators aside. */
-export function regionMentions(region: Nameable, query: string): boolean {
-  const wanted = fold(query);
-  return namesOf(region).some((text) => fold(text).includes(wanted));
-}
-
-function namesOf(region: Nameable): string[] {
-  return [region.label, region.name, ...(region.aliases ?? [])];
-}
-
-function fold(text: string): string {
-  return text.trim().toLowerCase().replace(/[_\s]+/g, " ");
+export function namePlane(depth: number, azimuth: number, elevation: number): string {
+  if (depth >= PLANE_OFF) return "off";
+  const known = PLANE_ANGLES.find((plane) => samePlane([plane.azimuth, plane.elevation], [azimuth, elevation]));
+  return known?.name ?? "custom";
 }

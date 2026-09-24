@@ -9,7 +9,7 @@
  * is retried with a backoff that settles at half a minute.
  */
 
-import type { AgentRequest, AgentResponse, RegionSummary } from "@brainsonify/control";
+import type { AgentRequest, AgentResponse, RegionSummary } from "niivue-mcp";
 
 import type { Controller } from "./keys";
 

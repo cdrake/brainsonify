@@ -9,7 +9,7 @@
  * to open.
  */
 
-import type { AgentMethod, AgentRequest, AgentResponse } from "@brainsonify/control";
+import type { AgentRequest, AgentResponse } from "niivue-mcp";
 
 /** Anything that can carry text to the app. `Bun.serve`'s socket does. */
 export interface AppSocket {
@@ -74,7 +74,7 @@ export class Bridge {
   }
 
   /** Puts one tool call to the app and waits for its answer. */
-  call(method: AgentMethod, params: Record<string, unknown> = {}): Promise<unknown> {
+  call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     const socket = this.socket;
     if (!socket) return Promise.reject(new Error(NO_APP));
     const id = this.nextId++;

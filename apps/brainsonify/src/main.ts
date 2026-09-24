@@ -1,8 +1,7 @@
 import { MULTIPLANAR_TYPE, NiiVue, SHOW_RENDER, SLICE_TYPE, lookupColorMap } from "@niivue/niivue";
 
+import { ControlAPI, ControlSurface, type ControlState, type KnobScene } from "@brainsonify/control";
 import {
-  ControlAPI,
-  ControlSurface,
   PLANE_ANGLES,
   PLANE_OFF,
   cameraForPlane,
@@ -11,9 +10,7 @@ import {
   matchRegion,
   regionMentions,
   resolvePlane,
-  type ControlState,
-  type KnobScene,
-} from "@brainsonify/control";
+} from "niivue-mcp";
 
 import {
   DEFAULT_BOUNDS,

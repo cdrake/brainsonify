@@ -24,6 +24,7 @@
         "@brainsonify/sonification": "workspace:*",
         "@niivue/niivue": "1.0.0-rc.14",
         "nifti-reader-js": "^0.8.0",
+        "niivue-mcp": "workspace:*",
       },
     },
     "apps/mcp": {
@@ -32,6 +33,7 @@
       "dependencies": {
         "@brainsonify/control": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.30.0",
+        "niivue-mcp": "workspace:*",
         "zod": "^4.6.5",
       },
       "devDependencies": {
@@ -43,6 +45,17 @@
       "version": "0.1.0",
       "dependencies": {
         "@brainsonify/sonification": "workspace:*",
+      },
+    },
+    "libs/niivue-mcp": {
+      "name": "niivue-mcp",
+      "version": "0.1.0",
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.30.0",
+        "zod": "^4.6.5",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.2",
       },
     },
     "libs/sonification": {
@@ -832,6 +845,8 @@
     "negotiator": ["negotiator@1.1.0", "", { "dependencies": { "content-type": "^2.1.0" } }, "sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg=="],
 
     "nifti-reader-js": ["nifti-reader-js@0.8.0", "", { "dependencies": { "fflate": "^0.8.2" } }, "sha512-iO1iIhQDfKniy+l/86HfOPte7So+SxBmBiMSiUB2VXU7z4hSewMTlE3h0fCgfzfXvMUa+ilzLTJ2ZHmtFw6EWw=="],
+
+    "niivue-mcp": ["niivue-mcp@workspace:libs/niivue-mcp"],
 
     "node-gyp-build-optional-packages": ["node-gyp-build-optional-packages@5.1.1", "", { "dependencies": { "detect-libc": "^2.0.1" }, "bin": { "node-gyp-build-optional-packages": "bin.js", "node-gyp-build-optional-packages-test": "build-test.js", "node-gyp-build-optional-packages-optional": "optional.js" } }, "sha512-+P72GAjVAbTxjjwUmwjVrqrdZROD4nf8KgpBoDxqXXTiYZZt/ud60dE5yvCSr9lRO8e8yv6kgJIC0K0PfZFVQw=="],
 

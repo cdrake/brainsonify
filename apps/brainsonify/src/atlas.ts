@@ -1,10 +1,9 @@
 import { nii2volume } from "@niivue/niivue";
 import * as nifti from "nifti-reader-js";
 
-import type { RegionSummary } from "@brainsonify/control";
+import { SPOKEN_NAMES, type RegionSummary } from "niivue-mcp";
 
 import { mm2vox, vox2mm, voxelValue } from "./geometry";
-import { SPOKEN_NAMES } from "./region-names";
 import type { Speech } from "./soundkey";
 
 /**

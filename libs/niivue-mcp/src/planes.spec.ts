@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   PLANE_ANGLES,
+  PLANE_NONE,
   cameraForPlane,
   clipNormal,
   depthThrough,
-  matchRegion,
-  regionMentions,
+  namePlane,
   resolvePlane,
+  samePlane,
   viewDirection,
-} from "./agent";
+} from "./planes";
 
 const close = (v: readonly number[], expected: readonly number[]) => {
   for (let i = 0; i < 3; i++) expect(v[i]).toBeCloseTo(expected[i], 6);
@@ -116,45 +117,27 @@ describe("resolvePlane", () => {
   });
 });
 
-describe("matchRegion", () => {
-  const regions = [
-    { label: "Precentral_L", name: "left precentral gyrus", aliases: ["Left precentral"] },
-    { label: "Precentral_R", name: "right precentral gyrus", aliases: ["Right precentral"] },
-    { label: "Frontal_Inf_Tri_L", name: "left inferior frontal gyrus, triangular part", aliases: ["Left frontal inferior triangular"] },
-    { label: "Insula_L", name: "left insula" },
-  ];
-
-  it("matches a label or a spoken name exactly, whatever the case or separator", () => {
-    expect(matchRegion(regions, "precentral_r")?.label).toBe("Precentral_R");
-    expect(matchRegion(regions, "Left Precentral Gyrus")?.label).toBe("Precentral_L");
-    expect(matchRegion(regions, "Precentral L")?.label).toBe("Precentral_L");
-    expect(matchRegion(regions, "left insula")?.label).toBe("Insula_L");
+describe("namePlane", () => {
+  it("names each of the six sides from the angles NiiVue reports, either way round", () => {
+    for (const plane of PLANE_ANGLES) {
+      expect(namePlane(0.1, plane.azimuth, plane.elevation)).toBe(plane.name);
+      expect(namePlane(0.1, plane.azimuth - 360, plane.elevation)).toBe(plane.name);
+    }
+    // NiiVue hands a plane set at 270 back as -90.
+    expect(namePlane(0, -90, 0)).toBe("left");
   });
 
-  it("still answers to the name a region had before the table", () => {
-    expect(matchRegion(regions, "left frontal inferior triangular")?.label).toBe("Frontal_Inf_Tri_L");
-    expect(matchRegion(regions, "right precentral")?.label).toBe("Precentral_R");
-  });
-
-  it("falls back to the first region containing the words", () => {
-    expect(matchRegion(regions, "triangular")?.label).toBe("Frontal_Inf_Tri_L");
-    expect(matchRegion(regions, "precentral")?.label).toBe("Precentral_L");
-    expect(matchRegion(regions, "frontal inferior")?.label).toBe("Frontal_Inf_Tri_L");
-  });
-
-  it("finds nothing for an empty or unknown query", () => {
-    expect(matchRegion(regions, "")).toBeNull();
-    expect(matchRegion(regions, "hippocampus")).toBeNull();
+  it("says off past the depth the shader ignores, and custom for any other angles", () => {
+    expect(namePlane(PLANE_NONE, 0, 0)).toBe("off");
+    expect(namePlane(1.8, 90, 0)).toBe("off");
+    expect(namePlane(0.2, 45, 10)).toBe("custom");
   });
 });
 
-describe("regionMentions", () => {
-  const region = { label: "Frontal_Inf_Tri_L", name: "left inferior frontal gyrus, triangular part", aliases: ["Left frontal inferior triangular"] };
-
-  it("looks through the label, the name and the aliases alike", () => {
-    expect(regionMentions(region, "frontal_inf")).toBe(true);
-    expect(regionMentions(region, "Triangular Part")).toBe(true);
-    expect(regionMentions(region, "frontal inferior")).toBe(true);
-    expect(regionMentions(region, "temporal")).toBe(false);
+describe("samePlane", () => {
+  it("compares normals, so a full turn or a wrapped angle is the same plane", () => {
+    expect(samePlane([270, 0], [-90, 0])).toBe(true);
+    expect(samePlane([0, 90], [180, 90])).toBe(true);
+    expect(samePlane([0, 0], [180, 0])).toBe(false);
   });
 });
