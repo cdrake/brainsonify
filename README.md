@@ -294,7 +294,11 @@ registry that drives the switcher, the default, and the visible controls.
   make freely, and that is it. Every button press is announced into the
   crosshair live region and, while sound is on, out loud, since a listener
   otherwise has no way to know the knob now does something else; numeric
-  nudges are silent, because the sound is the feedback. The virtual controller
+  nudges are silent, because the sound is the feedback. NiiVue's own keys
+  over the canvas are announced the same way: `v` says the view it changed
+  to, and `c` names the plane it cut, as the knob does. So does the Clip
+  slider, but only when it turns the cut on or off, not while it is dragged.
+  The virtual controller
   is a keyboard: `controllers/keys.ts` is the whole protocol, chosen around the
   keys NiiVue already reads while the pointer is over the canvas, and a physical rotary panel
   presenting itself as a Bluetooth keyboard sends the same keys

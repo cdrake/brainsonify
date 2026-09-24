@@ -71,14 +71,14 @@ cuts and then off, in this exact order, and wraps back to the start. Each
 is named for the side it takes off, and the 3D render turns to look at the
 cut from that side, so the face is what you see and what the pointer reads:
 
-1. Left — takes off the left hemisphere, faced from the left
+1. Posterior — takes off the back, faced from behind (this is the starting cut, so pressing `c` for the first time in a session moves past it, not onto it)
 2. Right — takes off the right hemisphere, faced from the right
-3. Posterior — takes off the back, faced from behind (this is the starting cut, so pressing `c` for the first time in a session moves past it, not onto it)
+3. Left — takes off the left hemisphere, faced from the left
 4. Anterior — takes off the front, faced from the front
 5. Inferior — takes off the underside, faced from below
 6. Superior — takes off the top, faced from above
 7. Off — nothing clipped, the whole head/brain visible; the camera stays where it was
-8. back to Left, and the cycle repeats
+8. back to Posterior, and the cycle repeats
 
 The knob's next plane (`n`) walks the same ring and turns the camera the
 same way. If you have dragged the render to some other angle, the next
@@ -87,9 +87,11 @@ whole plane snaps it back to face the cut.
 Every one of these opens already sitting at its own midline (`c` always
 lands you back at depth zero on the new axis), so after a `c` press the
 listener is hearing the same kind of "start at the center" cut as the
-session opened on, just along a different axis. Narrate the switch out
-loud — "I'm cutting from the top now" — since it's the one thing about the
-scene the listener has no other way to know just changed.
+session opened on, just along a different axis. The app says the new plane
+out loud while sound is on ("Cut plane: superior."), and a `v` press says
+the new view the same way, so the listener hears that something changed.
+What it means for them is still yours to add: "we're looking down from the
+top now."
 
 ## Presenting a region
 

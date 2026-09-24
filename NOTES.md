@@ -1694,6 +1694,13 @@ the 1.0 controller.
   a press then only logs NiiVue's version, so nothing looked wrong except
   that the view stayed put. it is switched on in the constructor now. like
   `c`, it only answers with the pointer over the canvas.
+- `c` walks a different ring in 1.0: off, posterior, right, left, anterior,
+  inferior, superior. the knob's next plane still walked the old one, left
+  first, so the two went out of step. and `c` steps its own counter
+  (`currentClipPlaneIndex`) rather than reading the plane, so a plane set any
+  other way left the next `c` stepping on from wherever `c` last was. the
+  knob follows NiiVue's order now, and every `clipPlaneChange` puts the
+  counter back on the plane that is cut.
 
 ### changed behavior, not fixed
 

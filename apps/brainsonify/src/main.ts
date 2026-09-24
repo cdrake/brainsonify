@@ -754,17 +754,49 @@ api.onStateChange((event) => {
 
 /**
  * The whole planes `c` cycles through, in NiiVue's own order, so the knob's
- * "next plane" and a `c` on the canvas walk the same ring. The current one
- * is read back from the scene rather than remembered, so the two stay in
- * step however the plane was last moved.
+ * "next plane" and a `c` on the canvas walk the same ring. The position in
+ * this list is NiiVue's `currentClipPlaneIndex`: off first, then posterior,
+ * right, left, anterior, inferior, superior (the `C` case of its keydown
+ * handler).
  */
 const WHOLE_PLANES: ReadonlyArray<{ name: string; plane: [number, number, number] }> = [
-  ...PLANE_ANGLES.map(({ name, azimuth, elevation }) => ({
-    name,
-    plane: [0, azimuth, elevation] as [number, number, number],
-  })),
   { name: "off", plane: [CLIP_OFF, 0, 0] },
+  ...["posterior", "right", "left", "anterior", "inferior", "superior"].map((wanted) => {
+    const { name, azimuth, elevation } = PLANE_ANGLES.find((p) => p.name === wanted)!;
+    return { name, plane: [0, azimuth, elevation] as [number, number, number] };
+  }),
 ];
+
+/**
+ * Where the cut now sits on the ring, read back from the scene rather than
+ * remembered, so the knob and `c` stay in step however the plane was last
+ * moved. A plane at any depth is placed by its angles; one at angles off the
+ * ring counts as off, so the next step from it is the first whole plane.
+ */
+function ringIndex(): number {
+  const [depth, azimuth, elevationDeg] = currentPlane();
+  if (depth >= PLANE_OFF) return 0;
+  const at = WHOLE_PLANES.findIndex(
+    ({ plane }, i) => i > 0 && samePlane([plane[1], plane[2]], [azimuth, elevationDeg]),
+  );
+  return Math.max(at, 0);
+}
+
+/** The plane that is cut now, by the name the knob says: a side, "off", or "custom". */
+function cutName(): string {
+  const [depth] = currentPlane();
+  if (depth >= PLANE_OFF) return "off";
+  const at = ringIndex();
+  return at > 0 ? WHOLE_PLANES[at].name : "custom";
+}
+
+// NiiVue's `c` steps its own counter rather than reading the plane, so a
+// plane set any other way (the knob, an agent, the Clip slider, a condition)
+// would leave the next `c` stepping on from wherever it was last. Every cut,
+// NiiVue's own included, fires this, so the counter is kept on the plane.
+nv.addEventListener("clipPlaneChange", () => {
+  nv.currentClipPlaneIndex = ringIndex();
+});
 
 function currentPlane(): [number, number, number] {
   return nv.getClipPlaneDepthAziElev(0);
@@ -822,12 +854,7 @@ const knobScene: KnobScene = {
     return true;
   },
   nextPlane() {
-    const [depth, azimuth, elevationDeg] = currentPlane();
-    const at =
-      depth >= PLANE_OFF
-        ? WHOLE_PLANES.length - 1
-        : WHOLE_PLANES.findIndex(({ plane }) => samePlane([plane[1], plane[2]], [azimuth, elevationDeg]));
-    const next = WHOLE_PLANES[(at + 1) % WHOLE_PLANES.length];
+    const next = WHOLE_PLANES[(ringIndex() + 1) % WHOLE_PLANES.length];
     // A whole plane is cut to expose a face; turn to it, so the face is the
     // near side and a depth pick over the render lands on it. Turning the
     // plane off leaves the camera where it is.
@@ -878,11 +905,7 @@ new VirtualController(surface).attach();
 /** The plane that is cut now, by the name the knob would say, or "off". */
 function describePlane(): { name: string; depth: number; azimuth: number; elevation: number } {
   const [depth, azimuth, elevation] = currentPlane();
-  const name =
-    depth >= PLANE_OFF
-      ? "off"
-      : (PLANE_ANGLES.find((p) => p.azimuth === azimuth && p.elevation === elevation)?.name ?? "custom");
-  return { name, depth, azimuth, elevation };
+  return { name: cutName(), depth, azimuth, elevation };
 }
 
 /** The atlas, fetched if it has not been, whatever the condition. Throws in words. */
@@ -1149,6 +1172,17 @@ function applyClip(): void {
 }
 
 el<HTMLInputElement>("clip").addEventListener("input", applyClip);
+/**
+ * Whether the slider's cut was on when last announced. A drag is silent, as a
+ * knob nudge is, since the sound is the feedback; only turning it on or off
+ * is said.
+ */
+let sliderCut = controls.clip > 0;
+el<HTMLInputElement>("clip").addEventListener("input", () => {
+  if (controls.clip > 0 === sliderCut) return;
+  sliderCut = controls.clip > 0;
+  announce(sliderCut ? "Cut plane: facing you." : "Cut plane: off.");
+});
 nv.addEventListener("azimuthElevationChange", () => {
   if (controls.clip > 0) applyClip();
 });
@@ -1175,6 +1209,20 @@ window.addEventListener("keyup", (event) => {
   }
   const [depth, azimuth, elevationDeg] = currentPlane();
   if (depth < PLANE_OFF) facePlane(azimuth, elevationDeg);
+  announce(`Cut plane: ${cutName()}.`);
+});
+
+const VIEW_NAMES: Readonly<Record<number, string>> = {
+  [SLICE_TYPE.AXIAL]: "axial",
+  [SLICE_TYPE.CORONAL]: "coronal",
+  [SLICE_TYPE.SAGITTAL]: "sagittal",
+  [SLICE_TYPE.MULTIPLANAR]: "all views",
+  [SLICE_TYPE.RENDER]: "3D render",
+};
+// NiiVue's `v` over the canvas is the only thing that changes the view, and
+// the picture is all it changes, so the listener is told.
+nv.addEventListener("sliceTypeChange", () => {
+  announce(`View: ${VIEW_NAMES[nv.sliceType] ?? "other"}.`);
 });
 
 /* ---------------- volume loading ---------------- */
