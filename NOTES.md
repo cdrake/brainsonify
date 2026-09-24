@@ -1834,3 +1834,100 @@ driving a tab on the dev server.
   pick says miss. over tissue on the plane it would sound. entry 23's
   question stands.
 - these are analyser readings. someone still has to listen.
+
+---
+
+## Entry 26 — 24 September 2026
+
+### pulling the niivue part of the mcp server out from under the sound
+
+the plan is to fork the mcp server into niivue/mono as a generic niivue mcp
+app, so this session was about making the fork possible without moving
+anything yet: a core that any niivue page can answer, and brainsonify as a
+layer on it.
+
+### decisions
+
+- three entry points in one lib, `niivue-mcp`, `/server`, `/browser`, rather
+  than three packages. the shared part (planes, regions, names, the wire
+  messages) is what both ends must agree on, and keeping it in one place is
+  how they agree. the server end imports bun types and the browser end
+  imports dom types, so they can't share a file, but they can share a
+  directory.
+- the core takes a `NiiVueHost`, the niivue instance plus optional hooks,
+  instead of importing anything from the app. every place the old code
+  reached into brainsonify (fit the canvas before answering, sample the
+  voxel after landing, say the place through the live region, name the cut
+  the app's way) became a hook with a default. the test for "no brainsonify
+  imports" is that the lib typechecks on its own.
+- brainsonify's four sound tools are an `Extension`: a name and a
+  `register(server, context)`. the extension is the only thing that imports
+  `@brainsonify/control`, for the mode enum, so the fork drops one file and
+  one dependency.
+- tabs are sessions, keyed by an id the page keeps in `sessionStorage`. i
+  wanted a reload to come back as the same tab and a second window to be a
+  new one, and that is exactly what a browser does with sessionStorage:
+  per tab, survives reload, not copied to a new window. `localStorage`
+  would make every tab the same id; a fresh id per page load would make
+  every reload a stranger.
+- with several tabs open and none chosen, the one that answered last keeps
+  answering, and if it's gone the call fails and lists them. newest-wins
+  stays only for the one-tab case, where it is just "the tab". the failure
+  is deliberate: an agent driving a tab nobody is looking at is worse than
+  an agent that has to ask.
+- a reload mid-drive is reported, not hidden. the bridge remembers a gone
+  tab's last state for a while, waits a few seconds for the same id to say
+  hello again, and the next reply opens with what changed: crosshair was
+  here, now here; plane was left, now off; sound was on, now off. said
+  once. before this the server would answer from the fresh scene as if
+  nothing had happened, and the agent would go on believing the crosshair
+  was still in the hippocampus.
+
+### ruled out
+
+- a headless browser for the integration test. nothing in the repo runs
+  one (jsdom only), and pulling in playwright or puppeteer for one spec is
+  a lot of weight for a test that still couldn't see webgl. instead the
+  "page" is a bun process running the real client and the real core
+  handlers over a fake niivue with a four-region atlas. the sockets, the
+  hello, two-tab routing and the reload are real; the scene is pretend.
+  what that doesn't cover is niivue itself, which the browser specs cover
+  at the interface and entry 25 covered by hand.
+- rounding millimetres in the core. the fake page's crosshair came back as
+  `6.000000000000005` from the frac to mm round trip and the first
+  instinct was to round in `where_am_i`. real niivue does the same, and an
+  agent reading `-36.000001` is not confused by it, so the test tolerates
+  it instead and the core reports what niivue says.
+
+### implementation notes
+
+- niivue 1.0's `crosshairPos` is a gl-matrix `vec3`, an `IndexedCollection`,
+  not a `number[]`. the `View` interface types three-number values as
+  `{ [index: number]: number; length: number }` so a real `Niivue` fits it
+  without a cast.
+- the mcp sdk returns schema failures as tool results with `isError`, not
+  as rejected calls. first draft of the schema tests expected a throw.
+- the bridge sends after awaiting the target tab, so a test that answers a
+  request by hand has to yield once after `call` before it can `receive`.
+- the two-tab end-to-end test takes five seconds: that's the grace the
+  bridge gives a gone tab to come back before it says so. it's the design,
+  not a slow test.
+
+### open questions
+
+- should the fork carry the aal spoken-name table at all, or is that
+  brainsonify's? it's anatomy, not sound, so it went in the core, but a
+  niivue app with a different atlas gets nothing from it.
+- "the tab that answered last" is a rule an agent can't see. is a failure
+  every time two tabs are open, until `use_tab` is called, the clearer
+  contract?
+- the reload note is text at the top of one reply. does an agent act on
+  it, or read past it? nobody has watched one yet.
+
+### next
+
+- fork `libs/niivue-mcp` plus `apps/mcp/src/server.ts` (minus the
+  extension) into niivue/mono; the "what the core needs from its host"
+  list at the bottom of the lib's readme is the checklist.
+- watch an agent drive across a reload and a second tab, and see whether
+  the note and the `use_tab` failure read right from that side.

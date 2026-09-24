@@ -6,6 +6,7 @@
   "dependencies": {
     "@brainsonify/sonification": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.14",
-    "nifti-reader-js": "^0.8.0"
+    "nifti-reader-js": "^0.8.0",
+    "niivue-mcp": "workspace:*"
   }
 }

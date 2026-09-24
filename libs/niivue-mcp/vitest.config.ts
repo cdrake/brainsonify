@@ -3,7 +3,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: "../../node_modules/.vite/mcp",
+  cacheDir: "../../node_modules/.vite/niivue-mcp",
 
   plugins: [tsconfigPaths({ root: "../../" })],
 
@@ -13,8 +13,5 @@ export default defineConfig({
     include: ["src/**/*.spec.ts"],
     watch: false,
     reporters: ["default"],
-    // The integration spec starts the server and pages as processes.
-    testTimeout: 30000,
-    hookTimeout: 30000,
   },
 });

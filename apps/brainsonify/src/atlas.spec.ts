@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DWELL_MS, RegionCallout, labelStats, nearestVoxel, regionName, speakable, spokenName } from "./atlas";
-import { SPOKEN_NAMES } from "./region-names";
+import { SPOKEN_NAMES } from "niivue-mcp";
 import type { Speech } from "./soundkey";
 
 describe("speakable", () => {
@@ -40,25 +40,6 @@ describe("spokenName", () => {
     expect(spokenName("Frontal_Inf_Oper_L")).toBe(SPOKEN_NAMES.Frontal_Inf_Oper_L);
     expect(spokenName("Frontal_New_Oper_L")).toBe("Left frontal new opercular");
     expect(spokenName("Made_Up")).toBe(speakable("Made_Up"));
-  });
-
-  it("has every AAL region, each sided one on both sides", () => {
-    const labels = Object.keys(SPOKEN_NAMES);
-    expect(labels).toHaveLength(116);
-    expect(labels.filter((label) => label.startsWith("Vermis_"))).toHaveLength(8);
-    for (const label of labels) {
-      const name = SPOKEN_NAMES[label];
-      expect(name, label).not.toContain("_");
-      if (label.endsWith("_L")) {
-        expect(name, label).toMatch(/^left /);
-        expect(SPOKEN_NAMES[label.replace(/_L$/, "_R")], label).toBe(name.replace(/^left /, "right "));
-      } else if (label.endsWith("_R")) {
-        expect(name, label).toMatch(/^right /);
-      } else {
-        expect(label, label).toMatch(/^Vermis_/);
-        expect(name, label).toMatch(/^vermis, /);
-      }
-    }
   });
 });
 

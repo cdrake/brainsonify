@@ -1,19 +1,9 @@
 import { MULTIPLANAR_TYPE, NiiVue, SHOW_RENDER, SLICE_TYPE, lookupColorMap } from "@niivue/niivue";
 
-import {
-  ControlAPI,
-  ControlSurface,
-  PLANE_ANGLES,
-  PLANE_OFF,
-  cameraForPlane,
-  clipNormal,
-  depthThrough,
-  matchRegion,
-  regionMentions,
-  resolvePlane,
-  type ControlState,
-  type KnobScene,
-} from "@brainsonify/control";
+import { ControlAPI, ControlSurface, type ControlState, type KnobScene } from "@brainsonify/control";
+import { CONTROL_SCHEMA } from "@brainsonify/control";
+import { PLANE_ANGLES, PLANE_OFF, cameraForPlane, samePlane } from "niivue-mcp";
+import type { NiiVueHost } from "niivue-mcp/browser";
 
 import {
   DEFAULT_BOUNDS,
@@ -38,7 +28,7 @@ import {
 
 import "./styles.css";
 import { RegionCallout, loadAtlas, type Atlas } from "./atlas";
-import { AgentController, type AgentScene, agentUrls } from "./controllers/agent";
+import { AgentController, agentUrls, type SoundHost } from "./controllers/agent";
 import { VirtualController } from "./controllers/virtual";
 import {
   EXPERIMENTS,
@@ -255,7 +245,13 @@ activate(active, false);
 const audioBtn = el<HTMLButtonElement>("audioBtn");
 const keyBtn = el<HTMLButtonElement>("keyBtn");
 
-audioBtn.addEventListener("click", async () => {
+/**
+ * Turns the sound on or off: the button does this, and so does an agent.
+ * Returns the state after, which is what was asked for unless the browser
+ * refused to start audio.
+ */
+async function setSound(wanted: boolean): Promise<boolean> {
+  if (sonifier.running === wanted) return wanted;
   const on = await sonifier.toggle();
   audioBtn.textContent = on ? "Sound on" : "Enable sound";
   audioBtn.classList.toggle("on", on);
@@ -269,7 +265,10 @@ audioBtn.addEventListener("click", async () => {
     key.cancel();
     callout.leave();
   }
-});
+  return on;
+}
+
+audioBtn.addEventListener("click", () => void setSound(!sonifier.running));
 
 keyBtn.addEventListener("click", playKey);
 
@@ -812,18 +811,6 @@ function clipPlaneVector(): number[] {
 }
 
 /**
- * Whether two planes' angles name the same plane. NiiVue 1.0 keeps a plane
- * as its normal and works the angles back out of it when asked, so a plane
- * set at an azimuth of 270 can come back as -90, give or take rounding:
- * comparing the normals is what survives the round trip.
- */
-function samePlane(a: readonly [number, number], b: readonly [number, number]): boolean {
-  const n = clipNormal(a[0], a[1]);
-  const m = clipNormal(b[0], b[1]);
-  return n[0] * m[0] + n[1] * m[1] + n[2] * m[2] > 0.9999;
-}
-
-/**
  * Turns the render camera to look straight at the face a plane at these
  * angles exposes. Called *before* the plane is cut: the camera turn fires
  * `azimuthElevationChange`, and when the Clip slider is above zero that
@@ -833,11 +820,6 @@ function facePlane(azimuth: number, elevationDeg: number): void {
   const camera = cameraForPlane(azimuth, elevationDeg);
   nv.azimuth = camera.azimuth;
   nv.elevation = camera.elevation;
-}
-
-/** Where the render camera is looking from, for a reply. */
-function describeCamera(): { azimuth: number; elevation: number } {
-  return { azimuth: nv.azimuth, elevation: nv.elevation };
 }
 
 /** The scene as the control surface sees it: fractions in, words out. */
@@ -902,12 +884,6 @@ new VirtualController(surface).attach();
 
 /* ---------------- agents ---------------- */
 
-/** The plane that is cut now, by the name the knob would say, or "off". */
-function describePlane(): { name: string; depth: number; azimuth: number; elevation: number } {
-  const [depth, azimuth, elevation] = currentPlane();
-  return { name: cutName(), depth, azimuth, elevation };
-}
-
 /** The atlas, fetched if it has not been, whatever the condition. Throws in words. */
 async function requireAtlas(): Promise<Atlas> {
   if (atlas) return atlas;
@@ -919,93 +895,41 @@ async function requireAtlas(): Promise<Atlas> {
 }
 
 /**
- * The scene as an agent sees it: names in, a landing out.
+ * The scene as an agent sees it, through the NiiVue core in `niivue-mcp`.
  *
- * Going to a region does what a technician would do by hand with the panel
- * and the `c` key, in one move: the crosshair to the region's centroid, the
- * cut through that same point so the region is on the exposed face, the
- * voxel there sounded, and the place announced as the knob would announce it.
+ * The core moves the crosshair, cuts and turns the camera on its own; these
+ * hooks add what only this app knows. Going to a region then does what a
+ * technician would do by hand with the panel and the `c` key, in one move:
+ * the crosshair to the region, the cut through that same point so the
+ * region is on the exposed face, the voxel there sounded, and the place
+ * announced as the knob would announce it.
  */
-const agentScene: AgentScene = {
-  async listRegions(query) {
-    const loaded = await requireAtlas();
-    const wanted = query?.trim();
-    const regions = wanted ? loaded.regions().filter((r) => regionMentions(r, wanted)) : loaded.regions();
-    return regions.map(({ label, name, centroid, voxels }) => ({ label, name, centroid, voxels }));
+const agentHost: NiiVueHost = {
+  view: nv,
+  atlas: requireAtlas,
+  atlasApplies: () => atlasFits,
+  beforeAnswer: fitCanvas,
+  moved: () => sampler.sampleFraction(nv.crosshairPos, onSample),
+  describe: () => (nv.volumes[0] ? knobScene.describe() : "No volume is loaded yet."),
+  announce,
+  loaded: ({ mni }) => {
+    atlasFits = mni;
+    refreshRange();
   },
+  planeName: cutName,
+  extraState: () => ({ atlas: atlas ? (atlasFits ? "ready" : "not an MNI scan") : "not loaded" }),
+};
 
-  async goToRegion(query, planeName) {
-    if (!nv.volumes[0]) throw new Error("No volume is loaded yet.");
-    fitCanvas();
-    const loaded = await requireAtlas();
-    if (!atlasFits) {
-      throw new Error("The loaded scan is not in MNI space, so the atlas does not apply to it. Load the MNI152 demo.");
-    }
-    const plane = resolvePlane(planeName, currentPlane());
-    if (!plane) throw new Error(`Unknown plane "${planeName}".`);
-    const region = matchRegion(loaded.regions(), query);
-    if (!region) throw new Error(`No region matches "${query}". Call list_regions to see the names.`);
-
-    // A curved region's mean can lie outside it; land inside rather than on
-    // the neighbour that happens to be there.
-    let target = region.centroid;
-    let snapped = false;
-    if (loaded.valueAt(target) !== region.value) {
-      const inside = loaded.nearestIn(region.value, target);
-      if (inside) {
-        target = inside;
-        snapped = true;
-      }
-    }
-
-    const at = nv.model.mm2scene([target[0], target[1], target[2]]);
-    const frac: [number, number, number] = [at[0], at[1], at[2]];
-    if (frac.some((f) => f < 0 || f > 1)) {
-      throw new Error(`${region.name} lies outside the loaded volume.`);
-    }
-
-    const normal = clipNormal(plane.azimuth, plane.elevation);
-    const depth = depthThrough(normal, frac);
-    // Face the cut, so the exposed face with the region on it is the near
-    // side rather than hidden behind the part the cut keeps.
-    facePlane(plane.azimuth, plane.elevation);
-    nv.setClipPlane([depth, plane.azimuth, plane.elevation]);
-    const position = nv.crosshairPos;
-    position[0] = frac[0];
-    position[1] = frac[1];
-    position[2] = frac[2];
-    nv.drawScene();
-    sampler.sampleFraction(position, onSample);
-
-    const description = knobScene.describe();
-    announce(description);
-    return {
-      region: { label: region.label, name: region.name, centroid: region.centroid, voxels: region.voxels },
-      landed: { mm: target, frac },
-      snapped,
-      plane: { name: plane.name, depth, azimuth: plane.azimuth, elevation: plane.elevation },
-      camera: describeCamera(),
-      description,
-      sounding: sonifier.running,
-    };
-  },
-
-  whereAmI() {
-    fitCanvas();
-    const frac = nv.crosshairPos;
-    const mm = nv.getCrosshairPos();
-    const region = atlas && atlasFits ? atlas.regionAt(mm) : null;
-    return {
-      volume: nv.volumes[0]?.name ?? null,
-      atlas: atlas ? (atlasFits ? "ready" : "not an MNI scan") : "not loaded",
-      crosshair: { mm, frac: Array.from(frac) },
-      region,
-      plane: describePlane(),
-      camera: describeCamera(),
-      description: nv.volumes[0] ? knobScene.describe() : "No volume is loaded yet.",
-      sounding: sonifier.running,
-    };
-  },
+/** The sound as an agent reaches it: the same button and the same Mapping control. */
+const agentSound: SoundHost = {
+  sounding: () => sonifier.running,
+  setSound,
+  modes: () => ({
+    modes: (CONTROL_SCHEMA.mode.enumValues ?? []).map(({ value, label }) => ({ value: String(value), label })),
+    current: controls.values.mode,
+  }),
+  setMode: (mode) => api.setState({ mode: mode as ControlState["mode"] }),
+  announce,
 };
 
 // The socket is opened only when asked for: in development always, since
@@ -1014,10 +938,11 @@ const agentScene: AgentScene = {
 const agentParam = new URLSearchParams(location.search).get("agent");
 if (import.meta.env.DEV || agentParam !== null) {
   const agentStatus = el("agentStatus");
-  new AgentController(agentScene, agentParam ? [agentParam] : agentUrls(), (connected) => {
-    agentStatus.textContent = connected ? "agent server connected" : "agent server not reached";
+  const agent = new AgentController(agentHost, agentSound, agentParam ? [agentParam] : agentUrls(), (connected) => {
+    agentStatus.textContent = connected ? `agent server connected (tab ${agent.id})` : "agent server not reached";
     agentStatus.hidden = false;
-  }).attach();
+  });
+  agent.attach();
 }
 
 stage.addEventListener("pointermove", track);

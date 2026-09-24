@@ -6,6 +6,7 @@
   "dependencies": {
     "@brainsonify/control": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "niivue-mcp": "workspace:*",
     "zod": "^4.6.5"
   },
   "devDependencies": {
