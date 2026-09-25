@@ -37,8 +37,15 @@ export interface View {
   getCrosshairPos(): Triple;
   getClipPlaneDepthAziElev(index: number): [number, number, number];
   setClipPlane(plane: number[]): void;
-  loadVolumes(volumes: Array<{ url: string; name?: string; colormap?: string }>): Promise<unknown>;
+  loadVolumes(volumes: Array<{ url: string; name?: string; colormap?: string; opacity?: number }>): Promise<unknown>;
+  /** Draws a volume as labels from a lookup table, by name (`freesurfer`) or definition. NiiVue 1.0 has it. */
+  setColormapLabel?(volumeIndex: number, cmap: string): Promise<unknown> | unknown;
+  /** Schedules a frame. NiiVue 1.0 draws it on the next animation frame, not now. */
   drawScene(): unknown;
+  /** Fits the canvas's drawing buffer to its box; NiiVue 1.0 has it. */
+  resize?(): void;
+  /** NiiVue 1.0's render backend, whose `render()` draws a frame now. */
+  view?: { render(): void } | null;
   model: {
     mm2scene(mm: number[]): Triple;
     scene2mm(frac: number[]): Triple;
@@ -76,8 +83,8 @@ export interface NiiVueHost {
   beforeAnswer?(): void;
   /** Called with the new position after the core moves the crosshair. */
   moved?(frac: readonly number[]): void;
-  /** The place in words, as the app would say it to a person. */
-  describe?(): string;
+  /** The place in words, as the app would say it to a person. May look something up first. */
+  describe?(): string | Promise<string>;
   /** Tells the person something changed that they did not do. */
   announce?(text: string): void;
   /** Called after `load_volume` has loaded one. */
@@ -157,6 +164,28 @@ export function nameFromUrl(url: string): string {
 
 const summary = ({ label, name, centroid, voxels }: RegionSummary): RegionSummary => ({ label, name, centroid, voxels });
 
+/** A volume as the page shows it: the base first, then any overlays in order. */
+interface Shown {
+  url: string;
+  name: string;
+  colormap: string;
+  opacity?: number;
+  /** A label lookup table by name, for a label map. */
+  labels?: string;
+}
+
+/** Label lookup tables the core knows by name; NiiVue 1.0 has each built in. */
+export const LABEL_TABLES = ["freesurfer"] as const;
+
+/** Three finite numbers, or a message saying what is wrong. */
+function point(params: Record<string, unknown>, key: string): [number, number, number] {
+  const value = params?.[key];
+  if (!Array.isArray(value) || value.length !== 3 || value.some((v) => !Number.isFinite(Number(v)))) {
+    throw new Error(`${key} must be three numbers, [x, y, z] in millimetres.`);
+  }
+  return [Number(value[0]), Number(value[1]), Number(value[2])];
+}
+
 /** The handlers for the core tools, over this host. */
 export function coreHandlers(host: NiiVueHost): Handlers {
   const { view } = host;
@@ -170,8 +199,35 @@ export function coreHandlers(host: NiiVueHost): Handlers {
     return host.atlas();
   };
 
-  const describe = (): string => {
-    if (host.describe) return host.describe();
+  // What is on show, so an overlay can be added without losing the base.
+  let shown: Shown[] = [];
+
+  const loadShown = async (): Promise<void> => {
+    await view.loadVolumes(shown.map(({ url, name, colormap, opacity }) => ({ url, name, colormap, ...(opacity === undefined ? {} : { opacity }) })));
+    for (const [index, volume] of shown.entries()) {
+      if (volume.labels) await view.setColormapLabel?.(index, volume.labels);
+    }
+  };
+
+  /** Moves the crosshair to `frac`, cuts `plane` through it facing the camera at the cut, and draws. */
+  const moveTo = (frac: [number, number, number], plane: { azimuth: number; elevation: number }): number => {
+    const normal = clipNormal(plane.azimuth, plane.elevation);
+    const depth = depthThrough(normal, frac);
+    // Face the cut first, so the exposed face with the target on it is
+    // the near side rather than hidden behind the part the cut keeps.
+    facePlane(view, plane.azimuth, plane.elevation);
+    view.setClipPlane([depth, plane.azimuth, plane.elevation]);
+    const position = view.crosshairPos;
+    position[0] = frac[0];
+    position[1] = frac[1];
+    position[2] = frac[2];
+    view.drawScene();
+    host.moved?.(frac);
+    return depth;
+  };
+
+  const describe = async (): Promise<string> => {
+    if (host.describe) return await host.describe();
     const mm = Array.from(view.getCrosshairPos()).map((v) => Math.round(v));
     return `Crosshair at ${mm.join(", ")} mm.`;
   };
@@ -185,6 +241,7 @@ export function coreHandlers(host: NiiVueHost): Handlers {
       const mni = flag(params, "mni") ?? looksMni(name);
       try {
         await view.loadVolumes([{ url, name, colormap }]);
+        shown = [{ url, name, colormap }];
       } catch (error) {
         const why = error instanceof Error ? error.message : String(error);
         throw new Error(`The volume at ${url} could not be loaded: ${why}`);
@@ -202,7 +259,7 @@ export function coreHandlers(host: NiiVueHost): Handlers {
       };
     },
 
-    where_am_i() {
+    async where_am_i() {
       host.beforeAnswer?.();
       const volume = view.volumes[0]?.name ?? null;
       if (!volume) {
@@ -215,7 +272,7 @@ export function coreHandlers(host: NiiVueHost): Handlers {
         crosshair: { mm, frac },
         plane: planeState(host),
         camera: camera(view),
-        description: describe(),
+        description: await describe(),
         ...(host.extraState?.() ?? {}),
       };
     },
@@ -263,25 +320,76 @@ export function coreHandlers(host: NiiVueHost): Handlers {
         throw new Error(`${region.name} lies outside the loaded volume.`);
       }
 
-      const normal = clipNormal(plane.azimuth, plane.elevation);
-      const depth = depthThrough(normal, frac);
-      // Face the cut first, so the exposed face with the region on it is
-      // the near side rather than hidden behind the part the cut keeps.
-      facePlane(view, plane.azimuth, plane.elevation);
-      view.setClipPlane([depth, plane.azimuth, plane.elevation]);
-      const position = view.crosshairPos;
-      position[0] = frac[0];
-      position[1] = frac[1];
-      position[2] = frac[2];
-      view.drawScene();
-      host.moved?.(frac);
+      const depth = moveTo(frac, plane);
 
-      const description = describe();
+      const description = await describe();
       host.announce?.(description);
       return {
         region: summary(region),
         landed: { mm: target, frac },
         snapped,
+        plane: { name: plane.name, depth, azimuth: plane.azimuth, elevation: plane.elevation },
+        camera: camera(view),
+        description,
+        ...(host.extraState?.() ?? {}),
+      };
+    },
+
+    async add_overlay(params) {
+      requireVolume();
+      if (!shown.length) throw new Error("Load the base volume with load_volume before adding an overlay.");
+      const url = text(params, "url");
+      if (!url) throw new Error("add_overlay needs a url.");
+      const name = text(params, "name") ?? nameFromUrl(url);
+      const labels = text(params, "labels");
+      if (labels && !(LABEL_TABLES as readonly string[]).includes(labels)) {
+        throw new Error(`Unknown label table "${labels}". One of: ${LABEL_TABLES.join(", ")}.`);
+      }
+      if (labels && !view.setColormapLabel) throw new Error("This page's NiiVue cannot draw label maps.");
+      const opacity = Math.min(1, Math.max(0, number(params, "opacity") ?? (labels ? 0.5 : 0.7)));
+      const colormap = text(params, "colormap") ?? (labels ? "gray" : "warm");
+      const before = shown;
+      shown = [...shown, { url, name, colormap, opacity, ...(labels ? { labels } : {}) }];
+      try {
+        await loadShown();
+      } catch (error) {
+        shown = before;
+        const why = error instanceof Error ? error.message : String(error);
+        throw new Error(`The overlay at ${url} could not be loaded: ${why}`);
+      }
+      host.beforeAnswer?.();
+      view.drawScene();
+      return {
+        volumes: shown.map(({ name: n, colormap: c, opacity: o, labels: l }, index) => ({
+          index,
+          name: n,
+          colormap: c,
+          ...(o === undefined ? {} : { opacity: o }),
+          ...(l ? { labels: l } : {}),
+        })),
+        crosshair: { mm: Array.from(view.getCrosshairPos()) },
+      };
+    },
+
+    async go_to_point(params) {
+      requireVolume();
+      host.beforeAnswer?.();
+      const mm = point(params, "mm");
+      const planeName = text(params, "plane");
+      const plane = resolvePlane(planeName, view.getClipPlaneDepthAziElev(0));
+      if (!plane) throw new Error(`Unknown plane "${planeName}".`);
+      const at = view.model.mm2scene([mm[0], mm[1], mm[2]]);
+      const frac: [number, number, number] = [at[0], at[1], at[2]];
+      if (frac.some((f) => !Number.isFinite(f) || f < 0 || f > 1)) {
+        throw new Error(`[${mm.join(", ")}] mm lies outside the loaded volume.`);
+      }
+      const depth = moveTo(frac, plane);
+      const label = text(params, "label");
+      const place = await describe();
+      const description = label ? `${label}. ${place}` : place;
+      host.announce?.(description);
+      return {
+        landed: { mm, frac },
         plane: { name: plane.name, depth, azimuth: plane.azimuth, elevation: plane.elevation },
         camera: camera(view),
         description,
@@ -329,10 +437,11 @@ export function coreHandlers(host: NiiVueHost): Handlers {
       host.beforeAnswer?.();
       const canvas = view.canvas;
       if (!canvas) throw new Error("NiiVue has no canvas to draw.");
+      if (tabHidden()) {
+        throw new Error("The tab is in the background, so the browser is not drawing it. Bring it to the front and try again.");
+      }
       const maxWidth = Math.max(1, Math.floor(number(params, "max_width") ?? SCREENSHOT_WIDTH));
-      // Draw and read back in the same task: the drawing buffer of a WebGL
-      // canvas does not survive to the next one unless it was asked to.
-      view.drawScene();
+      drawNow(view, canvas);
       const picture = canvas.width > maxWidth ? scaledCopy(canvas, maxWidth) : canvas;
       const dataUrl = picture.toDataURL("image/png");
       const comma = dataUrl.indexOf(",");
@@ -345,6 +454,29 @@ export function coreHandlers(host: NiiVueHost): Handlers {
       };
     },
   };
+}
+
+/** Whether the browser has stopped drawing the page: a tab behind another gets no frames. */
+function tabHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
+/**
+ * Draws a frame now, so the read-back that follows in the same task sees
+ * it. NiiVue 1.0's `drawScene` only schedules one, and a WebGL drawing
+ * buffer does not survive to the next task unless it was asked to; its
+ * render backend draws on demand. A canvas whose drawing buffer does not
+ * fit its box yet, as one NiiVue has not sized, is sized first.
+ */
+function drawNow(view: View, canvas: HTMLCanvasElement): void {
+  const box = canvas.getBoundingClientRect?.();
+  if (box && box.width > 0 && view.resize) {
+    const scale = globalThis.devicePixelRatio || 1;
+    const wanted = Math.max(1, Math.floor(box.width * scale));
+    if (canvas.width !== wanted) view.resize();
+  }
+  view.drawScene();
+  view.view?.render();
 }
 
 /** The canvas drawn onto a smaller one, `maxWidth` wide, keeping its shape. */

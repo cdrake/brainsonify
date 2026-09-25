@@ -83,7 +83,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
 | `libs/niivue-mcp/src/planes.ts`, `regions.ts`, `names.ts` | Shared by both ends: the plane through a point and the camera that faces it, region matching, the AAL spoken names |
 | `libs/niivue-mcp/src/server/bridge.ts` | Knows the connected tabs by id, routes each tool call to the one that answers, and notices a reload |
-| `libs/niivue-mcp/src/server/tools.ts` | The nine core tools over the bridge, and the `Extension` hook an app registers more through |
+| `libs/niivue-mcp/src/server/tools.ts` | The eleven core tools over the bridge, and the `Extension` hook an app registers more through |
 | `libs/niivue-mcp/src/browser/scene.ts` | Answers the core tools from a NiiVue instance, through the hooks a host page provides |
 | `libs/niivue-mcp/src/browser/client.ts` | The page's socket: says hello with a tab id, answers requests, retries |
 | `apps/brainsonify/src/controllers/agent.ts` | What brainsonify adds: the sound tools' handlers, wrapped as a controller |
@@ -394,10 +394,11 @@ the two are started in does not matter. The console gets one line when the
 server is reached and one when the retry settles without it; the browser's
 own line per refused attempt is not the app's.
 
-Thirteen tools. From the core: `list_tabs`, `use_tab`, `load_volume`,
-`where_am_i`, `list_regions`, `go_to_region`, `set_clip_plane`,
-`set_camera` and `screenshot`. From brainsonify: `set_sound`, `list_modes`,
-`set_mode` and `announce`. The three a technician leans on:
+Fifteen tools. From the core: `list_tabs`, `use_tab`, `load_volume`,
+`add_overlay`, `where_am_i`, `list_regions`, `go_to_region`, `go_to_point`,
+`set_clip_plane`, `set_camera` and `screenshot`. From brainsonify:
+`set_sound`, `list_modes`, `set_mode` and `announce`. The three a
+technician leans on:
 
 | Tool | What it does |
 |---|---|

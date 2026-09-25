@@ -46,11 +46,23 @@ export const CORE_SCHEMAS = {
     colormap: z.string().optional().describe("A NiiVue colormap name; gray otherwise."),
     mni: z.boolean().optional().describe("Whether the volume is in MNI space, so an atlas applies. Guessed from the name otherwise."),
   },
+  add_overlay: {
+    url: z.string().min(1).describe("Where the overlay is: an http(s) address the page can fetch."),
+    name: z.string().optional().describe("A name for it; the file name otherwise."),
+    labels: z.enum(["freesurfer"]).optional().describe("Draw it as a label map with this lookup table, e.g. freesurfer for FreeSurfer or SynthSeg segmentations."),
+    colormap: z.string().optional().describe("A NiiVue colormap name for a non-label overlay; warm otherwise."),
+    opacity: z.number().min(0).max(1).optional().describe("0 to 1; 0.5 for labels and 0.7 otherwise."),
+  },
   where_am_i: {},
   list_regions: { query: z.string().optional().describe("Text the label or name must contain.") },
   go_to_region: {
     region: z.string().min(1).describe("An atlas label or spoken region name."),
     plane: z.enum(PLANE_NAMES).optional().describe("The cut to make through the centroid."),
+  },
+  go_to_point: {
+    mm: z.array(z.number()).length(3).describe("The point, [x, y, z] in the loaded volume's world millimetres."),
+    plane: z.enum(PLANE_NAMES).optional().describe("The cut to make through the point."),
+    label: z.string().optional().describe("What is there, said before the page's own description, e.g. left hippocampus."),
   },
   set_clip_plane: {
     plane: z.enum(CUT_NAMES).describe("The side to take off, a slice name, or off."),
@@ -188,7 +200,7 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
     },
     async () => {
       const tabs = bridge.list();
-      const lead = tabs.length ? undefined : NO_TABS_LEAD;
+      const lead = tabs.length ? undefined : bridge.noApp;
       return reply({ tabs }, lead);
     },
   );
@@ -223,6 +235,26 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
       inputSchema: CORE_SCHEMAS.load_volume,
     },
     async (params) => context.answer("load_volume", params, { lead: (r) => `Loaded ${(r as { name?: string })?.name ?? "the volume"}.` }),
+  );
+
+  server.registerTool(
+    "add_overlay",
+    {
+      title: "Add an overlay",
+      description:
+        "Draws a second volume over the loaded one, keeping the base: a statistical map with a " +
+        "colormap, or a segmentation as labels with `labels: freesurfer` (FreeSurfer and SynthSeg " +
+        "label ids, named and coloured as FreeSurfer does). The overlay must share the base volume's " +
+        "space. Load the base with load_volume first; loading a new base clears the overlays.",
+      inputSchema: CORE_SCHEMAS.add_overlay,
+    },
+    async (params) =>
+      context.answer("add_overlay", params, {
+        lead: (r) => {
+          const volumes = (r as { volumes?: Array<{ name?: string }> })?.volumes;
+          return volumes?.length ? `Showing ${volumes.map((v) => v.name).join(" with ")}.` : undefined;
+        },
+      }),
   );
 
   server.registerTool(
@@ -270,6 +302,27 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
     },
     async ({ region, plane }) =>
       context.answer("go_to_region", { region, plane }, {
+        lead: (r) => {
+          const said = (r as { description?: string })?.description;
+          return said ? `Moved to ${said}` : undefined;
+        },
+      }),
+  );
+
+  server.registerTool(
+    "go_to_point",
+    {
+      title: "Go to a point",
+      description:
+        "Moves the crosshair to a point given in the loaded volume's world millimetres and cuts the " +
+        "volume with a plane through it, facing the render camera at the cut, as go_to_region does " +
+        "for an atlas region. Works in any space, so it reaches structures of a subject's own scan, " +
+        "for example a segmentation label's centroid. `label` names what is there for the listener. " +
+        "`plane` names the side the cut takes off, or a slice orientation; `current` keeps the cut.",
+      inputSchema: CORE_SCHEMAS.go_to_point,
+    },
+    async ({ mm, plane, label }) =>
+      context.answer("go_to_point", { mm, plane, label }, {
         lead: (r) => {
           const said = (r as { description?: string })?.description;
           return said ? `Moved to ${said}` : undefined;
@@ -331,9 +384,6 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
       }),
   );
 }
-
-const NO_TABS_LEAD =
-  "No tab is connected. Open the app with ?agent in the address (the dev server serves it at http://localhost:4200/?agent).";
 
 /** An MCP server with the core tools and each extension's, over one bridge. */
 export function buildServer(options: {

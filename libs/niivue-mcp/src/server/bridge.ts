@@ -78,14 +78,15 @@ export const RETURN_GRACE_MS = 5000;
 /** How long a gone tab is remembered, so a slow reload is still a reload. */
 const REMEMBER_LOST_MS = 10 * 60 * 1000;
 
-export const NO_APP =
-  "No NiiVue tab is connected. Open the app with ?agent in the address " +
-  "(the dev server serves it at http://localhost:4200/?agent) and try again.";
+/** What a call fails with while no tab is connected; `BridgeOptions.noTabHint` adds the app's own advice. */
+export const NO_APP = "No NiiVue tab is connected.";
 
 export interface BridgeOptions {
   timeoutMs?: number;
   returnGraceMs?: number;
   now?: () => number;
+  /** Appended to `NO_APP`, for example how to open the page. */
+  noTabHint?: string;
 }
 
 export class Bridge {
@@ -100,11 +101,14 @@ export class Bridge {
   private readonly timeoutMs: number;
   private readonly returnGraceMs: number;
   private readonly now: () => number;
+  /** The whole message a call fails with while no tab is connected. */
+  readonly noApp: string;
 
   constructor(options: BridgeOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? CALL_TIMEOUT_MS;
     this.returnGraceMs = options.returnGraceMs ?? RETURN_GRACE_MS;
     this.now = options.now ?? Date.now;
+    this.noApp = options.noTabHint ? `${NO_APP} ${options.noTabHint}` : NO_APP;
   }
 
   /** Whether any tab has said hello. */
@@ -233,7 +237,7 @@ export class Bridge {
       const last = this.tabs.get(this.lastUsed) ?? (this.tabs.size === 0 ? await this.awaitReturn(this.lastUsed) : null);
       if (last) return last;
     }
-    if (this.tabs.size === 0) throw new Error(NO_APP);
+    if (this.tabs.size === 0) throw new Error(this.noApp);
     throw new Error(`${this.tabs.size} tabs are connected and none is chosen. ${this.describeTabs()}`);
   }
 
@@ -281,7 +285,7 @@ export class Bridge {
 
   private describeTabs(): string {
     const tabs = this.list();
-    if (tabs.length === 0) return NO_APP;
+    if (tabs.length === 0) return this.noApp;
     const lines = tabs.map((tab) => `${tab.id} "${tab.title}"${tab.bound ? " (answering)" : ""}`);
     return `Connected: ${lines.join("; ")}. Call use_tab with the id to drive.`;
   }

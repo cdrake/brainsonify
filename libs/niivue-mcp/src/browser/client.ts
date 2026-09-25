@@ -10,7 +10,9 @@
  * the server can name who answered and notice a reset. The connection is
  * kept up for as long as the client is attached: a server that is not
  * running yet, or restarts, is retried with a backoff that settles at half
- * a minute.
+ * a minute. An address that neither opens nor refuses within a few seconds
+ * (a proxy that took the upgrade and hung) is given up on the same way, so
+ * the next one gets its turn.
  */
 
 import type { AgentRequest, AgentResponse, Hello, TabState } from "../protocol";
@@ -39,6 +41,9 @@ export function agentUrls(loc: Location = location): string[] {
 
 /** How long to wait before the first retry, and the longest wait after that. */
 export const RETRY_MS = { first: 1000, longest: 30000 } as const;
+
+/** How long an address gets to open before it is closed and the next one tried. */
+export const CONNECT_MS = 5000;
 
 /**
  * This tab's id: kept in `sessionStorage`, which a browser scopes to one
@@ -166,7 +171,13 @@ export class AgentClient {
       return;
     }
     this.socket = socket;
+    const deadline = setTimeout(() => {
+      // Closing a socket that is still connecting fails it, which fires
+      // `close`, so the retry below moves on to the next address.
+      if (this.socket === socket) socket.close();
+    }, CONNECT_MS);
     socket.addEventListener("open", () => {
+      clearTimeout(deadline);
       this.wait = RETRY_MS.first;
       this.reported = false;
       socket.send(JSON.stringify(this.hello()));
@@ -181,6 +192,7 @@ export class AgentClient {
       });
     });
     socket.addEventListener("close", () => {
+      clearTimeout(deadline);
       if (this.socket !== socket) return;
       this.socket = null;
       this.options.onStatus?.(false);

@@ -14,4 +14,8 @@ startServer({
   version: "0.1.0",
   port: Number(process.env.BRAINSONIFY_MCP_PORT ?? 4242),
   extensions: [brainsonify],
+  bridge: {
+    noTabHint:
+      "Open brainsonify with ?agent in the address (the dev server serves it at http://localhost:4200/?agent) and try again.",
+  },
 });

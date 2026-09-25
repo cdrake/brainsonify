@@ -1931,3 +1931,101 @@ layer on it.
   list at the bottom of the lib's readme is the checklist.
 - watch an agent drive across a reload and a second tab, and see whether
   the note and the `use_tab` failure read right from that side.
+
+---
+
+## Entry 27 — 25 September 2026
+
+### moving the niivue core into niivue/mono
+
+the fork entry 26 was preparing for happened today, in a worktree of
+niivue/mono: `packages/nv-mcp` is the core as `@niivue/nv-mcp`, and
+`apps/demo-mcp` is the smallest page that answers it, a render view of
+mni152 with a where-am-i line. brainsonify keeps `libs/niivue-mcp` for now
+and its `apps/mcp` extension on top; the plan is that the lib becomes a
+dependency on the package once it is published, so today's job was making
+the two the same code. nothing is committed in either repo yet.
+
+### decisions
+
+- the mono copy follows mono's conventions, not ours: biome, `bun test`,
+  vite with the dev-images plugin serving the demo volumes, an nx
+  `project.json`, a row in the root readme. the point of moving it is that
+  it looks like the other packages there, so the tests were rewritten from
+  vitest to bun:test rather than carrying vitest in.
+- the demo attaches the client before it awaits niivue, and every tool
+  answers "still starting" until the volume is loaded. this came out of a
+  long detour: driving the demo from a script kept saying no tab was
+  connected, and the cause was that the chrome window was covered. a tab
+  the browser isn't drawing gets no animation frames, `attachTo` and the
+  first `loadVolumes` await one, and the client used to attach after them.
+  the readme now says to attach first. brainsonify's page already does,
+  by accident: `nv.attachTo("gl")` isn't awaited there, so the agent
+  controller attaches regardless. the same rule holds for it.
+- `screenshot` refuses while the tab is hidden, in words, rather than
+  returning a black picture. an agent can act on "bring it to the front";
+  it cannot tell a black png from a dark scene.
+- the core's `describe` hook may return a promise. the demo's description
+  looks the atlas up when asked, and with a synchronous hook it returned
+  the previous answer: after `go_to_region` to the insula the reply said
+  thalamus. `where_am_i` and `go_to_point` are async for it.
+- the client gives an address five seconds to open before closing it and
+  moving on (`CONNECT_MS`). before this a socket that neither opened nor
+  refused kept the client on the first address forever; the backoff only
+  ever ran on a close.
+- the "no tab" message is no longer brainsonify's. the core says only that
+  no niivue tab is connected, and the bridge takes a `noTabHint` for the
+  app's own advice; `apps/mcp/src/server.ts` passes the `?agent` sentence
+  that used to be baked into the lib.
+- the fixes went back into `libs/niivue-mcp` by hand, same code in our
+  formatting, with the specs. the two copies were diffed after running
+  both through prettier so only real differences showed.
+
+### ruled out
+
+- running the demo's vite under bun. vite's websocket proxy goes through
+  http-proxy's upgrade path, and under `bunx --bun vite` the upgrade hangs
+  with no error; under node it works. the demo's dev script runs vite
+  under node and the readme says why. building under bun is fine. this
+  doesn't touch brainsonify, whose vite runs through the nx plugin under
+  node already.
+- keeping the demo in mono's github pages list. it needs the server
+  process, so a static copy would only show a page saying no server is
+  reached. the other server-backed demos are left out the same way.
+
+### implementation notes
+
+- the first screenshot through the merged server was a blank png. two
+  causes: the canvas's drawing buffer was still the default size, because
+  niivue hadn't sized it yet, and niivue 1.0's `drawScene` only schedules
+  a frame for the next animation frame, so `toDataURL` in the same task
+  read a buffer nothing had drawn to. the core now calls `resize` when the
+  buffer doesn't fit the box and has the render backend draw on demand
+  before reading back. the earlier "draw and read back in the same task"
+  comment was right about the problem and wrong about the fix.
+- bun:test's fake timers have no async advance, the thing vitest's
+  `advanceTimersByTimeAsync` does, so the bridge tests that wait out a
+  call timeout or the return grace run against real short ones through
+  the bridge's options instead. the client's retry timers are synchronous
+  and stayed on fake timers.
+- the chrome extension can't raise a tab that another window covers. the
+  smoke test's screenshot only passed on the run where the window happened
+  to be in front; the other runs got the new refusal, which is the
+  behaviour wanted, but it means the screenshot tool is the one thing the
+  scripted drive can't verify reliably.
+
+### open questions
+
+- when does `libs/niivue-mcp` become a dependency on `@niivue/nv-mcp`
+  instead of a copy? the moment it is published, presumably, but the aal
+  spoken-name table question from entry 26 still stands.
+- should the demo's "still starting" gate live in the core, as a host
+  hook the page flips, rather than in every page that copies the demo?
+
+### next
+
+- open the mono pull request from the `feat/nv-mcp` worktree once the
+  changes here are committed, and point it at the brainsonify commit that
+  matches.
+- drive the brainsonify page itself from a script with the window in
+  front, to see the screenshot come back with pixels.

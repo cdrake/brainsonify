@@ -10,7 +10,7 @@ The port is 4242 unless `BRAINSONIFY_MCP_PORT` says otherwise.
 
 ## The brainsonify extension
 
-Four tools on top of the core's nine, for an app that sonifies the voxel
+Four tools on top of the core's eleven, for an app that sonifies the voxel
 under the crosshair and talks to a listener:
 
 | Tool | Input | What it does |

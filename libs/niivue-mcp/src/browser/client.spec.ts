@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AgentClient, RETRY_MS, TAB_ID_KEY, agentUrls, serve, tabId } from "./client";
+import { AgentClient, CONNECT_MS, RETRY_MS, TAB_ID_KEY, agentUrls, serve, tabId } from "./client";
 
 /** A WebSocket whose other end is the test. */
 class FakeSocket extends EventTarget {
@@ -152,6 +152,28 @@ describe("AgentClient", () => {
     const count = FakeSocket.opened.length;
     vi.advanceTimersByTime(RETRY_MS.longest * 2);
     expect(FakeSocket.opened).toHaveLength(count);
+  });
+
+  it("gives up on an address that neither opens nor closes and tries the next", () => {
+    vi.useFakeTimers();
+    const status = vi.fn();
+    const c = client({}, { onStatus: status });
+    c.attach();
+    vi.advanceTimersByTime(CONNECT_MS - 1);
+    expect(FakeSocket.opened).toHaveLength(1);
+    expect(FakeSocket.opened[0].readyState).toBe(FakeSocket.CONNECTING);
+    vi.advanceTimersByTime(1);
+    expect(FakeSocket.opened[0].readyState).toBe(FakeSocket.CLOSED);
+    vi.advanceTimersByTime(RETRY_MS.first);
+    expect(FakeSocket.opened).toHaveLength(2);
+    expect(FakeSocket.opened[1].url).toBe("ws://two/app");
+    FakeSocket.opened[1].accept();
+    expect(status).toHaveBeenLastCalledWith(true);
+    // The deadline is cleared on opening: a slow but live socket stays up.
+    vi.advanceTimersByTime(CONNECT_MS * 2);
+    expect(FakeSocket.opened[1].readyState).toBe(FakeSocket.OPEN);
+    expect(FakeSocket.opened).toHaveLength(2);
+    c.detach();
   });
 
   it("does not answer on a socket it has left", async () => {

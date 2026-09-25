@@ -161,11 +161,11 @@ describe("list_regions", () => {
 });
 
 describe("where_am_i", () => {
-  it("reports the crosshair both ways, the plane, the camera, the description, and extras", () => {
+  it("reports the crosshair both ways, the plane, the camera, the description, and extras", async () => {
     const view = fakeView();
     view.crosshairPos[2] = 0.75;
-    const h = host(view, { describe: () => "up.", extraState: () => ({ sounding: false, mode: "tone" }) });
-    expect(coreHandlers(h).where_am_i({})).toEqual({
+    const h = host(view, { describe: async () => "up.", extraState: () => ({ sounding: false, mode: "tone" }) });
+    expect(await coreHandlers(h).where_am_i({})).toEqual({
       volume: "mni152.nii.gz",
       crosshair: { mm: [0, 0, 50], frac: [0.5, 0.5, 0.75] },
       plane: { name: "off", depth: PLANE_NONE, azimuth: 0, elevation: 0 },
@@ -176,9 +176,9 @@ describe("where_am_i", () => {
     });
   });
 
-  it("describes the position itself when the host does not, and says so before a volume", () => {
-    expect(coreHandlers(host()).where_am_i({})).toMatchObject({ description: "Crosshair at 0, 0, 0 mm." });
-    expect(coreHandlers(host(fakeView({ volumes: [] }))).where_am_i({})).toEqual({ volume: null, description: "No volume is loaded yet." });
+  it("describes the position itself when the host does not, and says so before a volume", async () => {
+    expect(await coreHandlers(host()).where_am_i({})).toMatchObject({ description: "Crosshair at 0, 0, 0 mm." });
+    expect(await coreHandlers(host(fakeView({ volumes: [] }))).where_am_i({})).toEqual({ volume: null, description: "No volume is loaded yet." });
   });
 });
 
@@ -241,6 +241,37 @@ describe("screenshot", () => {
     expect(calls).toEqual(["draw", "toDataURL:image/png"]);
     expect(() => coreHandlers(host(fakeView())).screenshot({})).toThrow("no canvas");
   });
+
+  it("sizes an unsized canvas first and has the render backend draw the frame now", () => {
+    const calls: string[] = [];
+    const canvas = {
+      width: 300,
+      height: 150,
+      getBoundingClientRect: () => ({ width: 640, height: 480 }),
+      toDataURL: () => "data:image/png;base64,iVBORw0KGgo=",
+    } as unknown as HTMLCanvasElement;
+    const view = fakeView({
+      canvas,
+      resize: vi.fn(() => calls.push("resize")),
+      drawScene: vi.fn(() => calls.push("draw")),
+      view: { render: () => calls.push("render") },
+    });
+    coreHandlers(host(view)).screenshot({});
+    expect(calls).toEqual(["resize", "draw", "render"]);
+  });
+
+  it("refuses while the tab is in the background, where nothing is drawn", () => {
+    const global = globalThis as { document?: unknown };
+    const before = global.document;
+    global.document = { visibilityState: "hidden" };
+    try {
+      const canvas = { width: 1, height: 1 } as unknown as HTMLCanvasElement;
+      expect(() => coreHandlers(host(fakeView({ canvas }))).screenshot({})).toThrow(/background/);
+    } finally {
+      if (before === undefined) delete global.document;
+      else global.document = before;
+    }
+  });
 });
 
 describe("load_volume", () => {
@@ -269,5 +300,92 @@ describe("load_volume", () => {
     expect(nameFromUrl("blob:http://localhost/abc")).toBe("abc");
     expect(looksMni("mni152.nii.gz")).toBe(true);
     expect(looksMni("chris_t1.nii.gz")).toBe(false);
+  });
+});
+
+describe("add_overlay", () => {
+  it("keeps the base, loads the overlay over it, and draws a label map with its table", async () => {
+    const setColormapLabel = vi.fn();
+    const view = fakeView({ setColormapLabel });
+    const handlers = coreHandlers(host(view));
+    await handlers.load_volume({ url: "http://h/t1/sub-01_T1w.nii.gz" });
+    const result = (await handlers.add_overlay({ url: "http://h/labels/synthseg.nii.gz", labels: "freesurfer" })) as {
+      volumes: Array<{ name: string; labels?: string; opacity?: number }>;
+    };
+    expect(view.loadVolumes).toHaveBeenLastCalledWith([
+      { url: "http://h/t1/sub-01_T1w.nii.gz", name: "sub-01_T1w.nii.gz", colormap: "gray" },
+      { url: "http://h/labels/synthseg.nii.gz", name: "synthseg.nii.gz", colormap: "gray", opacity: 0.5 },
+    ]);
+    expect(setColormapLabel).toHaveBeenCalledWith(1, "freesurfer");
+    expect(result.volumes.map((v) => v.name)).toEqual(["sub-01_T1w.nii.gz", "synthseg.nii.gz"]);
+    expect(result.volumes[1]).toMatchObject({ labels: "freesurfer", opacity: 0.5 });
+  });
+
+  it("uses a colormap for a non-label overlay and clamps the opacity", async () => {
+    const view = fakeView();
+    const handlers = coreHandlers(host(view));
+    await handlers.load_volume({ url: "http://h/t1.nii.gz" });
+    await handlers.add_overlay({ url: "http://h/zstat.nii.gz", colormap: "red", opacity: 3 });
+    expect(view.loadVolumes).toHaveBeenLastCalledWith([
+      { url: "http://h/t1.nii.gz", name: "t1.nii.gz", colormap: "gray" },
+      { url: "http://h/zstat.nii.gz", name: "zstat.nii.gz", colormap: "red", opacity: 1 },
+    ]);
+  });
+
+  it("refuses without a base loaded through load_volume, an unknown table, or a page that cannot draw labels", async () => {
+    const view = fakeView();
+    const handlers = coreHandlers(host(view));
+    await expect(handlers.add_overlay({ url: "http://h/x.nii.gz" })).rejects.toThrow(/load_volume/);
+    await handlers.load_volume({ url: "http://h/t1.nii.gz" });
+    await expect(handlers.add_overlay({ url: "http://h/x.nii.gz", labels: "aal" })).rejects.toThrow(/Unknown label table/);
+    await expect(handlers.add_overlay({ url: "http://h/x.nii.gz", labels: "freesurfer" })).rejects.toThrow(/label maps/);
+  });
+
+  it("keeps what was shown when the overlay fails to load", async () => {
+    let calls = 0;
+    const view = fakeView({ loadVolumes: vi.fn(async () => { if (++calls === 2) throw new Error("404"); }) });
+    const handlers = coreHandlers(host(view));
+    await handlers.load_volume({ url: "http://h/t1.nii.gz" });
+    await expect(handlers.add_overlay({ url: "http://h/missing.nii.gz" })).rejects.toThrow(/could not be loaded: 404/);
+    await handlers.add_overlay({ url: "http://h/ok.nii.gz" });
+    expect(view.loadVolumes).toHaveBeenLastCalledWith([
+      { url: "http://h/t1.nii.gz", name: "t1.nii.gz", colormap: "gray" },
+      { url: "http://h/ok.nii.gz", name: "ok.nii.gz", colormap: "warm", opacity: 0.7 },
+    ]);
+  });
+});
+
+describe("go_to_point", () => {
+  it("lands on the point, cuts through it facing the camera, samples, and announces with the label", async () => {
+    const view = fakeView();
+    const moved = vi.fn();
+    const announce = vi.fn();
+    const handlers = coreHandlers(host(view, { moved, announce, describe: () => "left, back, low." }));
+    const result = (await handlers.go_to_point({ mm: [-24, -20, -14], plane: "left", label: "Left hippocampus" })) as {
+      landed: { mm: number[]; frac: number[] };
+      plane: { name: string; depth: number };
+      description: string;
+    };
+    expect(tidy(result.landed.frac)).toEqual([0.38, 0.4, 0.43]);
+    expect(tidy(Array.from(view.crosshairPos))).toEqual([0.38, 0.4, 0.43]);
+    expect(view.setClipPlane).toHaveBeenCalledTimes(1);
+    expect(result.plane.name).toBe("left");
+    expect(moved).toHaveBeenCalledWith([0.38, 0.4, 0.43].map((f) => expect.closeTo(f, 6)));
+    expect(result.description).toBe("Left hippocampus. left, back, low.");
+    expect(announce).toHaveBeenCalledWith("Left hippocampus. left, back, low.");
+  });
+
+  it("works without an atlas, which a subject's own scan does not have", async () => {
+    const view = fakeView({ volumes: [{ name: "sub-01_T1w.nii.gz" }] });
+    const handlers = coreHandlers({ view });
+    const result = (await handlers.go_to_point({ mm: [10, 0, 0] })) as { description: string };
+    expect(result.description).toBe("Crosshair at 10, 0, 0 mm.");
+  });
+
+  it("refuses a point outside the volume, a malformed point, or no volume", async () => {
+    const handlers = coreHandlers(host());
+    await expect(handlers.go_to_point({ mm: [500, 0, 0] })).rejects.toThrow(/outside the loaded volume/);
+    await expect(handlers.go_to_point({ mm: [1, 2] })).rejects.toThrow(/three numbers/);
+    await expect(coreHandlers(host(fakeView({ volumes: [] }))).go_to_point({ mm: [0, 0, 0] })).rejects.toThrow(/load_volume/);
   });
 });

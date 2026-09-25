@@ -54,6 +54,11 @@ describe("Bridge", () => {
     await expect(bridge.call("where_am_i")).rejects.toThrow(NO_APP);
   });
 
+  it("adds the app's own hint to the refusal when given one", async () => {
+    const bridge = new Bridge({ noTabHint: "Open the page." });
+    await expect(bridge.call("where_am_i")).rejects.toThrow(`${NO_APP} Open the page.`);
+  });
+
   it("writes a request with a fresh id and resolves with the matching response and the tab", async () => {
     const bridge = new Bridge();
     const app = socket();

@@ -6,7 +6,7 @@
  * those handlers, plus any the app adds.
  */
 
-export { AGENT_PATH, AGENT_URL, AgentClient, RETRY_MS, TAB_ID_KEY, agentUrls, serve, tabId } from "./client";
+export { AGENT_PATH, AGENT_URL, AgentClient, CONNECT_MS, RETRY_MS, TAB_ID_KEY, agentUrls, serve, tabId } from "./client";
 export type { ClientOptions } from "./client";
 
 export { SCREENSHOT_WIDTH, coreHandlers, looksMni, nameFromUrl, planeIsCut, sceneState } from "./scene";

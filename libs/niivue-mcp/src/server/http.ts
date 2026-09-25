@@ -80,7 +80,7 @@ export function startServer(options: ServerOptions = {}): RunningServer {
           ? tabs.map((tab) => `  ${tab.bound ? "*" : " "} ${tab.id}  ${tab.title}  ${tab.url}`)
           : ["  none"];
         return new Response(
-          `${name} MCP server\nmcp endpoint: http://${host}:${port}/mcp\napp socket: ws://${host}:${port}/app\n` +
+          `${name} MCP server\nmcp endpoint: ${running.url}\napp socket: ${running.appUrl}\n` +
             `tabs (* answers):\n${lines.join("\n")}\n`,
           { headers: { "content-type": "text/plain" } },
         );

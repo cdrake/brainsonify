@@ -42,7 +42,9 @@ paths:
 
 `startServer` returns the running server with its `bridge`, `url`, `appUrl`
 and a `stop()`. Pass `log` to route its lines somewhere other than the
-console, and `bridge` to supply your own (the tests do).
+console, and `bridge` for the bridge's options: `noTabHint` is appended to
+the message a call fails with while no tab is connected, so the agent is
+told how to open your page (brainsonify's says to open it with `?agent`).
 
 ## Tabs
 
@@ -76,12 +78,14 @@ marks the one that is answering.
 | `list_tabs` | | The connected tabs: id, title, address, when each connected and which one answers |
 | `use_tab` | `id` | Makes one tab the one that answers every later call |
 | `load_volume` | `url`, `name?`, `colormap?`, `mni?` | Loads a volume from an address the page can fetch, replacing what is shown. `mni` says whether the atlas applies; guessed from the name when left out. Reports the name and the volume's bounds in millimetres |
+| `add_overlay` | `url`, `name?`, `labels?`, `colormap?`, `opacity?` | Draws a second volume over the loaded one, keeping the base. `labels: freesurfer` draws a segmentation (FreeSurfer or SynthSeg ids) with FreeSurfer's names and colours; otherwise a colormap. A new `load_volume` clears the overlays |
 | `where_am_i` | | The crosshair in millimetres and fractions, the plane cut, the camera, the page's description of the place, and whatever state the app adds. Says which tab answered |
 | `list_regions` | `query?` | The atlas regions the page can navigate to: label, spoken name, centroid in millimetres, voxel count. `query` filters by label or name |
 | `go_to_region` | `region`, `plane?` | Moves the crosshair to a region's centroid, turns the camera to face the cut, cuts a plane through the point, and announces the place. `plane` is a side, a slice name or `current`. An ambiguous name fails and lists the candidates |
+| `go_to_point` | `mm`, `plane?`, `label?` | Moves the crosshair to a point in the volume's world millimetres, cuts a plane through it facing the camera, and announces it, prefixed with `label` when given. The same move as `go_to_region`, for any space, such as a subject's own scan |
 | `set_clip_plane` | `plane`, `depth?`, `face?` | Cuts the volume with a whole plane named for the side it takes off, or `off`. `depth` is NiiVue's, clamped to ±1.5; `face` turns the camera to look at the cut, on by default |
 | `set_camera` | `azimuth`, `elevation` | Points the render camera |
-| `screenshot` | `max_width?` | Draws the scene and returns the canvas as a PNG, scaled down to fit |
+| `screenshot` | `max_width?` | Draws the scene and returns the canvas as a PNG, scaled down to fit. Refuses while the tab is in the background, where the browser draws nothing |
 
 Every reply is a line of prose for the agent to read, then the JSON the
 page returned. Failures are tool errors with the page's own message.
@@ -192,7 +196,16 @@ client.attach();
 
 `urls` defaults to `agentUrls()`, the two addresses above; pass one to
 reach a server elsewhere. The client retries with a backoff that settles
-at half a minute, so the order the two are started in does not matter.
+at half a minute, so the order the two are started in does not matter. An
+address that neither opens nor refuses within `CONNECT_MS` (five seconds)
+is closed and the next one tried, so a proxy that takes the upgrade and
+hangs does not hold the page off the server behind it.
+
+The client should be attached before the page awaits NiiVue. A tab in the
+background gets no animation frames, so `attachTo` and a first
+`loadVolumes` do not finish until it is brought to the front; a client
+attached only after them is invisible to the server until then. Attach
+first and have the handlers say "still starting" until the scene is ready.
 
 **3. Add your own tools, if any.** Extra handlers are just more entries in
 the object passed to `AgentClient`; they receive the tool's arguments and
