@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" width="1000" height="600" role="img" aria-label="Wiring diagram of the Brainsonify handheld">
+<style>
+  .box { fill: #e6eee8; stroke: #cfd9d2; stroke-width: 1.5; }
+  .title { fill: #1c2621; font: 600 14px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+  .sub { fill: #5b6a62; font: 12px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+  .pin { fill: #1c2621; font: 500 12px "IBM Plex Mono", Menlo, Consolas, monospace; }
+  .pinm { fill: #5b6a62; font: 12px "IBM Plex Mono", Menlo, Consolas, monospace; }
+  .lbl { font: 500 12px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+  .w { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .dot { stroke: none; }
+</style>
+<rect x="0" y="0" width="1000" height="600" fill="#ffffff"/>
+      <!-- LiPo -->
+      <rect class="box" x="40" y="70" width="170" height="80" rx="8"/>
+      <text class="title" x="56" y="98">LiPo cell</text>
+      <text class="sub" x="56" y="117">3.7 V 2500 mAh</text>
+      <text class="sub" x="56" y="134">Adafruit #328</text>
+      <path class="w" style="stroke:#d9811a" d="M210 104 H300"/>
+      <path class="w" style="stroke:#27302b" d="M210 116 H300"/>
+      <text class="lbl" style="fill:#5b6a62" x="222" y="95">JST-PH</text>
+
+      <!-- Charger -->
+      <rect class="box" x="40" y="200" width="170" height="64" rx="8"/>
+      <text class="title" x="56" y="226">USB charger</text>
+      <text class="sub" x="56" y="245">outside the case</text>
+      <path class="w" style="stroke:#d0362a; stroke-dasharray:6 6" d="M210 232 H300"/>
+      <text class="lbl" style="fill:#5b6a62" x="222" y="223">micro-USB</text>
+
+      <!-- PowerBoost -->
+      <rect class="box" x="300" y="60" width="200" height="240" rx="8"/>
+      <text class="title" x="316" y="86">PowerBoost 1000C</text>
+      <text class="pin" x="312" y="114">BAT</text>
+      <text class="pin" x="312" y="236">USB in</text>
+      <text class="pin" x="488" y="104" text-anchor="end">5V</text>
+      <text class="pin" x="488" y="144" text-anchor="end">GND</text>
+      <text class="pin" x="488" y="184" text-anchor="end">LBO</text>
+      <text class="pin" x="488" y="224" text-anchor="end">EN</text>
+      <text class="pinm" x="488" y="264" text-anchor="end">VS (unused)</text>
+
+      <!-- 5V to Pi pin 2 -->
+      <path class="w" style="stroke:#d0362a" d="M500 100 H600 V180 H640"/>
+      <!-- GND to Pi pin 6 -->
+      <path class="w" style="stroke:#27302b" d="M500 140 H580 V220 H640"/>
+      <!-- LBO through diode to GPIO17 -->
+      <path class="w" style="stroke:#1b8a6b" d="M500 180 H540 V280 H582"/>
+      <path class="w" style="stroke:#1b8a6b" d="M606 280 H640"/>
+      <polygon points="584,280 604,270 604,290" style="fill:#1b8a6b"/>
+      <line x1="584" y1="269" x2="584" y2="291" style="stroke:#1b8a6b; stroke-width:3"/>
+      <text class="lbl" style="fill:#1b8a6b" x="548" y="264">Schottky diode</text>
+
+      <!-- EN to switch to GND -->
+      <path class="w" style="stroke:#1b8a6b" d="M500 220 H520 V375 H480"/>
+      <rect class="box" x="360" y="352" width="120" height="46" rx="8"/>
+      <text class="title" x="376" y="380">Slide switch</text>
+      <path class="w" style="stroke:#27302b" d="M360 375 H330 V420"/>
+      <path class="w" style="stroke:#27302b" d="M314 420 H346 M319 428 H341 M325 436 H335"/>
+      <text class="sub" x="360" y="420">closed = off</text>
+
+      <!-- pHAT -->
+      <rect class="box" x="660" y="30" width="260" height="68" rx="8"/>
+      <text class="title" x="676" y="58">Enviro pHAT</text>
+      <text class="sub" x="676" y="78">stacked on the 40-pin header</text>
+      <path class="w" style="stroke:#7a4db3" d="M720 98 V150 M760 98 V150"/>
+      <text class="lbl" style="fill:#7a4db3" x="772" y="122">I²C: GPIO 2 / 3</text>
+      <text class="sub" x="772" y="139">LEDs: GPIO 4</text>
+
+      <!-- Pi -->
+      <rect class="box" x="640" y="150" width="300" height="190" rx="8"/>
+      <text class="title" x="926" y="178" text-anchor="end">Pi Zero 2 W</text>
+      <text class="sub" x="926" y="196" text-anchor="end">Raspberry Pi OS Lite</text>
+      <text class="pin" x="652" y="184">pin 2 · 5V</text>
+      <text class="pin" x="652" y="224">pin 6 · GND</text>
+      <text class="pin" x="652" y="284">pin 11 · GPIO 17</text>
+      <text class="pin" x="706" y="330">USB (data)</text>
+      <text class="pinm" x="826" y="330">PWR (unused)</text>
+      <circle class="dot" cx="640" cy="180" r="4" style="fill:#d0362a"/>
+      <circle class="dot" cx="640" cy="220" r="4" style="fill:#27302b"/>
+      <circle class="dot" cx="640" cy="280" r="4" style="fill:#1b8a6b"/>
+
+      <!-- USB chain -->
+      <path class="w" style="stroke:#2d68b0" d="M740 340 V400"/>
+      <rect class="box" x="620" y="400" width="300" height="46" rx="8"/>
+      <text class="title" x="636" y="419">OTG ribbon</text>
+      <text class="sub" x="636" y="437">micro-USB male → USB-A female</text>
+      <path class="w" style="stroke:#2d68b0" d="M740 446 V500 H560"/>
+      <rect class="box" x="300" y="478" width="260" height="46" rx="8"/>
+      <text class="title" x="316" y="497">Panel cable</text>
+      <text class="sub" x="316" y="515">USB-A male → panel</text>
+      <path class="w" style="stroke:#2d68b0" d="M300 500 H200"/>
+      <circle class="box" cx="130" cy="500" r="70"/>
+      <text class="title" x="130" y="494" text-anchor="middle">CrowPanel 2.1"</text>
+      <text class="sub" x="130" y="512" text-anchor="middle">ESP32-S3 knob</text>
+      <text class="lbl" style="fill:#2d68b0" x="600" y="560">5 V from the Pi + USB data (mouse, keyboard, serial)</text>
+    </svg>

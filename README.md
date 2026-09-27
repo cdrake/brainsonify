@@ -464,6 +464,14 @@ server in `claude_desktop_config.json`:
 The full path to `npx` matters: the app is launched without a shell, so it
 does not have Homebrew on its `PATH`.
 
+## Hardware
+
+The knob in the Controls table can also be a physical one: an Elecrow CrowPanel
+2.1" rotary display that appears to the browser as a USB mouse and keyboard. A
+handheld built around it, with a Raspberry Pi Zero 2 W, a LiPo, and an Enviro
+pHAT, is described in [docs/hardware](docs/hardware/README.md), with renders of
+the case and a wiring diagram.
+
 ## Deployment
 
 Pushes to `main` build the app and publish `dist/apps/brainsonify` to GitHub
