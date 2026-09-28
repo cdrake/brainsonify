@@ -2278,6 +2278,17 @@ is what this commit mirrors. mono's pull request #214 carries it.
   members are left out and why: DOM nodes, canvases, callbacks, loaders,
   pointer-driven picks and live source objects belong to the page.
 
+## Entry 35 — 28 September 2026
+
+Mirrors mono d6552a3a (fix(nv-mcp): await NiiVue's async mutations, and make a signal replace replace), Codex's review of the 48-tool commit.
+
+- remove_volume, reorder_volume, remove_mesh, set_volume's affine branch and transform_volume's replace branch called NiiVue members that return a promise without awaiting them, so a handler could answer, and the bridge start the next request, before the GPU update landed. View now declares removeVolume, removeAllVolumes, the four moveVolume members, removeMesh and removeAllMeshes as returning a promise, and every handler awaits before drawScene and the answer. reorder_volume binds the move members instead of wrapping optional calls.
+- load_signal's replace went through loadSignals, which appends; it now calls removeAllSignals first (refusing in words without it), then loadSignals so the graph window resets.
+- README: volume transforms are page-registered but exposed through transform_volume and capabilities, not left out.
+- Specs: the signal fake's loadSignals appends as NiiVue's does; mesh remove fakes are async; scene.spec gains remove_volume, reorder_volume, transform_volume and set_volume-affine cases whose fakes finish on a later microtask, so they fail without the awaits (proved by removing them).
+
+Regenerated through the converter: browser/{meshes,scene,signals,view}.ts and the three specs. README patched by hand. Tool count unchanged at 52.
+
 ### next
 
 - the mono pull request #214 is open with this work; brainsonify's

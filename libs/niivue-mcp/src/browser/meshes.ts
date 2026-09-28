@@ -207,18 +207,18 @@ export function meshHandlers(host: NiiVueHost): Handlers {
       };
     },
 
-    remove_mesh(params: Params) {
+    async remove_mesh(params: Params) {
       host.beforeAnswer?.();
       if (flag(params, "all")) {
         if (!view.removeAllMeshes) throw new Error("This page's NiiVue cannot remove its meshes.");
-        view.removeAllMeshes();
+        await view.removeAllMeshes();
         view.drawScene();
         return { meshes: [] };
       }
       if (!view.removeMesh) throw new Error("This page's NiiVue cannot remove a mesh.");
       const index = pickIndex(meshes(), params?.mesh, "mesh");
       const removed = meshes()[index].name ?? index;
-      view.removeMesh(index);
+      await view.removeMesh(index);
       view.drawScene();
       return { removed, meshes: meshesShown() };
     },

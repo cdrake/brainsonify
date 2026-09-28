@@ -34,7 +34,7 @@ function signalView(overrides: Partial<View> = {}) {
   return baseView({
     signals,
     loadSignals: vi.fn(async (next: SignalToLoad[]) => {
-      signals.splice(0, signals.length, ...next.map(shown));
+      signals.push(...next.map(shown));
     }),
     addSignal: vi.fn(async (signal: SignalToLoad) => {
       signals.push(shown(signal));
@@ -144,8 +144,13 @@ describe("load_signal", () => {
       url: "https://x/a.tsv",
       replace: true,
     })) as { signals: unknown[] };
+    expect(view.removeAllSignals).toHaveBeenCalledTimes(1);
     expect(view.loadSignals).toHaveBeenCalledWith([{ url: "https://x/a.tsv", name: "a.tsv" }]);
-    expect(got.signals).toHaveLength(1);
+    expect(got.signals).toEqual([expect.objectContaining({ name: "a.tsv" })]);
+    const stuck = signalHandlers(hostOf(signalView({ removeAllSignals: undefined })));
+    await expect(stuck.load_signal({ url: "https://x/a.tsv", replace: true })).rejects.toThrow(
+      "This page's NiiVue cannot replace its signals.",
+    );
     const failing = signalHandlers(
       hostOf(
         signalView({
