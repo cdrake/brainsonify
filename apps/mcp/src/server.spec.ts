@@ -5,6 +5,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { request as httpRequest } from "node:http";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -126,6 +127,15 @@ describe("the brainsonify MCP server, end to end", () => {
     expect(failed.isError).toBe(true);
     expect(text(failed)).toMatch(/could not be loaded: 404/);
 
+    const overlaid = await call("add_overlay", { url: "https://example.test/zstat.nii.gz", colormap: "red" });
+    expect(overlaid.isError).toBeUndefined();
+    expect(json(overlaid)).toMatchObject({
+      volumes: [
+        { index: 0, name: "mni152.nii.gz" },
+        { index: 1, name: "zstat.nii.gz", colormap: "red", opacity: 0.7 },
+      ],
+    });
+
     const regions = json(await call("list_regions", { query: "insula" })) as unknown as Array<{ label: string }>;
     expect(regions.map((r) => r.label)).toEqual(["Insula_L", "Insula_R"]);
 
@@ -148,6 +158,9 @@ describe("the brainsonify MCP server, end to end", () => {
 
     const turned = json(await call("set_camera", { azimuth: 45, elevation: -20 }));
     expect(turned).toMatchObject({ camera: { azimuth: 45, elevation: -20 } });
+
+    const point = json(await call("go_to_point", { mm: [10, 20, 30], plane: "anterior" }));
+    expect(point).toMatchObject({ landed: { mm: mm(10, 20, 30), frac: [0.55, 0.6, 0.65] }, plane: { name: "anterior" } });
 
     const shot = await call("screenshot", { max_width: 800 });
     const content = shot.content as Array<{ type: string; mimeType?: string; data?: string }>;
@@ -191,6 +204,58 @@ describe("the brainsonify MCP server, end to end", () => {
     expect(gone.isError).toBe(true);
     expect(text(gone)).toMatch(/chosen with use_tab \(t2\) is no longer connected/);
   }, 30000);
+
+  it("answers calls to one tab in the order they were made, one at a time", async () => {
+    await openPage("t2", "second tab");
+    const load = call("load_volume", { url: "https://example.test/mni152.nii.gz" });
+    const go = call("go_to_region", { region: "left insula", plane: "left" });
+    const here = call("where_am_i");
+    const [loaded, went, where] = await Promise.all([load, go, here]);
+    expect(loaded.isError).toBeUndefined();
+    expect(went.isError).toBeUndefined();
+    expect(json(where)).toMatchObject({ volume: "mni152.nii.gz", crosshair: { mm: mm(-36, 6, 2) }, plane: { name: "left" } });
+    await closePage("t2");
+  }, 30000);
+
+  it("refuses the socket to a page from a foreign origin and takes one from loopback", async () => {
+    // A plain GET is not an upgrade, so an allowed origin gets 426 rather
+    // than a socket; a refused one never gets that far.
+    const status = async (origin: string) => (await fetch(`http://127.0.0.1:${port}/app`, { headers: { origin } })).status;
+    expect(await status("https://evil.example")).toBe(403);
+    expect(await status("http://localhost:8091")).toBe(426);
+    expect(await status("http://[::1]:5173")).toBe(426);
+    expect(await status(`http://127.0.0.1:${port}`)).toBe(426);
+  });
+
+  it("refuses an MCP request whose Host header does not name this server", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
+    // Through node:http, not fetch: fetch treats Host as a forbidden header
+    // and writes the real one, which is what a DNS-rebinding request lacks.
+    const post = (host: string) =>
+      new Promise<{ status: number; text: string }>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: "127.0.0.1",
+            port,
+            path: "/mcp",
+            method: "POST",
+            headers: { host, "content-type": "application/json", accept: "application/json, text/event-stream", "content-length": Buffer.byteLength(body) },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (chunk: Buffer) => chunks.push(chunk));
+            res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on("error", reject);
+        req.end(body);
+      });
+    const rebound = await post("niivue.attacker.example");
+    expect(rebound.status).toBe(403);
+    expect(rebound.text).toMatch(/Invalid Host header/);
+    const own = await post(`localhost:${port}`);
+    expect(own.status).toBe(200);
+  });
 
   it("re-binds a reloaded tab by id and reports the reset once", async () => {
     await openPage("t3", "third tab");

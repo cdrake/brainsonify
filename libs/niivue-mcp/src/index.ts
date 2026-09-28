@@ -19,6 +19,7 @@ export {
   clipNormal,
   depthThrough,
   namePlane,
+  planeDepthCuts,
   resolvePlane,
   samePlane,
   viewDirection,

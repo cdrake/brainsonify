@@ -8,7 +8,7 @@
  * server, what id and what title come from the environment.
  */
 
-import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type View } from "niivue-mcp/browser";
+import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type ShownVolume, type View, type VolumeToLoad } from "niivue-mcp/browser";
 
 const port = process.env.PAGE_PORT ?? "4242";
 const id = process.env.PAGE_ID ?? "fake";
@@ -34,23 +34,35 @@ const atlas: AtlasLike = {
 // A 1×1 transparent PNG.
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-const crosshairPos = [0.5, 0.5, 0.5];
 let plane: [number, number, number] = [2, 0, 0];
-const volumes: Array<{ name: string }> = [];
+const volumes: ShownVolume[] = [];
+const shown = (volume: VolumeToLoad): ShownVolume => ({
+  name: volume.name ?? volume.url,
+  url: volume.url,
+  ...(volume.colormap === undefined ? {} : { colormap: volume.colormap }),
+  ...(volume.opacity === undefined ? {} : { opacity: volume.opacity }),
+});
+const fetching = async (volume: VolumeToLoad): Promise<void> => {
+  if (volume.url.includes("missing")) throw new Error("404 Not Found");
+};
 const view: View = {
   canvas: { width: 320, height: 240, toDataURL: () => `data:image/png;base64,${PNG}` } as unknown as HTMLCanvasElement,
   volumes,
   azimuth: 110,
   elevation: 15,
-  crosshairPos,
-  getCrosshairPos: () => Array.from(crosshairPos).map((f) => (f - 0.5) * 200),
+  crosshairPos: [0.5, 0.5, 0.5],
+  getCrosshairPos: () => Array.from(view.crosshairPos).map((f) => (f - 0.5) * 200),
   getClipPlaneDepthAziElev: () => plane,
   setClipPlane: (next) => {
     plane = [next[0], next[1], next[2]];
   },
-  loadVolumes: async ([volume]) => {
-    if (volume.url.includes("missing")) throw new Error("404 Not Found");
-    volumes.splice(0, volumes.length, { name: volume.name ?? volume.url });
+  loadVolumes: async (next) => {
+    for (const volume of next) await fetching(volume);
+    volumes.splice(0, volumes.length, ...next.map(shown));
+  },
+  addVolume: async (volume) => {
+    await fetching(volume);
+    volumes.push(shown(volume));
   },
   drawScene: () => {},
   model: {

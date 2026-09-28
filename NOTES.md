@@ -2029,3 +2029,37 @@ the two the same code. nothing is committed in either repo yet.
   matches.
 - drive the brainsonify page itself from a script with the window in
   front, to see the screenshot come back with pixels.
+
+## Entry 28 — 28 September 2026
+
+### bringing the mono review back
+
+the second mono commit on `feat/nv-mcp` (review fixes: calls to one tab
+serialized, `add_overlay` through niivue's own `addVolume` over whatever
+the page shows, a fresh niivue's depth -2 plane read as off, the crosshair
+moved through niivue's setter, origin and host guards on the loopback
+server) had come back into `libs/niivue-mcp` by hand, source only. the
+specs still described the old core, so the lib and the app both failed
+typecheck and tests. this session ported the specs and the fake page.
+
+### implementation notes
+
+- the fake page's `getCrosshairPos` closed over the array it was built
+  with; once the core assigns `crosshairPos` a fresh `Float32Array`, it has
+  to read `view.crosshairPos` live, or every move lands at the origin.
+- node's `fetch` treats `Host` as a forbidden header and writes the real
+  one, so the dns-rebinding test passed a rebound request straight through
+  to a 200. under vitest (node) the request goes through `node:http`,
+  which lets the header stand. bun's fetch, which mono's test uses, does
+  not rewrite it.
+- the origin guard is tested with a plain GET to `/app`: a foreign origin
+  is refused with 403 before the upgrade is tried; a loopback one gets 426,
+  which is the server asking for a websocket it was not offered. no socket
+  needed.
+- the mono copy never had the screenshot resize-then-draw spec from entry
+  27; it went there today as a bun:test.
+
+### next
+
+- push `feat/nv-mcp` and open the mono pull request, pointing at this
+  commit as the brainsonify side that matches.
