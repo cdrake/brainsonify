@@ -9,5 +9,5 @@
 export { AGENT_PATH, AGENT_URL, AgentClient, CONNECT_MS, RETRY_MS, TAB_ID_KEY, agentUrls, serve, tabId } from "./client";
 export type { ClientOptions } from "./client";
 
-export { SCREENSHOT_WIDTH, coreHandlers, looksMni, nameFromUrl, planeIsCut, sceneState, viewState } from "./scene";
-export type { AtlasLike, AtlasRegion, Handler, Handlers, LoadedVolume, NiiVueHost, ShownVolume, Triple, View, VolumeToLoad, VolumeUpdate } from "./scene";
+export { SCREENSHOT_WIDTH, coreHandlers, fetchLabelTable, looksMni, nameFromUrl, planeIsCut, sceneState, viewState } from "./scene";
+export type { AtlasLike, AtlasRegion, Handler, Handlers, LabelTable, LoadedVolume, NiiVueHost, ShownVolume, Triple, View, VolumeToLoad, VolumeUpdate } from "./scene";

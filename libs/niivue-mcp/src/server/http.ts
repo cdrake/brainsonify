@@ -38,6 +38,11 @@ export interface ServerOptions {
    */
   pageUrl?: string;
   /**
+   * What an agent reads when it connects, for what only the app knows,
+   * such as the volumes its server serves and where the page opens.
+   */
+  instructions?: string;
+  /**
    * Page origins allowed to open `/app` besides loopback ones. A loopback
    * origin on any port is always allowed, as is a client that sends no
    * Origin, which is not a browser.
@@ -89,10 +94,11 @@ export function startServer(options: ServerOptions = {}): RunningServer {
   const allowedOrigins = options.allowedOrigins ?? [];
   const extraHosts = options.allowedHosts ?? [];
   const pageUrl = options.pageUrl;
+  const instructions = options.instructions;
   const allowedHosts = (): string[] => [...new Set([...[...LOOPBACK_NAMES, host].map((n) => `${n}:${running.port}`), ...extraHosts])];
 
   async function handleMcp(request: Request): Promise<Response> {
-    const server = buildServer({ bridge, extensions, name, version, pageUrl });
+    const server = buildServer({ bridge, extensions, name, version, pageUrl, instructions });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

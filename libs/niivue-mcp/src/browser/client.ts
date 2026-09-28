@@ -31,6 +31,9 @@ export const AGENT_PATH = "/agent";
 /** The key the tab's id is kept under in `sessionStorage`. */
 export const TAB_ID_KEY = "niivue-mcp.tab";
 
+/** Where the `?tab=` address that claimed the storage is kept, so a duplicate keeps its spare id. */
+const TAB_ADDRESS_ID_KEY = "niivue-mcp.tab.address";
+
 /**
  * The addresses to try, in turn: the page's own origin first, since a browser
  * that allows a page one origin only (Claude's built-in pane) can reach
@@ -53,24 +56,34 @@ export const CONNECT_MS = 5000;
 export type IdStorage = Pick<Storage, "getItem" | "setItem">;
 
 /**
- * This tab's id. A `?tab=<id>` in the page's address names it outright:
- * an agent's `new_tab` hands such an address out, so the id is agreed
- * before the page opens, and a reload keeps the address. Otherwise it is
- * kept in `sessionStorage`, which a browser scopes to one tab and keeps
- * across its reloads but does not copy to a new tab, other than by
- * duplicating it; the server catches that case and hands the copy an id
- * of its own. Made up fresh when storage is not available. Whichever way
- * it came, it is written to storage, so the page keeps it should it
- * navigate to an address without the parameter.
+ * This tab's id. A `?tab=<id>` in the page's address names it: an agent's
+ * `new_tab` hands such an address out, so the id is agreed before the page
+ * opens, and a reload keeps the address. Otherwise it is kept in
+ * `sessionStorage`, which a browser scopes to one tab and keeps across its
+ * reloads but does not copy to a new tab, other than by duplicating it;
+ * the server catches that case and hands the copy an id of its own. A
+ * duplicate of a `?tab` page keeps that spare id too: the address that
+ * claimed the storage is remembered, and while the address still names
+ * it, the stored id wins over it, so the copy's reloads do not take the
+ * original's id back. Made up fresh when storage is not available.
+ * Whichever way it came, it is written to storage, so the page keeps it
+ * should it navigate to an address without the parameter.
  */
 export function tabId(storage: IdStorage | null = sessionStore(), search: string = pageSearch()): string {
   const named = tabFromSearch(search);
   try {
-    const kept = named ?? storage?.getItem(TAB_ID_KEY);
-    if (kept) {
-      if (named) storage?.setItem(TAB_ID_KEY, kept);
-      return kept;
+    const kept = storage?.getItem(TAB_ID_KEY);
+    const addressId = storage?.getItem(TAB_ADDRESS_ID_KEY);
+    if (named) {
+      // A duplicated page keeps the original `?tab` in its address, but
+      // the server may have welcomed it with a spare id. Keep that spare
+      // on reload; a different address still deliberately claims its id.
+      if (kept && addressId === named) return kept;
+      storage?.setItem(TAB_ID_KEY, named);
+      storage?.setItem(TAB_ADDRESS_ID_KEY, named);
+      return named;
     }
+    if (kept) return kept;
     const fresh = freshId();
     storage?.setItem(TAB_ID_KEY, fresh);
     return fresh;

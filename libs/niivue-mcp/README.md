@@ -43,7 +43,9 @@ paths:
 `startServer` returns the running server with its `bridge`, `url`, `appUrl`
 and a `stop()`. Pass `log` to route its lines somewhere other than the
 console, `pageUrl` so `new_tab` can hand out the address that opens the
-page as a named tab, and `bridge` for the bridge's options: `noTabHint` is
+page as a named tab, `instructions` for what an agent reads when it
+connects (what the page shows and can fetch, which the tools cannot know),
+and `bridge` for the bridge's options: `noTabHint` is
 appended to the message a call fails with while no tab is connected, so the
 agent is told how to open your page (brainsonify's says to open it with
 `?agent`).
@@ -91,7 +93,9 @@ address to open, the person opens it, and every later call in the
 conversation passes the id as `tab` and reaches that tab whatever else is
 connected or chosen. An agent may make up any id itself and put it in the
 address the same way; `new_tab` only spares it the guessing and knows
-where the page is.
+where the page is. A duplicate of such a tab is renamed by the server as
+any duplicate is, and keeps the spare id across its own reloads although
+its address still names the original.
 
 Which tab answers a call:
 
@@ -124,7 +128,7 @@ marks the one that is answering.
 | `use_tab` | `id` | Makes one tab the one that answers every later call |
 | `new_tab` | | Makes up an id for a tab that is not open yet and gives the address that opens the page as that tab, `pageUrl` with `?tab=<id>` on it |
 | `load_volume` | `url`, `name?`, `colormap?`, `mni?` | Loads a volume from an address the page can fetch, replacing what is shown. `mni` says whether the atlas applies; guessed from the name when left out. Reports the name and the volume's bounds in millimetres |
-| `add_overlay` | `url`, `name?`, `labels?`, `colormap?`, `opacity?` | Draws another volume over whatever the page shows, keeping it, whether the page opened with it or `load_volume` brought it. `labels: freesurfer` draws a segmentation (FreeSurfer or SynthSeg ids) with FreeSurfer's names and colours; otherwise a colormap. A new `load_volume` clears the overlays |
+| `add_overlay` | `url`, `name?`, `labels?`, `colormap?`, `opacity?` | Draws another volume over whatever the page shows, keeping it, whether the page opened with it or `load_volume` brought it. `labels: freesurfer` draws a segmentation (FreeSurfer or SynthSeg ids) with FreeSurfer's names and colours, and `labels` as the address of a label table JSON (`R`, `G`, `B` and `labels` arrays, as NiiVue reads them) draws any other atlas with its own; otherwise a colormap. A new `load_volume` clears the overlays |
 | `where_am_i` | | The crosshair in millimetres and fractions, the volumes shown and how each is drawn, the plane cut, the camera, the view layout, the page's description of the place, and whatever state the app adds. Says which tab answered |
 | `list_regions` | `query?` | The atlas regions the page can navigate to: label, spoken name, centroid in millimetres, voxel count. `query` filters by label or name |
 | `go_to_region` | `region`, `plane?` | Moves the crosshair to a region's centroid, turns the camera to face the cut, cuts a plane through the point, and announces the place. `plane` is a side, a slice name or `current`. An ambiguous name fails and lists the candidates |

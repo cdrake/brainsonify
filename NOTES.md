@@ -2185,6 +2185,42 @@ both sides today; mono 8ddec870 is the commit this one mirrors.
   freesurfer` on the AAL atlas gives names that do not match its
   regions, and the demo's base window opens at 40..80.
 
+## Entry 33 — 28 September 2026
+
+The three things entry 32 left alone, and one Codex fixed on the mono
+side in the meantime; mono 36155454 (on top of Codex's d10a3497) is what
+this commit mirrors.
+
+- `add_overlay`'s `labels` took `freesurfer` or nothing, so the AAL atlas
+  was drawn with FreeSurfer's names and the regions did not match. It now
+  also takes the address of a label table JSON the page can fetch (`R`,
+  `G`, `B` and `labels`, the shape NiiVue reads and the shape of
+  niivue.com's `aal.json`). `fetchLabelTable` fetches it before anything
+  is added, so a bad address leaves the scene as it was, checks the
+  arrays are one length, and fills `I` and `A` in as NiiVue's own reader
+  would, so the object satisfies NiiVue's `ColorMap` type for
+  `setColormapLabel`. `where_am_i` lists the address as the volume's
+  labels. The schema went from `z.enum(["freesurfer"])` to a string; the
+  handler still refuses a bare name it does not know, and a name with a
+  `/` in it is an address.
+- The agent guessed a public address for a volume and got a 404 before
+  finding the demo's own. `startServer` takes `instructions`, handed to
+  `McpServer` so a client reads it on connecting. Mono's demo names the
+  volumes its dev server serves; brainsonify's server names the two demo
+  images the page's buttons load and the AAL atlas with its table at
+  niivue.com. `server.spec.ts` checks `getInstructions()` mentions them.
+- Codex's d10a3497 in mono: a `?tab=<id>` page that the server had
+  renamed as a duplicate took the original's id back on reload, because
+  the address won over storage. `tabId` now remembers which address
+  claimed the storage (`niivue-mcp.tab.address`) and, while the address
+  still names it, the stored id wins; a different `?tab` address still
+  claims its id. The two `tabId` specs cover the rename and the new
+  address, and the welcome spec reloads the duplicate. The `tabId` doc
+  comment and the README's tab paragraph say the same.
+- Not a defect: the demo's base window opening at 40..80 is the
+  `mni152.nii.gz` header's own `cal_min`/`cal_max`, and the render is
+  right for it.
+
 ### next
 
 - push `feat/mcp` and open the mono pull request, pointing at this

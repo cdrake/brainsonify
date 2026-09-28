@@ -100,6 +100,11 @@ describe("the brainsonify MCP server, end to end", () => {
     server?.kill();
   });
 
+  it("tells a connecting agent what the page can load", () => {
+    expect(client.getInstructions()).toMatch(/mni152\.nii\.gz/);
+    expect(client.getInstructions()).toMatch(/aal\.json/);
+  });
+
   it("lists the core tools and the sound tools", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...CORE_TOOLS, ...SOUND_TOOLS].sort());
