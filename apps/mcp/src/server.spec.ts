@@ -275,4 +275,27 @@ describe("the brainsonify MCP server, end to end", () => {
     expect(text(await call("where_am_i"))).not.toMatch(/^Note/);
     await closePage("t3");
   }, 30000);
+
+  it("gives a duplicated tab its own id and keeps the original answering", async () => {
+    await openPage("t4", "fourth tab");
+    expect(json(await call("where_am_i"))).toMatchObject({ tab: { id: "t4" } });
+    // A duplicate: a fresh page whose copied sessionStorage says t4.
+    const copy = run("src/testing/fake-page.ts", { PAGE_PORT: String(port), PAGE_ID: "t4", PAGE_TITLE: "fourth tab" });
+    try {
+      await until("the copy to be welcomed", async () => (await tabs()).some((tab) => tab.id === "t4-2"));
+      expect(await tabs()).toMatchObject([
+        { id: "t4", title: "fourth tab", bound: true },
+        { id: "t4-2", title: "fourth tab", bound: false },
+      ]);
+      expect(json(await call("where_am_i"))).toMatchObject({ tab: { id: "t4" } });
+      await call("use_tab", { id: "t4-2" });
+      const answer = await call("where_am_i");
+      expect(text(answer)).not.toMatch(/^Note/);
+      expect(json(answer)).toMatchObject({ tab: { id: "t4-2" } });
+    } finally {
+      copy.kill();
+    }
+    await closePage("t4");
+    await until("the copy to go", async () => (await tabs()).length === 0);
+  }, 30000);
 });

@@ -70,9 +70,16 @@ than racing them.
 ## Tabs
 
 Every page that connects says hello with an id, a title, its address and
-its state. The id is kept in the tab's `sessionStorage`, which a browser
+its state, and the server welcomes it with the id it will list the tab
+under. The id is kept in the tab's `sessionStorage`, which a browser
 scopes to one tab and keeps across reloads, so a reload arrives as the
-same id on a new socket and a second tab arrives as a new id.
+same id on a new socket and a second tab arrives as a new id. A
+duplicated tab is the exception: the browser copies its `sessionStorage`,
+so the copy arrives with the original's id while the original is still
+connected. The bridge keeps the original as it is and welcomes the copy
+with a spare id, the original's with `-2` on the end, which the copy
+keeps for its own reloads; both are then listed, and a call with neither
+chosen asks, as with any two tabs.
 
 Which tab answers a call:
 
@@ -86,7 +93,9 @@ Which tab answers a call:
   from it and puts a note at the top of the reply saying the tab reloaded
   and what its state was before and is now, so the agent knows the
   crosshair, plane and anything the app adds started over. The note is
-  said once.
+  said once. A page that comes back on a new socket without reloading,
+  after the server restarted or the socket dropped, says so in its hello
+  and gets no note, since its scene is as it was.
 - **No tab connected**: the call fails with a message saying what to open.
 
 Every answer carries `tab: {id, title}` in `where_am_i`, and `list_tabs`

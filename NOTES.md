@@ -2061,5 +2061,33 @@ typecheck and tests. this session ported the specs and the fake page.
 
 ### next
 
-- push `feat/nv-mcp` and open the mono pull request, pointing at this
+- push `feat/mcp` and open the mono pull request, pointing at this
+  commit as the brainsonify side that matches.
+
+## Entry 29 — 28 September 2026
+
+Codex reviewed the mono branch (renamed `feat/mcp`) and found one real
+thing: duplicating a browser tab copies `sessionStorage`, so the copy
+said hello with the original's id and the bridge replaced the original,
+which stayed open but could no longer be listed or chosen. Fixed on both
+sides today; mono 2ebb0db2 is the commit this one mirrors.
+
+- the hello now carries `reconnect` when the same page comes back on a
+  new socket (server restart, dropped socket). only then does a same-id
+  hello replace a live tab, and with no reset note, since nothing started
+  over. a fresh page whose id a live tab holds is a duplicate: it is
+  given a spare id, the original's with `-2` on the end.
+- every tab is welcomed with the id the server lists it under
+  (`{ welcome: { id } }`). the client takes a spare id, keeps it in
+  storage for its own reloads, and says hello with it from then on.
+  `AgentClient.id` is a getter now, and `ClientOptions.storage` lets a
+  test (or a host) say where the id lives.
+- the e2e spec runs a second fake-page process with the same `PAGE_ID`
+  and drives both; the bridge spec has both sockets live.
+- the bridge specs' fake sockets file the welcome apart from requests
+  (`welcomes` beside `sent`), so the counts in the older specs stand.
+
+### next
+
+- push `feat/mcp` and open the mono pull request, pointing at this
   commit as the brainsonify side that matches.
