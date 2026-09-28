@@ -19,7 +19,7 @@ import { BRAINSONIFY_SCHEMAS } from "./brainsonify";
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
 
-const CORE_TOOLS = ["list_tabs", "use_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "screenshot"];
+const CORE_TOOLS = ["list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "screenshot"];
 const SOUND_TOOLS = Object.keys(BRAINSONIFY_SCHEMAS);
 
 async function freePort(): Promise<number> {
@@ -88,7 +88,7 @@ describe("the brainsonify MCP server, end to end", () => {
 
   beforeAll(async () => {
     port = await freePort();
-    server = run("src/server.ts", { BRAINSONIFY_MCP_PORT: String(port) });
+    server = run("src/server.ts", { BRAINSONIFY_MCP_PORT: String(port), BRAINSONIFY_PAGE: "http://localhost:4200/?agent" });
     await until("the server", async () => (await fetch(`http://127.0.0.1:${port}/`)).ok);
     client = new Client({ name: "integration", version: "0" });
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)));
@@ -297,5 +297,31 @@ describe("the brainsonify MCP server, end to end", () => {
     }
     await closePage("t4");
     await until("the copy to go", async () => (await tabs()).length === 0);
+  }, 30000);
+
+  it("reaches a tab named by new_tab and opened from its address, past whatever is chosen", async () => {
+    await openPage("t5", "fifth tab");
+    await call("use_tab", { id: "t5" });
+    const made = json(await call("new_tab")) as { id: string; url: string };
+    expect(made.url).toBe(`http://localhost:4200/?agent=&tab=${made.id}`);
+    const gone = await call("where_am_i", { tab: made.id });
+    expect(gone.isError).toBe(true);
+    expect(text(gone)).toMatch(new RegExp(`^No connected tab has the id "${made.id}"\\. Connected: t5`));
+    // The person opens the address: the page takes its id from the query string.
+    const search = new URL(made.url).search;
+    pages.set(made.id, run("src/testing/fake-page.ts", { PAGE_PORT: String(port), PAGE_SEARCH: search, PAGE_TITLE: "named tab" }));
+    await until(`tab ${made.id}`, async () => (await tabs()).some((tab) => tab.id === made.id));
+    const reached = await call("where_am_i", { tab: made.id });
+    expect(json(reached)).toMatchObject({ tab: { id: made.id, title: "named tab" }, sounding: false });
+    // Named calls do not move the choice.
+    expect(json(await call("where_am_i"))).toMatchObject({ tab: { id: "t5" } });
+    const sounded = await call("set_sound", { on: true, tab: made.id });
+    expect(sounded.isError).toBeUndefined();
+    expect(json(await call("where_am_i", { tab: made.id }))).toMatchObject({ sounding: true });
+    expect(json(await call("where_am_i"))).toMatchObject({ sounding: false });
+    await closePage(made.id);
+    await closePage("t5");
+    // The choice of t5 stands until a bare call finds it gone, which this
+    // test does not make; it runs last so no other test inherits the wait.
   }, 30000);
 });

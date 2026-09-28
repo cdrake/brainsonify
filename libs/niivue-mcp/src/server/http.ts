@@ -31,6 +31,13 @@ export interface ServerOptions {
   /** Where a line about a tab connecting or leaving goes; the console otherwise. */
   log?: (line: string) => void;
   /**
+   * The page's address, such as `http://localhost:4200/?agent`, so `new_tab`
+   * can give an agent the address that opens the page as a named tab.
+   * Without it the tool gives the id and says to add `?tab=<id>` to the
+   * address.
+   */
+  pageUrl?: string;
+  /**
    * Page origins allowed to open `/app` besides loopback ones. A loopback
    * origin on any port is always allowed, as is a client that sends no
    * Origin, which is not a browser.
@@ -81,10 +88,11 @@ export function startServer(options: ServerOptions = {}): RunningServer {
   const extensions = options.extensions ?? [];
   const allowedOrigins = options.allowedOrigins ?? [];
   const extraHosts = options.allowedHosts ?? [];
+  const pageUrl = options.pageUrl;
   const allowedHosts = (): string[] => [...new Set([...[...LOOPBACK_NAMES, host].map((n) => `${n}:${running.port}`), ...extraHosts])];
 
   async function handleMcp(request: Request): Promise<Response> {
-    const server = buildServer({ bridge, extensions, name, version });
+    const server = buildServer({ bridge, extensions, name, version, pageUrl });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

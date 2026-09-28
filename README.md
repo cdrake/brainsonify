@@ -83,7 +83,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
 | `libs/niivue-mcp/src/planes.ts`, `regions.ts`, `names.ts` | Shared by both ends: the plane through a point and the camera that faces it, region matching, the AAL spoken names |
 | `libs/niivue-mcp/src/server/bridge.ts` | Knows the connected tabs by id, routes each tool call to the one that answers, and notices a reload |
-| `libs/niivue-mcp/src/server/tools.ts` | The eleven core tools over the bridge, and the `Extension` hook an app registers more through |
+| `libs/niivue-mcp/src/server/tools.ts` | The twelve core tools over the bridge, and the `Extension` hook an app registers more through |
 | `libs/niivue-mcp/src/browser/scene.ts` | Answers the core tools from a NiiVue instance, through the hooks a host page provides |
 | `libs/niivue-mcp/src/browser/client.ts` | The page's socket: says hello with a tab id, answers requests, retries |
 | `apps/brainsonify/src/controllers/agent.ts` | What brainsonify adds: the sound tools' handlers, wrapped as a controller |
@@ -374,7 +374,10 @@ how to embed it in another NiiVue app, and
 Each tab says hello with an id it keeps in `sessionStorage`, so a reload
 comes back as the same tab and a second window as a new one. One tab
 answers on its own; with several open the agent is told to pick one with
-`use_tab`, and `where_am_i` says which tab answered. When the tab an agent
+`use_tab`, or names one with `tab` on the call, and `where_am_i` says
+which tab answered. An agent that wants a tab of its own asks `new_tab`
+for an address with `?tab=<id>` on it, and a page opened from it answers
+to that id for the rest of the conversation. When the tab an agent
 is driving reloads, the next reply opens with a note saying so and what
 the crosshair, plane and sound were before, since the scene has started
 over. The line under the crosshair buttons shows the tab's id next to
@@ -394,7 +397,7 @@ the two are started in does not matter. The console gets one line when the
 server is reached and one when the retry settles without it; the browser's
 own line per refused attempt is not the app's.
 
-Fifteen tools. From the core: `list_tabs`, `use_tab`, `load_volume`,
+Sixteen tools. From the core: `list_tabs`, `use_tab`, `new_tab`, `load_volume`,
 `add_overlay`, `where_am_i`, `list_regions`, `go_to_region`, `go_to_point`,
 `set_clip_plane`, `set_camera` and `screenshot`. From brainsonify:
 `set_sound`, `list_modes`, `set_mode` and `announce`. The three a

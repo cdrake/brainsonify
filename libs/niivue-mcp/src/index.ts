@@ -7,8 +7,8 @@
  * page's end under `niivue-mcp/browser` (DOM).
  */
 
-export type { AgentRequest, AgentResponse, Hello, PlaneState, RegionSummary, TabState } from "./protocol";
-export { isHello } from "./protocol";
+export type { AgentRequest, AgentResponse, Hello, PlaneState, RegionSummary, TabState, Welcome } from "./protocol";
+export { isHello, isWelcome, TAB_ID_MAX, TAB_PARAM, tabFromSearch } from "./protocol";
 
 export {
   PLANE_ALIASES,

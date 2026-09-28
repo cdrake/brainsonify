@@ -28,7 +28,7 @@ WebSocket ends together:
 ```ts
 import { startServer } from "niivue-mcp/server";
 
-startServer({ name: "my-niivue-app", version: "0.1.0" });
+startServer({ name: "my-niivue-app", version: "0.1.0", pageUrl: "http://localhost:8080/" });
 ```
 
 That listens on `127.0.0.1:4242` (both configurable) and serves three
@@ -42,9 +42,11 @@ paths:
 
 `startServer` returns the running server with its `bridge`, `url`, `appUrl`
 and a `stop()`. Pass `log` to route its lines somewhere other than the
-console, and `bridge` for the bridge's options: `noTabHint` is appended to
-the message a call fails with while no tab is connected, so the agent is
-told how to open your page (brainsonify's says to open it with `?agent`).
+console, `pageUrl` so `new_tab` can hand out the address that opens the
+page as a named tab, and `bridge` for the bridge's options: `noTabHint` is
+appended to the message a call fails with while no tab is connected, so the
+agent is told how to open your page (brainsonify's says to open it with
+`?agent`).
 
 Loopback keeps the network out but not other web pages: any site open in
 the same browser can ask it to open a socket to `127.0.0.1`, and a hostname
@@ -81,8 +83,21 @@ with a spare id, the original's with `-2` on the end, which the copy
 keeps for its own reloads; both are then listed, and a call with neither
 chosen asks, as with any two tabs.
 
+A page opened with `?tab=<id>` in its address takes that id instead, and
+keeps it in `sessionStorage` too, so its reloads and a later address
+without the parameter still arrive as it. That is how an agent names a
+tab before it exists: `new_tab` makes up a UUID and returns it with the
+address to open, the person opens it, and every later call in the
+conversation passes the id as `tab` and reaches that tab whatever else is
+connected or chosen. An agent may make up any id itself and put it in the
+address the same way; `new_tab` only spares it the guessing and knows
+where the page is.
+
 Which tab answers a call:
 
+- **The call names a `tab`**: that one, if it is connected, else the call
+  fails and lists the tabs. The choice made with `use_tab` is left as it
+  was.
 - **One tab connected**: that one.
 - **A tab chosen with `use_tab`**: that one, for as long as it is connected.
 - **Several connected and none chosen**: the one that answered last, if it
@@ -107,6 +122,7 @@ marks the one that is answering.
 |---|---|---|
 | `list_tabs` | | The connected tabs: id, title, address, when each connected and which one answers |
 | `use_tab` | `id` | Makes one tab the one that answers every later call |
+| `new_tab` | | Makes up an id for a tab that is not open yet and gives the address that opens the page as that tab, `pageUrl` with `?tab=<id>` on it |
 | `load_volume` | `url`, `name?`, `colormap?`, `mni?` | Loads a volume from an address the page can fetch, replacing what is shown. `mni` says whether the atlas applies; guessed from the name when left out. Reports the name and the volume's bounds in millimetres |
 | `add_overlay` | `url`, `name?`, `labels?`, `colormap?`, `opacity?` | Draws another volume over whatever the page shows, keeping it, whether the page opened with it or `load_volume` brought it. `labels: freesurfer` draws a segmentation (FreeSurfer or SynthSeg ids) with FreeSurfer's names and colours; otherwise a colormap. A new `load_volume` clears the overlays |
 | `where_am_i` | | The crosshair in millimetres and fractions, the plane cut, the camera, the page's description of the place, and whatever state the app adds. Says which tab answered |
@@ -116,6 +132,9 @@ marks the one that is answering.
 | `set_clip_plane` | `plane`, `depth?`, `face?` | Cuts the volume with a whole plane named for the side it takes off, or `off`. `depth` is NiiVue's, clamped to ±1.5; `face` turns the camera to look at the cut, on by default |
 | `set_camera` | `azimuth`, `elevation` | Points the render camera |
 | `screenshot` | `max_width?` | Draws the scene and returns the canvas as a PNG, scaled down to fit. Refuses while the tab is in the background, where the browser draws nothing |
+
+Every tool below `new_tab` also takes `tab?`, the id of the tab to ask;
+without it the answering tab is asked, as the Tabs section explains.
 
 Every reply is a line of prose for the agent to read, then the JSON the
 page returned. Failures are tool errors with the page's own message.
@@ -244,8 +263,11 @@ to what the `state` callback returns and the reload note will cover it.
 
 **4. Register them on the server.** An `Extension` is a name and a
 `register(server, context)` that calls `server.registerTool` for each
-tool, answering through `context.answer(method, params, shape)`, which
-forwards to the bound tab and wraps the reply. Pass it to `startServer`:
+tool, answering through `context.answer(method, params, options)`, which
+forwards to the bound tab, or to the one `options.tab` names, and wraps
+the reply. Spread `TAB_ARG` into the tool's schema so an agent can name
+the tab for it as it does for the core tools, and pass the value on as
+`options.tab`. Pass the extension to `startServer`:
 
 ```ts
 startServer({ name: "my-niivue-app", version: "0.1.0", extensions: [mine] });

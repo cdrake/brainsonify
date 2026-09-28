@@ -2091,3 +2091,39 @@ sides today; mono 2ebb0db2 is the commit this one mirrors.
 
 - push `feat/mcp` and open the mono pull request, pointing at this
   commit as the brainsonify side that matches.
+
+## Entry 30 — 28 September 2026
+
+Chris asked whether a prompt could make up a UUID and reuse it in every
+later prompt to say which tab it means, instead of `use_tab`, which is a
+choice held on the server that a later prompt cannot see. Built on both
+sides today; mono 677c803f is the commit this one mirrors.
+
+- every tool a page answers takes an optional `tab`, the id to ask. the
+  bridge's `call` takes it as a third argument and goes to that tab,
+  waiting its usual grace for one mid-reload, and otherwise fails naming
+  the id and listing the tabs. a named call counts as the last one
+  answered but leaves the `use_tab` choice alone.
+- `new_tab` makes up a UUID server-side and returns it with the address
+  that opens the page as that tab: `pageUrl`, a new `startServer` option,
+  with `?tab=<id>` on it. brainsonify's server passes
+  `http://localhost:4200/?agent` (or `BRAINSONIFY_PAGE`).
+- the page takes `?tab=` from its address over `sessionStorage`
+  (`tabFromSearch` in the protocol; `TAB_ID_MAX` 64) and writes it to
+  storage, so a reload and a later address without the parameter still
+  arrive as it. a duplicate of such a page collides on the server as any
+  duplicate does and gets the spare id.
+- extensions spread `TAB_ARG` into their schemas and pass `tab` on
+  `context.answer`'s options (`AnswerOptions`, the old `ReplyShape` plus
+  `tab`). brainsonify's four sound tools do.
+- the fake page takes `PAGE_SEARCH` instead of `PAGE_ID` to read its id
+  from a query string, and the e2e spec's last test opens one from a
+  `new_tab` address and drives it past a chosen tab. it runs last because
+  it leaves `t5` chosen and closed, and the next bare call would wait the
+  return grace. the seams spec counts sixteen tools now, three of them
+  answered by the server itself.
+
+### next
+
+- push `feat/mcp` and open the mono pull request, pointing at this
+  commit as the brainsonify side that matches.

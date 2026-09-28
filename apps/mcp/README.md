@@ -6,12 +6,15 @@ core with brainsonify's sound tools registered on it as an extension:
 holds the tools, and `apps/brainsonify/src/controllers/agent.ts` answers
 them in the page.
 
-The port is 4242 unless `BRAINSONIFY_MCP_PORT` says otherwise.
+The port is 4242 unless `BRAINSONIFY_MCP_PORT` says otherwise, and the
+page the `new_tab` tool hands out addresses for is
+`http://localhost:4200/?agent` unless `BRAINSONIFY_PAGE` says otherwise.
 
 ## The brainsonify extension
 
-Four tools on top of the core's eleven, for an app that sonifies the voxel
-under the crosshair and talks to a listener:
+Four tools on top of the core's twelve, for an app that sonifies the voxel
+under the crosshair and talks to a listener. Each takes the core's `tab`
+too, the id of the tab to ask:
 
 | Tool | Input | What it does |
 |---|---|---|

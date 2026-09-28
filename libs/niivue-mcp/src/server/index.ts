@@ -12,14 +12,16 @@ export {
   CORE_SCHEMAS,
   CUT_NAMES,
   PLANE_NAMES,
+  TAB_ARG,
   buildServer,
   failure,
   registerCoreTools,
   reloadNotice,
   reply,
+  tabAddress,
   toolContext,
 } from "./tools";
-export type { Extension, ReplyShape, ToolContext, ToolReply } from "./tools";
+export type { AnswerOptions, Extension, ReplyShape, ToolContext, ToolReply } from "./tools";
 
 export { DEFAULT_HOST, DEFAULT_PORT, startServer } from "./http";
 export type { RunningServer, ServerOptions } from "./http";

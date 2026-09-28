@@ -5,13 +5,16 @@
  * to the server with the real client over a fake NiiVue: a volume 200 mm
  * across centred on the origin, a four-region atlas, a canvas that hands
  * back a fixed PNG, and a sound that remembers whether it is on. Which
- * server, what id and what title come from the environment.
+ * server, what id and what title come from the environment; PAGE_SEARCH
+ * instead of PAGE_ID gives a query string the id is read from, as a page
+ * opened from a `new_tab` address would.
  */
 
 import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type ShownVolume, type View, type VolumeToLoad } from "niivue-mcp/browser";
 
 const port = process.env.PAGE_PORT ?? "4242";
-const id = process.env.PAGE_ID ?? "fake";
+const search = process.env.PAGE_SEARCH;
+const id = search === undefined ? (process.env.PAGE_ID ?? "fake") : undefined;
 const title = process.env.PAGE_TITLE ?? "fake page";
 
 const REGIONS: AtlasRegion[] = [
@@ -112,9 +115,9 @@ const client = new AgentClient(
   { ...coreHandlers(host), ...sound },
   {
     urls: [`ws://127.0.0.1:${port}/app`],
-    id,
+    ...(id === undefined ? { storage: null, search } : { id }),
     title: () => title,
-    url: () => `http://fake/${id}`,
+    url: () => `http://fake/${id ?? search}`,
     state: () => ({ ...sceneState(host), sounding, mode }),
     onStatus: (connected) => console.log(connected ? "page connected" : "page disconnected"),
   },
