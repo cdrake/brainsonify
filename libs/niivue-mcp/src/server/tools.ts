@@ -17,68 +17,62 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { PLANE_ALIASES, PLANE_ANGLES } from "../planes";
-import { TAB_PARAM, type TabState } from "../protocol";
+import { TAB_PARAM } from "../protocol";
 import { LAYOUT_NAMES, SHOW_RENDER_NAMES, SLICE_NAMES, type ViewState } from "../views";
-import type { Bridge, ResetReport, TabInfo } from "./bridge";
-
-type Content =
-  | { type: "text"; text: string }
-  | { type: "image"; data: string; mimeType: string };
-
-export interface ToolReply {
-  content: Content[];
-  isError?: boolean;
-  [key: string]: unknown;
-}
+import { triple, VOLUME_ARG } from "./args";
+import type { Bridge } from "./bridge";
+import { type Extension, failure, reply, TAB_ARG, type ToolContext, tabAddress, toolContext } from "./context";
+import { EXTRA_SCHEMAS, registerExtraTools } from "./tools-extras";
+import { LAYER_SCHEMAS, registerLayerTools } from "./tools-layers";
+import { MARK_SCHEMAS, registerMarkTools } from "./tools-marks";
+import { registerSettingTools, SETTING_SCHEMAS } from "./tools-settings";
+import { registerVolumeTools, VOLUME_SCHEMAS } from "./tools-volumes";
 
 /** The sides a plane can be named for, the slice names, and `current`. */
-export const PLANE_NAMES = [
-  "current",
-  ...PLANE_ANGLES.map((plane) => plane.name),
-  ...Object.keys(PLANE_ALIASES),
-] as [string, ...string[]];
+export const PLANE_NAMES = ["current", ...PLANE_ANGLES.map((plane) => plane.name), ...Object.keys(PLANE_ALIASES)] as [
+  string,
+  ...string[],
+];
 
 /** The same without `current` and with `off`, for setting a plane outright. */
 export const CUT_NAMES = ["off", ...PLANE_NAMES.filter((name) => name !== "current")] as [string, ...string[]];
 
-/**
- * The argument that names the tab a call goes to, for every tool a page
- * answers. An extension spreads it into its own schemas and passes the
- * value as `tab` to `context.answer`.
- */
-export const TAB_ARG = {
-  tab: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "The id of the tab to ask, from list_tabs or new_tab. Without it, the tab chosen with " +
-        "use_tab answers, or the only one, or the one that answered last.",
-    ),
-};
-
 /** The input schema of each core tool, by name, so a test can read them. */
 export const CORE_SCHEMAS = {
   list_tabs: {},
-  use_tab: { id: z.string().min(1).describe("The id of a connected tab, from list_tabs.") },
+  use_tab: {
+    id: z.string().min(1).describe("The id of a connected tab, from list_tabs."),
+  },
   new_tab: {},
   load_volume: {
     ...TAB_ARG,
     url: z.string().min(1).describe("Where the volume is: an http(s) address the page can fetch."),
     name: z.string().optional().describe("A name for it; the file name otherwise."),
     colormap: z.string().optional().describe("A NiiVue colormap name; gray otherwise."),
-    mni: z.boolean().optional().describe("Whether the volume is in MNI space, so an atlas applies. Guessed from the name otherwise."),
+    mni: z
+      .boolean()
+      .optional()
+      .describe("Whether the volume is in MNI space, so an atlas applies. Guessed from the name otherwise."),
   },
   add_overlay: {
     ...TAB_ARG,
     url: z.string().min(1).describe("Where the overlay is: an http(s) address the page can fetch."),
     name: z.string().optional().describe("A name for it; the file name otherwise."),
-    labels: z.string().min(1).optional().describe("Draw it as a label map: freesurfer for FreeSurfer or SynthSeg ids, or, for any other atlas, the address of a label table JSON the page can fetch (R, G, B and labels arrays, as NiiVue reads them)."),
+    labels: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Draw it as a label map: freesurfer for FreeSurfer or SynthSeg ids, or, for any other atlas, the address of a label table JSON the page can fetch (R, G, B and labels arrays, as NiiVue reads them).",
+      ),
     colormap: z.string().optional().describe("A NiiVue colormap name for a non-label overlay; warm otherwise."),
     opacity: z.number().min(0).max(1).optional().describe("0 to 1; 0.5 for labels and 0.7 otherwise."),
   },
   where_am_i: { ...TAB_ARG },
-  list_regions: { ...TAB_ARG, query: z.string().optional().describe("Text the label or name must contain.") },
+  list_regions: {
+    ...TAB_ARG,
+    query: z.string().optional().describe("Text the label or name must contain."),
+  },
   go_to_region: {
     ...TAB_ARG,
     region: z.string().min(1).describe("An atlas label or spoken region name."),
@@ -86,46 +80,175 @@ export const CORE_SCHEMAS = {
   },
   go_to_point: {
     ...TAB_ARG,
-    mm: z.array(z.number()).length(3).describe("The point, [x, y, z] in the loaded volume's world millimetres."),
+    mm: triple("The point, [x, y, z] in the loaded volume's world millimetres.").optional(),
+    vox: z
+      .array(z.number().int())
+      .length(3)
+      .optional()
+      .describe("The point as a voxel of the base volume, [i, j, k], instead of mm."),
     plane: z.enum(PLANE_NAMES).optional().describe("The cut to make through the point."),
-    label: z.string().optional().describe("What is there, said before the page's own description, e.g. left hippocampus."),
+    label: z
+      .string()
+      .optional()
+      .describe("What is there, said before the page's own description, e.g. left hippocampus."),
   },
   set_clip_plane: {
     ...TAB_ARG,
-    plane: z.enum(CUT_NAMES).describe("The side to take off, a slice name, or off."),
+    plane: z.enum(CUT_NAMES).optional().describe("The side to take off, a slice name, or off."),
+    azimuth: z
+      .number()
+      .optional()
+      .describe(
+        "Instead of a plane name: the normal's azimuth in degrees, with elevation. The plane is named by the nearest side.",
+      ),
+    elevation: z
+      .number()
+      .min(-90)
+      .max(90)
+      .optional()
+      .describe("Instead of a plane name: the normal's elevation in degrees, with azimuth."),
+    index: z
+      .number()
+      .int()
+      .min(0)
+      .max(5)
+      .optional()
+      .describe("Which of the six clip planes to set. The first otherwise."),
+    planes: z
+      .array(z.array(z.number()).length(3))
+      .min(1)
+      .max(6)
+      .optional()
+      .describe("Set several clip planes at once, [depth, azimuth, elevation] each, in place of the rest."),
     depth: z
       .number()
       .min(-1.5)
       .max(1.5)
       .optional()
-      .describe("Where along the normal, in NiiVue's fraction units: 0 through the middle, positive towards the side taken off. 0 otherwise."),
+      .describe(
+        "Where along the normal, in NiiVue's fraction units: 0 through the middle, positive towards the side taken off. 0 otherwise.",
+      ),
     face: z.boolean().optional().describe("Turn the render camera to face the cut. On otherwise."),
   },
   set_camera: {
     ...TAB_ARG,
-    azimuth: z.number().describe("Degrees round the vertical: 0 from behind, 90 from the right, 180 from the front, 270 from the left."),
-    elevation: z.number().min(-90).max(90).describe("Degrees above the horizontal, from -90 (below) to 90 (above)."),
+    azimuth: z
+      .number()
+      .optional()
+      .describe("Degrees round the vertical: 0 from behind, 90 from the right, 180 from the front, 270 from the left."),
+    elevation: z
+      .number()
+      .min(-90)
+      .max(90)
+      .optional()
+      .describe("Degrees above the horizontal, from -90 (below) to 90 (above)."),
+    pan_2d: z
+      .array(z.number())
+      .length(4)
+      .optional()
+      .describe("The 2D pan and zoom, [x, y, z, zoom] as NiiVue keeps them."),
+    render_pan: z.array(z.number()).length(2).optional().describe("The render pan, [x, y]."),
+    pivot: triple("The point in millimetres the render turns about.")
+      .nullable()
+      .optional()
+      .describe("The point in millimetres the render turns about; null for the centre."),
+    center_on: triple("Centre the render on this point in millimetres.").optional(),
+    global: z
+      .object({
+        position: triple("Where the camera is, in millimetres."),
+        yaw: z.number().optional().describe("Degrees."),
+        pitch: z.number().optional().describe("Degrees."),
+        fov: z.number().optional().describe("The field of view, degrees."),
+        near: z.number().optional(),
+        far: z.number().optional(),
+      })
+      .optional()
+      .describe("Place a free camera in the world instead of orbiting."),
   },
   set_volume: {
     ...TAB_ARG,
-    volume: z
-      .union([z.number().int().min(0), z.string().min(1)])
-      .optional()
-      .describe("Which volume: its index as where_am_i and add_overlay list them (0 is the base), or its name. The base otherwise."),
+    volume: VOLUME_ARG.optional().describe(
+      "Which volume: its index as where_am_i and add_overlay list them (0 is the base), or its name. The base otherwise.",
+    ),
     colormap: z.string().optional().describe("A NiiVue colormap name."),
+    colormap_negative: z
+      .string()
+      .optional()
+      .describe("The colormap for values below zero, when they get their own; the empty string drops it."),
     opacity: z.number().min(0).max(1).optional().describe("0 (hidden) to 1 (opaque)."),
-    cal_min: z.number().optional().describe("The low end of the display window: the intensity drawn as the colormap's darkest colour."),
-    cal_max: z.number().optional().describe("The high end of the display window: the intensity drawn as the colormap's brightest colour."),
+    cal_min: z
+      .number()
+      .optional()
+      .describe("The low end of the display window: the intensity drawn as the colormap's darkest colour."),
+    cal_max: z
+      .number()
+      .optional()
+      .describe("The high end of the display window: the intensity drawn as the colormap's brightest colour."),
+    cal_min_neg: z.number().optional().describe("The low end of the negative window."),
+    cal_max_neg: z.number().optional().describe("The high end of the negative window."),
+    colormap_type: z
+      .enum(["min_to_max", "zero_to_max_transparent_below_min", "zero_to_max_translucent_below_min"])
+      .optional()
+      .describe("How the colormap spans the window and treats values under cal_min."),
+    transparent_below_cal_min: z.boolean().optional().describe("Whether values under cal_min are left unpainted."),
     frame: z.number().int().min(0).optional().describe("The frame of a 4D volume to show, counted from 0."),
     invert: z.boolean().optional().describe("Whether the colormap runs backwards."),
+    colorbar: z.boolean().optional().describe("Whether a colorbar is drawn for it."),
+    nearest: z.boolean().optional().describe("Nearest-neighbour sampling instead of linear, for label maps."),
+    atlas_outline: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .describe("For a label map: how strongly region outlines are drawn, 0 for none."),
+    modulate_alpha: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .describe("How much the modulation volume, if any, also fades the opacity."),
+    labels: z
+      .string()
+      .optional()
+      .describe("A label table for it: the address of a NiiVue label JSON, or a table the server knows (freesurfer)."),
+    modulate: z
+      .object({
+        volume: VOLUME_ARG.describe("The volume whose intensity modulates this one."),
+        alpha: z.number().min(0).max(1).optional().describe("How much it fades the opacity too. 0 otherwise."),
+      })
+      .optional()
+      .describe("Modulate this volume's colours by another's intensity."),
+    load_all_frames: z
+      .boolean()
+      .optional()
+      .describe("Fetch the remaining frames of a 4D volume that loaded its first only."),
+    auto_window: z.boolean().optional().describe("Recompute cal_min and cal_max from the intensities."),
+    affine: z
+      .union([z.array(z.array(z.number()).length(4)).length(4), z.array(z.number()).length(16)])
+      .optional()
+      .describe("Set its voxel-to-world matrix outright: 4 rows of 4, or 16 numbers row by row."),
+    reset_affine: z.boolean().optional().describe("Put its affine back to the file's."),
+    transform: z
+      .object({
+        translation: triple("Millimetres along x, y and z.").optional(),
+        rotation: triple("Degrees about x, y and z.").optional(),
+        scale: triple("Factors along x, y and z.").optional(),
+      })
+      .optional()
+      .describe("Move, turn or scale it in the world, applied to its affine."),
   },
   set_view: {
     ...TAB_ARG,
     slice: z
       .enum(SLICE_NAMES)
       .optional()
-      .describe("What the canvas shows: one slice orientation, all three with the render (multiplanar), or the render alone."),
-    layout: z.enum(LAYOUT_NAMES).optional().describe("How the multiplanar tiles are arranged; auto picks by the shape of the canvas."),
+      .describe(
+        "What the canvas shows: one slice orientation, all three with the render (multiplanar), or the render alone.",
+      ),
+    layout: z
+      .enum(LAYOUT_NAMES)
+      .optional()
+      .describe("How the multiplanar tiles are arranged; auto picks by the shape of the canvas."),
     mosaic: z
       .string()
       .optional()
@@ -137,143 +260,28 @@ export const CORE_SCHEMAS = {
       .enum(SHOW_RENDER_NAMES)
       .optional()
       .describe("Whether the multiplanar view includes the render tile; auto adds it when there is room."),
-    radiological: z.boolean().optional().describe("Radiological convention: the subject's left on the right of the picture."),
+    radiological: z
+      .boolean()
+      .optional()
+      .describe("Radiological convention: the subject's left on the right of the picture."),
     colorbar: z.boolean().optional().describe("Whether a colorbar is drawn."),
   },
   screenshot: {
     ...TAB_ARG,
-    max_width: z.number().int().min(64).max(4096).optional().describe("Scale the picture down to at most this many pixels wide. 1024 otherwise."),
+    max_width: z
+      .number()
+      .int()
+      .min(64)
+      .max(4096)
+      .optional()
+      .describe("Scale the picture down to at most this many pixels wide. 1024 otherwise."),
   },
+  ...VOLUME_SCHEMAS,
+  ...SETTING_SCHEMAS,
+  ...LAYER_SCHEMAS,
+  ...MARK_SCHEMAS,
+  ...EXTRA_SCHEMAS,
 } as const;
-
-/** What a tool handler has to work with. */
-export interface ToolContext {
-  bridge: Bridge;
-  /** Where the page is, for `new_tab` to give an address that opens one; unset when not known. */
-  pageUrl?: string;
-  /**
-   * Puts `method` to the answering tab, or to the tab `options.tab` names,
-   * and shapes the reply: `lead` gives a line to say above the JSON,
-   * `image` picks a picture out of the result, which goes as an image
-   * block and is left out of the JSON. A thrown error, from the
-   * page or the bridge, becomes an error reply.
-   */
-  answer(method: string, params?: Record<string, unknown>, options?: AnswerOptions): Promise<ToolReply>;
-  reply(result: unknown, lead?: string): ToolReply;
-  failure(error: unknown): ToolReply;
-}
-
-export interface ReplyShape {
-  lead?: (result: unknown, tab: TabInfo) => string | undefined;
-  /** The picture in the result; the result's `data` and `mimeType` then stay out of the text. */
-  image?: (result: unknown) => { data: string; mimeType: string } | undefined;
-  /** Put the answering tab into the JSON. */
-  withTab?: boolean;
-}
-
-export interface AnswerOptions extends ReplyShape {
-  /** The id of the tab to ask, as `TAB_ARG` takes it; the answering tab otherwise. */
-  tab?: string;
-}
-
-/** Something that adds tools to the server: the app's own, over the core's. */
-export interface Extension {
-  name: string;
-  register(server: McpServer, context: ToolContext): void;
-}
-
-export function reply(result: unknown, lead?: string): ToolReply {
-  const text = JSON.stringify(result, null, 2);
-  return { content: [{ type: "text", text: lead ? `${lead}\n${text}` : text }] };
-}
-
-export function failure(error: unknown): ToolReply {
-  const text = error instanceof Error ? error.message : String(error);
-  return { isError: true, content: [{ type: "text", text }] };
-}
-
-/** A context over this bridge. */
-export function toolContext(bridge: Bridge, options: { pageUrl?: string } = {}): ToolContext {
-  return {
-    bridge,
-    ...(options.pageUrl === undefined ? {} : { pageUrl: options.pageUrl }),
-    reply,
-    failure,
-    async answer(method, params = {}, options = {}) {
-      try {
-        const { result, tab, reloaded } = await bridge.call(method, params, options.tab);
-        const lines: string[] = [];
-        if (reloaded) lines.push(reloadNotice(tab, reloaded));
-        const lead = options.lead?.(result, tab);
-        if (lead) lines.push(lead);
-        let payload = result;
-        if (isRecord(result) && (options.withTab || reloaded)) {
-          payload = {
-            ...(options.withTab ? { tab: { id: tab.id, title: tab.title } } : {}),
-            ...result,
-            ...(reloaded ? { reloaded } : {}),
-          };
-        }
-        // The picture goes once, as an image block: with it in the text
-        // too, a reply would be twice the size and the JSON unreadable.
-        const image = options.image?.(result);
-        if (image && isRecord(payload)) {
-          const { data: _data, mimeType: _mimeType, ...rest } = payload;
-          payload = rest;
-        }
-        const out = reply(payload, lines.length ? lines.join("\n") : undefined);
-        if (image) out.content.push({ type: "image", data: image.data, mimeType: image.mimeType });
-        return out;
-      } catch (error) {
-        return failure(error);
-      }
-    },
-  };
-}
-
-/** The line that says a tab started over, and what changed. */
-export function reloadNotice(tab: TabInfo, reset: ResetReport): string {
-  const changes = describeChanges(reset.before, reset.after);
-  const when = new Date(reset.reloadedAt).toISOString();
-  const head = `Note: the tab "${tab.title}" reloaded at ${when}, since the last call, so its scene started over.`;
-  return changes.length ? `${head} Changed: ${changes.join("; ")}.` : `${head} Nothing it reported has changed.`;
-}
-
-function describeChanges(before: TabState | null, after: TabState | null): string[] {
-  const keys = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
-  const changes: string[] = [];
-  for (const key of keys) {
-    const was = brief(key, before?.[key]);
-    const now = brief(key, after?.[key]);
-    if (was !== now) changes.push(`${key} was ${was}, now ${now}`);
-  }
-  return changes;
-}
-
-function brief(key: string, value: unknown): string {
-  if (value === undefined || value === null) return "unset";
-  if (key === "plane" && isRecord(value) && typeof value.name === "string") return value.name;
-  if (key === "crosshair" && isRecord(value) && Array.isArray(value.mm)) {
-    return `[${(value.mm as number[]).map((n) => Math.round(n)).join(", ")}] mm`;
-  }
-  return typeof value === "string" ? value : JSON.stringify(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** The address that opens the page as the tab `id`, or null without a page address. */
-export function tabAddress(pageUrl: string | undefined, id: string): string | null {
-  if (!pageUrl) return null;
-  try {
-    const url = new URL(pageUrl);
-    url.searchParams.set(TAB_PARAM, id);
-    return url.href;
-  } catch {
-    return null;
-  }
-}
 
 /** A line that says what the view shows: the slice type, and the mosaic when one is drawn. */
 export function describeView(state: ViewState): string {
@@ -342,7 +350,9 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
       const url = tabAddress(context.pageUrl, id);
       return reply(
         { id, ...(url ? { url } : {}) },
-        url ? `Open ${url} to connect a tab with the id ${id}.` : `Open the page with ?${TAB_PARAM}=${id} in its address to connect a tab with that id.`,
+        url
+          ? `Open ${url} to connect a tab with the id ${id}.`
+          : `Open the page with ?${TAB_PARAM}=${id} in its address to connect a tab with that id.`,
       );
     },
   );
@@ -358,7 +368,10 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
       inputSchema: CORE_SCHEMAS.load_volume,
     },
     async ({ tab, ...params }) =>
-      context.answer("load_volume", params, { tab, lead: (r) => `Loaded ${(r as { name?: string })?.name ?? "the volume"}.` }),
+      context.answer("load_volume", params, {
+        tab,
+        lead: (r) => `Loaded ${(r as { name?: string })?.name ?? "the volume"}.`,
+      }),
   );
 
   server.registerTool(
@@ -429,13 +442,17 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
       inputSchema: CORE_SCHEMAS.go_to_region,
     },
     async ({ tab, region, plane }) =>
-      context.answer("go_to_region", { region, plane }, {
-        tab,
-        lead: (r) => {
-          const said = (r as { description?: string })?.description;
-          return said ? `Moved to ${said}` : undefined;
+      context.answer(
+        "go_to_region",
+        { region, plane },
+        {
+          tab,
+          lead: (r) => {
+            const said = (r as { description?: string })?.description;
+            return said ? `Moved to ${said}` : undefined;
+          },
         },
-      }),
+      ),
   );
 
   server.registerTool(
@@ -443,21 +460,26 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
     {
       title: "Go to a point",
       description:
-        "Moves the crosshair to a point given in the loaded volume's world millimetres and cuts the " +
+        "Moves the crosshair to a point given in the loaded volume's world millimetres, or as a " +
+        "voxel of the base volume, and cuts the " +
         "volume with a plane through it, facing the render camera at the cut, as go_to_region does " +
         "for an atlas region. Works in any space, so it reaches structures of a subject's own scan, " +
         "for example a segmentation label's centroid. `label` names what is there for the listener. " +
         "`plane` names the side the cut takes off, or a slice orientation; `current` keeps the cut.",
       inputSchema: CORE_SCHEMAS.go_to_point,
     },
-    async ({ tab, mm, plane, label }) =>
-      context.answer("go_to_point", { mm, plane, label }, {
-        tab,
-        lead: (r) => {
-          const said = (r as { description?: string })?.description;
-          return said ? `Moved to ${said}` : undefined;
+    async ({ tab, mm, vox, plane, label }) =>
+      context.answer(
+        "go_to_point",
+        { mm, vox, plane, label },
+        {
+          tab,
+          lead: (r) => {
+            const said = (r as { description?: string })?.description;
+            return said ? `Moved to ${said}` : undefined;
+          },
         },
-      }),
+      ),
   );
 
   server.registerTool(
@@ -468,7 +490,9 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
         "Cuts the volume with a whole plane named for the side it takes off (left, right, anterior, " +
         "posterior, superior, inferior) or a slice orientation (sagittal, coronal, axial), at a depth " +
         "along its normal, and turns the render camera to face the cut unless told not to. `off` " +
-        "removes the cut and leaves the camera where it is.",
+        "removes the cut and leaves the camera where it is. A plane can instead be given by the " +
+        "azimuth and elevation of its normal; `index` picks one of the six planes NiiVue keeps, " +
+        "and `planes` sets several at once.",
       inputSchema: CORE_SCHEMAS.set_clip_plane,
     },
     async ({ tab, ...params }) =>
@@ -483,9 +507,10 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
     {
       title: "Turn the render camera",
       description:
-        "Points the render camera from the given azimuth and elevation. Note that when the page " +
-        "ties its clip plane to the camera (brainsonify's Clip slider does above zero), the turn " +
-        "re-cuts the plane the page's way.",
+        "Points the render camera from the given azimuth and elevation, pans the 2D view or the " +
+        "render, sets the point the render turns about or centres it on one, or places a free " +
+        "camera with `global`. Only what is given changes. Note that when the page " +
+        "ties its clip plane to the camera, a turn re-cuts the plane the page's way.",
       inputSchema: CORE_SCHEMAS.set_camera,
     },
     async ({ tab, ...params }) => context.answer("set_camera", params, { tab }),
@@ -496,11 +521,13 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
     {
       title: "Change how a volume is drawn",
       description:
-        "Changes how one loaded volume is drawn, leaving the rest as it is: its colormap, its " +
-        "opacity, its display window (`cal_min` and `cal_max`, the intensities drawn as the " +
-        "colormap's darkest and brightest colours), the frame shown of a 4D volume, or whether the " +
-        "colormap is inverted. `volume` is an index as where_am_i lists them, or a name; the base " +
-        "volume otherwise. Reports the volume as it is drawn now, with the intensities it spans.",
+        "Changes how one loaded volume is drawn, leaving the rest as it is: its colormap (and " +
+        "one for negative values), its opacity, its display window (`cal_min` and `cal_max`, the " +
+        "intensities drawn as the colormap's darkest and brightest colours), how the colormap " +
+        "spans it, the frame shown of a 4D volume, the colorbar, sampling, atlas outline, a label " +
+        "table, modulation by another volume, and its place in the world (an affine outright, a " +
+        "translation, rotation and scale, or a reset). `volume` is an index as where_am_i lists " +
+        "them, or a name; the base volume otherwise. Reports the volume as it is drawn now.",
       inputSchema: CORE_SCHEMAS.set_volume,
     },
     async ({ tab, ...params }) =>
@@ -547,18 +574,28 @@ export function registerCoreTools(server: McpServer, context: ToolContext): void
       annotations: { readOnlyHint: true },
     },
     async ({ tab, max_width }) =>
-      context.answer("screenshot", { max_width }, {
-        tab,
-        image: (r) => {
-          const shot = r as { data?: string; mimeType?: string };
-          return shot?.data && shot.mimeType ? { data: shot.data, mimeType: shot.mimeType } : undefined;
+      context.answer(
+        "screenshot",
+        { max_width },
+        {
+          tab,
+          image: (r) => {
+            const shot = r as { data?: string; mimeType?: string };
+            return shot?.data && shot.mimeType ? { data: shot.data, mimeType: shot.mimeType } : undefined;
+          },
+          lead: (r) => {
+            const shot = r as { width?: number; height?: number };
+            return shot?.width ? `${shot.width}×${shot.height} pixels.` : undefined;
+          },
         },
-        lead: (r) => {
-          const shot = r as { width?: number; height?: number };
-          return shot?.width ? `${shot.width}×${shot.height} pixels.` : undefined;
-        },
-      }),
+      ),
   );
+
+  registerVolumeTools(server, context);
+  registerSettingTools(server, context);
+  registerLayerTools(server, context);
+  registerMarkTools(server, context);
+  registerExtraTools(server, context);
 }
 
 /** An MCP server with the core tools and each extension's, over one bridge. */
@@ -569,11 +606,14 @@ export function buildServer(options: {
   version?: string;
   /** Where the page is, for `new_tab`. */
   pageUrl?: string;
-  /** What an agent reads when it connects: what the page shows and can fetch, which the tools cannot know. */
+  /** What an agent reads on connecting: what the page shows and can fetch. */
   instructions?: string;
 }): McpServer {
   const server = new McpServer(
-    { name: options.name ?? "niivue", version: options.version ?? "0.1.0" },
+    {
+      name: options.name ?? "niivue",
+      version: options.version ?? "0.1.0",
+    },
     options.instructions === undefined ? {} : { instructions: options.instructions },
   );
   const context = toolContext(options.bridge, { pageUrl: options.pageUrl });

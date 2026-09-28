@@ -47,7 +47,16 @@ describe("the core", () => {
 
   it("names a schema for every core tool and no others", () => {
     expect(Object.keys(CORE_SCHEMAS).sort()).toEqual(
-      ["list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_view", "screenshot"].sort(),
+      [
+        "list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region",
+        "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_view", "screenshot",
+        "nudge_crosshair", "transform_volume", "remove_volume", "reorder_volume", "describe_volume",
+        "get_options", "set_options", "capabilities", "add_colormap", "set_font", "set_custom_layout",
+        "load_mesh", "list_meshes", "set_mesh", "remove_mesh", "add_mesh_layer", "set_mesh_layer", "remove_mesh_layer",
+        "load_signal", "list_signals", "set_signal", "remove_signal", "set_graph",
+        "edit_drawing", "list_annotations", "edit_annotations", "list_measurements", "edit_measurements",
+        "set_viewport", "map_point", "set_slide", "chunk_stats", "save", "load_document",
+      ].sort(),
     );
   });
 });
@@ -64,7 +73,7 @@ describe("the server and the page", () => {
   /** The three the server answers itself; the page never sees them. */
   const serverSide = ["list_tabs", "use_tab", "new_tab"];
 
-  it("offer and answer the same eighteen tools", async () => {
+  it("offer and answer the same fifty-two tools", async () => {
     const server = buildServer({ bridge: new Bridge(), extensions: [brainsonify] });
     const [clientEnd, serverEnd] = InMemoryTransport.createLinkedPair();
     await server.connect(serverEnd);
@@ -72,7 +81,7 @@ describe("the server and the page", () => {
     await client.connect(clientEnd);
     try {
       const offered = (await client.listTools()).tools.map((tool) => tool.name).sort();
-      expect(offered).toHaveLength(18);
+      expect(offered).toHaveLength(52);
       expect(offered).toEqual([...serverSide, ...Object.keys(pageHandlers)].sort());
       expect(offered).toEqual([...Object.keys(CORE_SCHEMAS), ...Object.keys(BRAINSONIFY_SCHEMAS)].sort());
     } finally {

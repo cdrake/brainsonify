@@ -68,6 +68,10 @@ const view: View = {
     volumes.splice(0, volumes.length, ...next.map(shown));
   },
   addVolume: async (volume) => {
+    if (!("url" in volume)) {
+      volumes.push({ name: volume.name ?? "transformed" });
+      return;
+    }
     await fetching(volume);
     volumes.push(shown(volume));
   },

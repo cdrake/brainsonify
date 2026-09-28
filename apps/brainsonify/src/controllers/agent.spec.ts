@@ -75,6 +75,7 @@ describe("brainsonifyState", () => {
       getClipPlaneDepthAziElev: () => [2, 0, 0] as [number, number, number],
       setClipPlane: () => {},
       loadVolumes: async () => {},
+      addVolume: async () => {},
       drawScene: () => {},
       model: { mm2scene: (mm: number[]) => mm, scene2mm: (f: number[]) => f },
     };

@@ -2221,7 +2221,67 @@ this commit mirrors.
   `mni152.nii.gz` header's own `cal_min`/`cal_max`, and the render is
   right for it.
 
+## Entry 34 — 28 September 2026
+
+The core grows from 14 tools to 48, one for every public NiiVue API that
+takes and returns serializable state; mono adc3b83f (on top of 36155454)
+is what this commit mirrors. mono's pull request #214 carries it.
+
+- The tools, by group. Volumes: `nudge_crosshair`, `transform_volume`,
+  `remove_volume`, `reorder_volume`, `describe_volume`; `set_volume`
+  takes every drawing field plus the affine and a transform;
+  `set_clip_plane` and `set_camera` take NiiVue's full argument sets;
+  `go_to_point` takes voxels. Settings: `get_options`, `set_options` and
+  `capabilities` over a typed table of NiiVue's options (`settings.ts`)
+  that coerces choices, colours, vectors and bounds; `add_colormap`,
+  `set_font`, `set_custom_layout`. Meshes: `load_mesh`, `list_meshes`,
+  `set_mesh`, `remove_mesh` and the three mesh-layer tools. Signals:
+  `load_signal`, `list_signals`, `set_signal`, `remove_signal`,
+  `set_graph`. Marks: `edit_drawing`, `list_annotations`,
+  `edit_annotations`, `list_measurements`, `edit_measurements`. The
+  canvas and files: `set_viewport`, `map_point`, `set_slide`,
+  `chunk_stats`, `save`, `load_document`.
+- The `View` interface moved to `browser/view.ts` and is typed member by
+  member. Twelve members are required (the old eleven plus `addVolume`);
+  everything else is optional, and a handler whose members the page's
+  NiiVue lacks refuses in words ("This page's NiiVue cannot ...") while
+  every other tool answers. `apps/brainsonify` passes its NiiVue
+  1.0.0-rc.14 as the view unchanged and typechecks; the one fake view in
+  `agent.spec.ts` gained `addVolume`.
+- Two typings were loosened so a real NiiVue is assignable without a
+  cast: the chunk report members return `object` (NiiVue's snapshot
+  interfaces have no index signature), and `volumeTransform` is a record
+  of a method-style signature, so a transform that takes NiiVue's own
+  volume class fits the `ShownVolume` the handler passes.
+- Handlers share parameter readers (`browser/params.ts`) and
+  `pickIndex` (`browser/pick.ts`), so every tool gives the same errors
+  for a missing field, a bad number, an unknown volume. `nameFromUrl`
+  lives in `params.ts` now; `scene.ts` re-exports it.
+- The server side splits the schemas by group (`tools-volumes.ts`,
+  `tools-settings.ts`, `tools-layers.ts`, `tools-marks.ts`,
+  `tools-extras.ts`) with `args.ts` for the shared zod pieces and
+  `context.ts` for the `Extension` and `ToolContext` types, which
+  `server/index.ts` still exports.
+- Tests: `testing/fake-view.ts` is the shared base view, and each
+  handler module has a spec (191 lib tests). `seams.spec.ts` and
+  `server.spec.ts` list the 48 core names and count 52 with the sound
+  tools. mono's `http.test.ts` stays bun-only and is not carried over.
+- The regenerated files (`scene.ts`, `tools.ts`, their specs, the three
+  index files) were produced from mono's by a converter (`.spec.ts`,
+  vitest, biome at double quotes, semicolons, width 120) rather than by
+  hand, so their comment wording is now mono's; the brainsonify-specific
+  phrasings entry 33's files had are gone from those five. The
+  normalized diff (both sides through mono's biome) shows only biome's
+  object-wrapping artifacts, the storage-key names in `client.ts`, and
+  the untouched prose deviations in `http.ts` and `bridge.ts`.
+- The README lists every tool in six tables and says which NiiVue
+  members are left out and why: DOM nodes, canvases, callbacks, loaders,
+  pointer-driven picks and live source objects belong to the page.
+
 ### next
 
-- push `feat/mcp` and open the mono pull request, pointing at this
-  commit as the brainsonify side that matches.
+- the mono pull request #214 is open with this work; brainsonify's
+  `libs/niivue-mcp` becomes a dependency on `@niivue/nv-mcp` once it is
+  published.
+- an agent-driven pass over the new tools against the real page, as
+  entry 32 did for the first fourteen.

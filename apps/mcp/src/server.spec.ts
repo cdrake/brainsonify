@@ -19,7 +19,16 @@ import { BRAINSONIFY_SCHEMAS } from "./brainsonify";
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
 
-const CORE_TOOLS = ["list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_view", "screenshot"];
+const CORE_TOOLS = [
+  "list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region",
+  "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_view", "screenshot",
+  "nudge_crosshair", "transform_volume", "remove_volume", "reorder_volume", "describe_volume",
+  "get_options", "set_options", "capabilities", "add_colormap", "set_font", "set_custom_layout",
+  "load_mesh", "list_meshes", "set_mesh", "remove_mesh", "add_mesh_layer", "set_mesh_layer", "remove_mesh_layer",
+  "load_signal", "list_signals", "set_signal", "remove_signal", "set_graph",
+  "edit_drawing", "list_annotations", "edit_annotations", "list_measurements", "edit_measurements",
+  "set_viewport", "map_point", "set_slide", "chunk_stats", "save", "load_document",
+];
 const SOUND_TOOLS = Object.keys(BRAINSONIFY_SCHEMAS);
 
 async function freePort(): Promise<number> {
