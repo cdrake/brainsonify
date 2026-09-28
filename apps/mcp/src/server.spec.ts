@@ -19,7 +19,7 @@ import { BRAINSONIFY_SCHEMAS } from "./brainsonify";
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
 
-const CORE_TOOLS = ["list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "screenshot"];
+const CORE_TOOLS = ["list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_view", "screenshot"];
 const SOUND_TOOLS = Object.keys(BRAINSONIFY_SCHEMAS);
 
 async function freePort(): Promise<number> {
@@ -158,6 +158,20 @@ describe("the brainsonify MCP server, end to end", () => {
 
     const turned = json(await call("set_camera", { azimuth: 45, elevation: -20 }));
     expect(turned).toMatchObject({ camera: { azimuth: 45, elevation: -20 } });
+
+    const drawn = await call("set_volume", { volume: "zstat", opacity: 0.4, cal_min: 20 });
+    expect(drawn.isError).toBeUndefined();
+    expect(text(drawn)).toMatch(/^Changed zstat\.nii\.gz\./);
+    expect(json(drawn)).toMatchObject({ volume: { index: 1, name: "zstat.nii.gz", colormap: "red", opacity: 0.4, calMin: 20, calMax: 100, globalMin: 0, globalMax: 255 } });
+    const empty = await call("set_volume", { volume: "zstat", cal_max: 10 });
+    expect(empty.isError).toBe(true);
+    expect(text(empty)).toMatch(/cal_min \(20\) must not be above cal_max \(10\)/);
+
+    const laid = await call("set_view", { slice: "multiplanar", layout: "grid", colorbar: true });
+    expect(laid.isError).toBeUndefined();
+    expect(text(laid)).toMatch(/^View: multiplanar, grid layout\./);
+    expect(json(laid)).toMatchObject({ view: { slice: "multiplanar", layout: "grid", showRender: "auto", radiological: false, colorbar: true } });
+    expect(json(await call("where_am_i"))).toMatchObject({ volumes: [{ index: 0 }, { index: 1, opacity: 0.4 }], view: { slice: "multiplanar", colorbar: true } });
 
     const point = json(await call("go_to_point", { mm: [10, 20, 30], plane: "anterior" }));
     expect(point).toMatchObject({ landed: { mm: mm(10, 20, 30), frac: [0.55, 0.6, 0.65] }, plane: { name: "anterior" } });

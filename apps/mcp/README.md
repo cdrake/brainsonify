@@ -12,7 +12,7 @@ page the `new_tab` tool hands out addresses for is
 
 ## The brainsonify extension
 
-Four tools on top of the core's twelve, for an app that sonifies the voxel
+Four tools on top of the core's fourteen, for an app that sonifies the voxel
 under the crosshair and talks to a listener. Each takes the core's `tab`
 too, the id of the tab to ask:
 

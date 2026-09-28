@@ -47,7 +47,7 @@ describe("the core", () => {
 
   it("names a schema for every core tool and no others", () => {
     expect(Object.keys(CORE_SCHEMAS).sort()).toEqual(
-      ["list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "screenshot"].sort(),
+      ["list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region", "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_view", "screenshot"].sort(),
     );
   });
 });
@@ -64,7 +64,7 @@ describe("the server and the page", () => {
   /** The three the server answers itself; the page never sees them. */
   const serverSide = ["list_tabs", "use_tab", "new_tab"];
 
-  it("offer and answer the same sixteen tools", async () => {
+  it("offer and answer the same eighteen tools", async () => {
     const server = buildServer({ bridge: new Bridge(), extensions: [brainsonify] });
     const [clientEnd, serverEnd] = InMemoryTransport.createLinkedPair();
     await server.connect(serverEnd);
@@ -72,7 +72,7 @@ describe("the server and the page", () => {
     await client.connect(clientEnd);
     try {
       const offered = (await client.listTools()).tools.map((tool) => tool.name).sort();
-      expect(offered).toHaveLength(16);
+      expect(offered).toHaveLength(18);
       expect(offered).toEqual([...serverSide, ...Object.keys(pageHandlers)].sort());
       expect(offered).toEqual([...Object.keys(CORE_SCHEMAS), ...Object.keys(BRAINSONIFY_SCHEMAS)].sort());
     } finally {

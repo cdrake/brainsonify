@@ -2127,3 +2127,40 @@ sides today; mono 677c803f is the commit this one mirrors.
 
 - push `feat/mcp` and open the mono pull request, pointing at this
   commit as the brainsonify side that matches.
+
+## Entry 31 — 28 September 2026
+
+Chris asked how much of NiiVue's public API the tools reach, and picked
+`set_volume` and `set_view` as the first two to add. Built on both sides
+today; mono d2134523 is the commit this one mirrors.
+
+- `set_volume` changes how one loaded volume is drawn and leaves the
+  rest alone: colormap, opacity, the `cal_min`/`cal_max` window, the
+  frame of a 4D volume, an inverted colormap. `volume` is an index as
+  `where_am_i` lists them or a name (exact first, then a single
+  containing match; two matches refuse and list them); the base without
+  it. Only the fields asked for go to NiiVue's `setVolume`, since it
+  assigns the update onto the volume as it is and an undefined field
+  would wipe one. An empty window, a frame the volume does not have and
+  nothing to set are refused in words.
+- `set_view` sets the layout by name: `slice` (axial, coronal, sagittal,
+  multiplanar, render), `layout` (auto, column, grid, row), `mosaic`,
+  `show_render` (never, always, auto), `radiological`, `colorbar`. The
+  new `views.ts` holds the names against NiiVue 1.0's numbers so the
+  server's schemas and the page's handler agree; `nameFor` answers
+  `other` for a number it does not know. The handler does not announce:
+  main.ts already speaks on NiiVue's `sliceTypeChange`.
+- `View` gains all of this as optional members (`setVolume`,
+  `sliceType`, `multiplanarType`, `mosaicString`, `showRender`,
+  `isRadiological`, `isColorbarVisible`), and `ShownVolume` the window,
+  the span and the frame count, so a fake without them still serves the
+  other tools and the page says what it cannot do. `where_am_i` now
+  lists `volumes` with each one's window and span, and `view` when the
+  page has a layout.
+- the fake page can change a volume and has a layout; the e2e spec
+  drives both tools past it. the seams spec counts eighteen tools now.
+
+### next
+
+- push `feat/mcp` and open the mono pull request, pointing at this
+  commit as the brainsonify side that matches.

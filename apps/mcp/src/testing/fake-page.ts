@@ -10,7 +10,7 @@
  * opened from a `new_tab` address would.
  */
 
-import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type ShownVolume, type View, type VolumeToLoad } from "niivue-mcp/browser";
+import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type ShownVolume, type View, type VolumeToLoad, type VolumeUpdate } from "niivue-mcp/browser";
 
 const port = process.env.PAGE_PORT ?? "4242";
 const search = process.env.PAGE_SEARCH;
@@ -44,6 +44,10 @@ const shown = (volume: VolumeToLoad): ShownVolume => ({
   url: volume.url,
   ...(volume.colormap === undefined ? {} : { colormap: volume.colormap }),
   ...(volume.opacity === undefined ? {} : { opacity: volume.opacity }),
+  calMin: 0,
+  calMax: 100,
+  globalMin: 0,
+  globalMax: 255,
 });
 const fetching = async (volume: VolumeToLoad): Promise<void> => {
   if (volume.url.includes("missing")) throw new Error("404 Not Found");
@@ -67,6 +71,15 @@ const view: View = {
     await fetching(volume);
     volumes.push(shown(volume));
   },
+  setVolume: async (index: number, update: VolumeUpdate) => {
+    Object.assign(volumes[index], update);
+  },
+  sliceType: 4,
+  multiplanarType: 0,
+  mosaicString: "",
+  showRender: 2,
+  isRadiological: false,
+  isColorbarVisible: false,
   drawScene: () => {},
   model: {
     mm2scene: (mm) => mm.map((v) => v / 200 + 0.5),
