@@ -451,6 +451,10 @@ export function coreHandlers(host: NiiVueHost): Handlers {
       if (labels && !view.setColormapLabel) throw new Error("This page's NiiVue cannot draw label maps.");
       const opacity = Math.min(1, Math.max(0, number(params, "opacity") ?? (labels ? 0.5 : 0.7)));
       const colormap = text(params, "colormap") ?? (labels ? "gray" : "warm");
+      // NiiVue keeps the crosshair as a fraction of the scene, and a volume
+      // with a different box changes the scene, so the same fraction would
+      // land somewhere else. It is read in millimetres first and put back.
+      const before = Array.from(view.getCrosshairPos());
       // NiiVue's own add keeps whatever is shown, whether the page opened
       // with it or load_volume brought it, and a failed add leaves it as is.
       try {
@@ -465,6 +469,7 @@ export function coreHandlers(host: NiiVueHost): Handlers {
         await view.setColormapLabel?.(index, labels);
         labelled.set(added, labels);
       }
+      view.crosshairPos = new Float32Array(view.model.mm2scene([before[0], before[1], before[2]]));
       host.beforeAnswer?.();
       view.drawScene();
       return { volumes: volumesShown(), crosshair: { mm: Array.from(view.getCrosshairPos()) } };

@@ -154,7 +154,8 @@ export interface ToolContext {
   /**
    * Puts `method` to the answering tab, or to the tab `options.tab` names,
    * and shapes the reply: `lead` gives a line to say above the JSON,
-   * `image` picks a picture out of the result. A thrown error, from the
+   * `image` picks a picture out of the result, which goes as an image
+   * block and is left out of the JSON. A thrown error, from the
    * page or the bridge, becomes an error reply.
    */
   answer(method: string, params?: Record<string, unknown>, options?: AnswerOptions): Promise<ToolReply>;
@@ -164,6 +165,7 @@ export interface ToolContext {
 
 export interface ReplyShape {
   lead?: (result: unknown, tab: TabInfo) => string | undefined;
+  /** The picture in the result; the result's `data` and `mimeType` then stay out of the text. */
   image?: (result: unknown) => { data: string; mimeType: string } | undefined;
   /** Put the answering tab into the JSON. */
   withTab?: boolean;
@@ -212,8 +214,14 @@ export function toolContext(bridge: Bridge, options: { pageUrl?: string } = {}):
             ...(reloaded ? { reloaded } : {}),
           };
         }
-        const out = reply(payload, lines.length ? lines.join("\n") : undefined);
+        // The picture goes once, as an image block: with it in the text
+        // too, a reply would be twice the size and the JSON unreadable.
         const image = options.image?.(result);
+        if (image && isRecord(payload)) {
+          const { data: _data, mimeType: _mimeType, ...rest } = payload;
+          payload = rest;
+        }
+        const out = reply(payload, lines.length ? lines.join("\n") : undefined);
         if (image) out.content.push({ type: "image", data: image.data, mimeType: image.mimeType });
         return out;
       } catch (error) {

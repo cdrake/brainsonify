@@ -182,6 +182,7 @@ describe("the brainsonify MCP server, end to end", () => {
     expect(content[1].mimeType).toBe("image/png");
     expect(content[1].data?.startsWith("iVBORw0KGgo")).toBe(true);
     expect(json(shot)).toMatchObject({ width: 320, height: 240 });
+    expect(json(shot)).not.toHaveProperty("data");
 
     expect(json(await call("set_sound", { on: true }))).toEqual({ sounding: true });
     expect(text(await call("set_sound", { on: true }))).toMatch(/^Sound on\./);

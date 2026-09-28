@@ -2160,6 +2160,31 @@ today; mono d2134523 is the commit this one mirrors.
 - the fake page can change a volume and has a layout; the e2e spec
   drives both tools past it. the seams spec counts eighteen tools now.
 
+## Entry 32 — 28 September 2026
+
+Ran the mono demo (`apps/demo-mcp`) with Claude Code headless against it:
+load the MNI template, go to the left hippocampus, add the AAL atlas as
+an overlay, take a screenshot and say what is under the crosshair. Both
+new tools worked against real NiiVue 1.0. Two things did not, fixed on
+both sides today; mono 8ddec870 is the commit this one mirrors.
+
+- `add_overlay` moved the crosshair. NiiVue keeps it as a fraction of
+  the scene, and a volume with a different bounding box changes the
+  scene, so the fraction that was on the hippocampus landed somewhere
+  else once the atlas was added. The handler reads the crosshair in
+  millimetres before `addVolume` and puts it back through `mm2scene`
+  after. The spec swaps the fake's model for a bigger box inside
+  `addVolume` and checks both the millimetres and the new fraction.
+- `screenshot` carried the PNG twice, once as the image block and once
+  as base64 inside the JSON text, so a 1024-wide shot was close to a
+  megabyte and Claude Code truncated it. `answer()` now leaves the
+  result's `data` and `mimeType` out of the text when a picture goes as
+  an image block; the specs assert the JSON is width and height only.
+- Not acted on: the demo's server hint could name the volumes it serves
+  (the agent guessed a public URL first and got a 404), `labels:
+  freesurfer` on the AAL atlas gives names that do not match its
+  regions, and the demo's base window opens at 40..80.
+
 ### next
 
 - push `feat/mcp` and open the mono pull request, pointing at this
