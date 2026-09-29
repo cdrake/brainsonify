@@ -59,7 +59,6 @@ const FEATURES: Record<string, ReadonlyArray<keyof View>> = {
   ],
   meshes: [
     "meshes",
-    "loadMeshes",
     "addMesh",
     "setMesh",
     "removeMesh",

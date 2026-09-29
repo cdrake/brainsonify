@@ -2289,6 +2289,16 @@ Mirrors mono d6552a3a (fix(nv-mcp): await NiiVue's async mutations, and make a s
 
 Regenerated through the converter: browser/{meshes,scene,signals,view}.ts and the three specs. README patched by hand. Tool count unchanged at 52.
 
+## Entry 36 — 29 September 2026
+
+Mirrors mono de81994c (fix(nv-mcp): put a replacement in before dropping what it replaces), Codex's second pass over the failure paths.
+
+- Three tools destroyed the scene before their replacement had loaded, so a bad address or a failed parse left the page with less than it started with. load_signal's replace cleared the signals, then loaded; it now loads through loadSignals (appends, resets the graph window) and removes the prior signals by index only once the new one is in, so it needs removeSignal rather than removeAllSignals. load_mesh's replace went through NiiVue's loadMeshes, which clears the scene before it fetches; it now adds first and removes the prior meshes after the add succeeds, and View no longer declares loadMeshes since nothing reads it (settings.ts drops it from its key list too). transform_volume's replace removed the source, then added the result; it now adds first.
+- Specs: the replace cases check call order (add, then remove from the highest index down) and the refusal without removeSignal or removeMesh; new cases fail the load and expect the scene untouched and no remove called. Five fail without the fixes (proved by setting the source aside).
+- README: load_mesh's replace "drops the meshes shown once it has loaded".
+
+Regenerated through the converter: browser/{meshes,scene,signals,view,settings}.ts and the three specs. README patched by hand. Tool count unchanged at 52; libs 198 specs, apps/mcp 14.
+
 ### next
 
 - the mono pull request #214 is open with this work; brainsonify's
