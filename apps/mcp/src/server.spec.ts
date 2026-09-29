@@ -21,7 +21,7 @@ const appDir = join(here, "..");
 
 const CORE_TOOLS = [
   "list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region",
-  "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_view", "screenshot",
+  "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_labels", "set_view", "screenshot",
   "nudge_crosshair", "transform_volume", "remove_volume", "reorder_volume", "describe_volume",
   "get_options", "set_options", "capabilities", "add_colormap", "set_font", "set_custom_layout",
   "load_mesh", "list_meshes", "set_mesh", "remove_mesh", "add_mesh_layer", "set_mesh_layer", "remove_mesh_layer",

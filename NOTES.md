@@ -2299,6 +2299,18 @@ Mirrors mono de81994c (fix(nv-mcp): put a replacement in before dropping what it
 
 Regenerated through the converter: browser/{meshes,scene,signals,view,settings}.ts and the three specs. README patched by hand. Tool count unchanged at 52; libs 198 specs, apps/mcp 14.
 
+## Entry 37 — 29 September 2026
+
+Mirrors mono c214946d (feat(nv-mcp): label atlas regions on an exploded chunked volume), the example film's tooling.
+
+- set_volume takes `chunk_grid` (three whole numbers, or null to make the volume one texture again) and `spread` (1 or more; a volume not yet chunked is tiled 3 by 3 by 3 first). describeVolume reports `chunkGrid` and `spread` when the volume is tiled. ShownVolume gains `chunkPlan` and `chunkExplode`; View gains setVolumeChunkGrid, setVolumeChunkExplode, chunkBrickIndexAt, chunkBrickCornersAt, setVolumeBrickOpacity and whenChunkStreamSettles, all optional.
+- New tool set_labels: text labels tied by a line to an atlas region's centroid (its spoken name unless `text` is given) or to a point in mm with its own text. On a tiled volume each label names and outlines its brick (the page gets the corners as `boxMM`) and `dim_others` sets the opacity of every brick holding no label through setVolumeBrickOpacity; every call replaces the labels and the dimming, `clear` takes them down. The page draws them through a new optional `labels` hook on NiiVueHost (PointLabel exported from the browser entry); a page without one declines.
+- screenshot awaits whenChunkStreamSettles before drawing: a chunked volume streams its bricks over the frames after the grid is set, and again after a change that rebuilds them (volumeIllumination on, say), so a frame drawn at once showed part of the volume or none of it.
+- Specs: tiling, spreading and their refusals; labels at centroids and points, brick naming and dimming, brick counting from the plan, clearing, and the refusals (unknown or ambiguous region, a point without text, no hook, dim_others on an untiled volume); the screenshot's settle wait ordered before the draw. Schema specs cover the two new set_volume keys, set_labels' keys, and the refusals of a bad spread, grid or labels value.
+- README: the set_volume row, a set_labels row, the screenshot row, and the `labels` hook in the host example.
+
+Regenerated through the converter: browser/{scene,view,index}.ts, server/tools.ts and their two specs. README patched by hand. Tool count 52 to 53 (seams.spec.ts and server.spec.ts name the new tool); libs 208 specs, apps/mcp 14. The brainsonify page has no `labels` hook yet, so set_labels declines there until one is added.
+
 ### next
 
 - the mono pull request #214 is open with this work; brainsonify's
