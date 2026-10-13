@@ -53,7 +53,7 @@ cache hit rather than a rebuild.
 apps/brainsonify/   Vite app: NiiVue canvas, pointer sampling, control panel
 apps/mcp/           Bun process: the MCP server agents connect to, the NiiVue core plus the sound tools
 libs/sonification/  Framework-free audio core: intensity -> frequency, Web Audio voice
-libs/control/       Control API: the parameter schema, a state store with events and undo, the knob surface
+libs/control/       Control API: the parameter schema, a state store with events and undo, the Helm surface
 libs/niivue-mcp/    The generic NiiVue MCP core: tabs, the core tools, plane math, region matching; knows nothing of brainsonify
 ```
 
@@ -78,7 +78,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `apps/brainsonify/src/region-names.ts` | The spoken name of every AAL region in anatomical English, `left inferior frontal gyrus, triangular part`; a label not in the table gets a name generated from its parts |
 | `libs/control/src/schema.ts` | The panel's parameters: range, step, default and spoken name for each |
 | `libs/control/src/controller.ts` | `ControlAPI`: a validated state store with change events and undo |
-| `libs/control/src/surface.ts` | `ControlSurface`: one knob, its modes and step sizes, and what it says |
+| `libs/control/src/surface.ts` | `ControlSurface`: the Helm, its modes and step sizes, and what it says |
 | `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
 | `libs/niivue-mcp/src/planes.ts`, `regions.ts`, `names.ts` | Shared by both ends: the plane through a point and the camera that faces it, region matching, the AAL spoken names |
@@ -287,8 +287,8 @@ registry that drives the switcher, the default, and the visible controls.
   explores at. The taps get the same treatment, since 1800 Hz sits near the peak
   of the ear's sensitivity and a tap at full scale was some 13 dB louder than a
   low tone at full scale.
-- **The knob.** The app is built for two people at once: a listener who turns
-  one knob and hears the result, and a technician who presses buttons that
+- **The Sonaview Helm.** The app is built for two people at once: a listener who turns
+  one hand-held device, the Sonaview Helm (the Helm for short), and hears the result, and a technician who presses buttons that
   change what turning does. `ControlSurface` in `libs/control` is that
   arrangement with nothing physical in it. A turn moves the crosshair along
   one axis, slides the cut plane along its own axis (the wheel's move over
@@ -298,15 +298,15 @@ registry that drives the switcher, the default, and the visible controls.
   the focused parameter in the panel's order, center the crosshair, or jump to
   the next whole plane in the same cycle as `c`, read back from the scene so
   the two stay in step; either one also turns the render camera to face the
-  new cut, since the face is only on the near side from there. Pressing the knob never changes anything: it says
+  new cut, since the face is only on the near side from there. Pressing the Helm never changes anything: it says
   where the crosshair is, region first when the atlas fits, or what the
   focused parameter reads. A shared device needs one gesture the listener can
   make freely, and that is it. Every button press is announced into the
   crosshair live region and, while sound is on, out loud, since a listener
-  otherwise has no way to know the knob now does something else; numeric
+  otherwise has no way to know the Helm now does something else; numeric
   nudges are silent, because the sound is the feedback. NiiVue's own keys
   over the canvas are announced the same way: `v` says the view it changed
-  to, and `c` names the plane it cut, as the knob does. So does the Clip
+  to, and `c` names the plane it cut, as the Helm does. So does the Clip
   slider, but only when it turns the cut on or off, not while it is dragged.
   The virtual controller
   is a keyboard: `controllers/keys.ts` is the whole protocol, chosen around the
@@ -314,12 +314,12 @@ registry that drives the switcher, the default, and the visible controls.
   presenting itself as a Bluetooth keyboard sends the same keys
   ([docs/control/CROWPANEL.md](docs/control/CROWPANEL.md)). The panel and the
   control API hold the same values and each follows the other: a slider
-  reaches the API through the panel's change listener, the knob reaches the
+  reaches the API through the panel's change listener, the Helm reaches the
   sliders through the API's, and a value already held is not written again,
   so neither direction loops. `panel.spec.ts` checks the schema against
-  `index.html` so the two cannot drift. The knob's step size is separate from
+  `index.html` so the two cannot drift. The Helm's step size is separate from
   the step select beside the crosshair buttons: that select belongs to the
-  buttons, the knob's belongs to the knob.
+  buttons, the Helm's belongs to the Helm.
 
 ## Controls
 
@@ -345,7 +345,7 @@ registry that drives the switcher, the default, and the visible controls.
 | Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |
 | Line / Lines / Rest | The sweep's pace: seconds per line, lines to a face, and the silence between lines, up to 3 s; each sweep condition sets its own on entry |
 | Lines run | Which cardinal direction each line is read in: left to right, right to left, top to bottom, bottom to top; rows always step top down and columns left to right |
-| Knob | `↑` `↓` turn, `Enter` press and hear where you are; `1`–`5` pick what a turn moves (left/right, back/front, down/up, cut plane, parameter), `0` the next mode; `[` `]` the parameter, `s` the step size, `Home` centers, `n` the next whole plane. Works anywhere on the page outside a form control |
+| Helm | `↑` `↓` turn, `Enter` press and hear where you are; `1`–`5` pick what a turn moves (left/right, back/front, down/up, cut plane, parameter), `0` the next mode; `[` `]` the parameter, `s` the step size, `Home` centers, `n` the next whole plane. Works anywhere on the page outside a form control |
 
 Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
 demo volumes are fetched from `niivue.github.io` at runtime and are not stored
@@ -439,7 +439,7 @@ scalp rather than on the face. The turn comes first because it fires
 Clip slider made of that. The reply carries the camera angles as well as
 the plane's. The voxel under
 the crosshair is then sampled the way a crosshair button samples it, and the
-place is announced through the same path as the knob: into the live region,
+place is announced through the same path as the Helm: into the live region,
 and out loud while sound is on. Navigation needs the loaded scan to be in
 MNI space; on the whole-head T1 the tool declines rather than name regions
 that are not there. The **Clip** slider still ties the plane to the camera

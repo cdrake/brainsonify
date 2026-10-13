@@ -12,6 +12,23 @@ where the plane currently is, and when something has finished loading.
 
 ## Before the listener sits down
 
+The page opens on a **Starting a session** screen that walks these steps in
+order: load the image, fit the headphones, hand over the Helm, explain the
+Helm (with a short script to read aloud), and start. **Start session** there
+does the same as **Enable sound** below. **Skip** closes it to set up from the
+panel instead. **Session steps** in the panel brings it back mid-session.
+
+The page is built for a shared tablet passed from patient to patient, so
+every load is a new session and opens on these steps. When a patient is done,
+tap **End session** in the panel, then tap it again within a few seconds (the
+first tap only arms it, so a stray tap cannot end a session). That turns the
+sound off, clears the patient's scan from the screen and from memory, and
+opens the steps for the next patient. The experiment you picked and whether
+the panel is hidden carry over. Reloading the page does the same, without the
+second tap.
+
+The rest of this section is the same ground in more detail.
+
 Load the scan (a demo button, or drop a `.nii` / `.nii.gz` file on the page)
 and pick the **Experiment** at the top that matches what you're demonstrating
 — the numbered switcher runs 01 (pitch only) through 11 (the radar sweep
@@ -44,6 +61,12 @@ is where the cut face is. They rearrange to fit the window — side by side
 when it is wide, stacked when it is tall, two by two otherwise — so the
 render is not always bottom right, but it is always there. If a listener's
 setup is a wide, short window, expect it to be the rightmost tile.
+
+**Hide panel**, at the top right of the scan, folds the panel away so the
+scan gets the whole window; **Show panel** in the same corner brings it back.
+The Helm and the spoken announcements keep working while it is folded, and
+the browser remembers the choice, so a tablet set up for the scan alone stays
+that way.
 
 The render is a `<canvas>`, and browsers only send it keyboard shortcuts
 once you've clicked it — **click once on the 3D render before you try `c`
@@ -80,7 +103,7 @@ cut from that side, so the face is what you see and what the pointer reads:
 7. Off — nothing clipped, the whole head/brain visible; the camera stays where it was
 8. back to Posterior, and the cycle repeats
 
-The knob's next plane (`n`) walks the same ring and turns the camera the
+The Helm's next plane (`n`) walks the same ring and turns the camera the
 same way. If you have dragged the render to some other angle, the next
 whole plane snaps it back to face the cut.
 
@@ -146,10 +169,11 @@ or faster, and say what you changed. **Lines run** picks which way each
 line is read: left to right, right to left, top to bottom, or bottom to
 top. Say which way the lines now run, since the sound alone does not.
 
-## The knob
+## The Sonaview Helm
 
-The knob is the listener's; its buttons are yours. Until the rotary panel
-arrives, the knob is the keyboard: `↑` and `↓` turn it, `Enter` presses it,
+The Sonaview Helm, the Helm for short, is the hand-held device the listener
+turns and presses to move through the scan. The Helm is the listener's; its
+buttons are yours. Until the rotary panel arrives, the Helm is the keyboard: `↑` and `↓` turn it, `Enter` presses it,
 and the number keys and a few letters are the buttons. The panel will send
 these same keys over Bluetooth, so nothing in this section changes when it
 does.
@@ -166,24 +190,24 @@ What a turn does depends on the mode, and the mode is yours to set:
 - `Home` centers the crosshair; `n` jumps to the next whole plane, the same
   cycle as `c`, and the two stay in step
 
-Every one of those is said out loud while sound is on — "Knob moves the cut
+Every one of those is said out loud while sound is on — "Helm moves the cut
 plane." — so you don't have to announce the change itself, but you should
 still say why: "I'm handing you the cut plane now, turn it to go deeper."
-Turning a slider value with the knob is silent, the sound is the feedback;
+Turning a slider value with the Helm is silent, the sound is the feedback;
 switching an on/off or a list setting is spoken.
 
-Pressing the knob changes nothing. It says where the crosshair is — region
+Pressing the Helm changes nothing. It says where the crosshair is — region
 first on an MNI scan, then left/right, front/back and height — or, in
 parameter mode, what that parameter reads. Tell the listener that up front:
 it is the one thing they can do freely, whenever they lose track, without
 undoing anything.
 
 The keys work from anywhere on the page except inside a slider, list or
-button, so click on empty space before handing over. The **Knob:** line
-under the crosshair buttons shows what the knob does right now, its step
+button, so click on empty space before handing over. The **Helm:** line
+under the crosshair buttons shows what the Helm does right now, its step
 size, and the focused parameter's value; glance at it when a listener asks
 what turning will do. The step-size select beside the crosshair buttons is
-for those buttons only; the knob's step size is set with `s`.
+for those buttons only; the Helm's step size is set with `s`.
 
 ## Letting an agent drive
 
@@ -191,7 +215,7 @@ An agent connected over MCP can do the region step for you: `go_to_region`
 puts the crosshair on a region's centroid, cuts a plane through it so the
 region is on the exposed face, turns the render to look at that face from
 the side the cut took off, sounds the voxel there and announces the
-place the way the knob does. For that to work the app must be open with
+place the way the Helm does. For that to work the app must be open with
 `?agent` in its address (the dev server does it without), the MCP server
 must be running (`bun run mcp`), and the scan must be the MNI152 demo or
 another MNI-space volume. The line under the crosshair buttons says whether
@@ -203,7 +227,7 @@ something is about to happen. An agent keeps the plane you have cut unless
 it asks for another, so set the orientation first if it matters, and leave
 the **Clip** slider at zero while an agent is driving, since above zero a
 camera turn re-cuts the plane the slider's way. `where_am_i` is the agent's
-version of pressing the knob and changes nothing.
+version of pressing the Helm and changes nothing.
 
 ## Quick troubleshooting
 

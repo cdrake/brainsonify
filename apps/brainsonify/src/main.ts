@@ -42,6 +42,8 @@ import { type PlanarLayout, planarLayout } from "./layout";
 import { VoxelSampler, type Sample } from "./sampler";
 import { colormapLut, projectToCanvas, vox2mm } from "./geometry";
 import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
+import { PanelCollapse } from "./collapse";
+import { TechnicianIntro } from "./intro";
 import { KeyPlayer, browserSpeech } from "./soundkey";
 import { Controls, ExperimentNav, Readout, applyChannels, el, spokenPosition } from "./ui";
 
@@ -135,6 +137,8 @@ function fitCanvas(): void {
   nv.resize();
   scheduleOverlayDraw();
 }
+// Before the first fit, so a panel remembered as collapsed never shows.
+new PanelCollapse();
 new ResizeObserver(fitCanvas).observe(stage);
 window.addEventListener("resize", fitCanvas);
 document.addEventListener("visibilitychange", fitCanvas);
@@ -915,6 +919,7 @@ const agentHost: NiiVueHost = {
   loaded: ({ mni }) => {
     atlasFits = mni;
     refreshRange();
+    intro.volume(`An agent loaded a scan.${mni ? "" : " Not MNI space, so no region names."}`);
   },
   planeName: cutName,
   extraState: () => ({ atlas: atlas ? (atlasFits ? "ready" : "not an MNI scan") : "not loaded" }),
@@ -1176,42 +1181,65 @@ function refreshRange(): void {
   resetBoneMap();
 }
 
+/**
+ * The technician's intro reports what loaded however it was loaded: from its
+ * own buttons, the panel's, a dropped file or an agent.
+ */
+const intro = new TechnicianIntro({
+  load: (source, file) => (source === "file" ? (file ? loadFile(file) : Promise.resolve()) : loadDemo(source)),
+  start: () => (sonifier.running ? playKey() : void setSound(true)),
+  experiment: () => `${active.number} ${active.name}`,
+  // A reload is the whole reset: the patient's file, the crosshair, sound
+  // and any sweep all go, and the steps open again for the next patient.
+  // The condition is in the address and survives, as the technician's choice.
+  end: () => location.reload(),
+});
+
 async function loadFile(file: File): Promise<void> {
+  intro.volume(`Loading ${file.name}…`);
   try {
-    await nv.loadImage(file);
-  } catch {
-    await nv.loadVolumes([{ url: URL.createObjectURL(file), name: file.name }]);
+    try {
+      await nv.loadImage(file);
+    } catch {
+      await nv.loadVolumes([{ url: URL.createObjectURL(file), name: file.name }]);
+    }
+  } catch (error) {
+    intro.volume(`${file.name} could not be read.`, true);
+    throw error;
   }
   atlasFits = true;
   refreshRange();
+  intro.volume(`Loaded ${file.name}. Region names assume it is in MNI space.`);
 }
 
 el<HTMLInputElement>("file").addEventListener("change", (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
-  if (file) void loadFile(file);
+  if (file) void loadFile(file).catch(() => {});
 });
 
-function wireDemo(id: keyof typeof DEMO_VOLUMES): HTMLButtonElement {
+/** Loads one of the demo volumes, showing progress on its panel button. Rejects when the load fails. */
+async function loadDemo(id: keyof typeof DEMO_VOLUMES): Promise<void> {
   const { label, url, mni } = DEMO_VOLUMES[id];
   const button = el<HTMLButtonElement>(id);
-
-  button.addEventListener("click", async () => {
-    button.textContent = "Loading…";
-    try {
-      await nv.loadVolumes([{ url, colormap: "gray" }]);
-      atlasFits = mni;
-      refreshRange();
-      button.textContent = label;
-    } catch {
-      button.textContent = "Load failed (offline?)";
-    }
-  });
-
-  return button;
+  const name = label.replace(/^Load /, "");
+  button.textContent = "Loading…";
+  intro.volume(`Loading the ${name}…`);
+  try {
+    await nv.loadVolumes([{ url, colormap: "gray" }]);
+  } catch (error) {
+    button.textContent = "Load failed (offline?)";
+    intro.volume(`The ${name} did not load (offline?).`, true);
+    throw error;
+  }
+  atlasFits = mni;
+  refreshRange();
+  button.textContent = label;
+  intro.volume(mni ? `Loaded the ${name}. Region names are on.` : `Loaded the ${name}. Not MNI space, so no region names.`);
 }
 
-const demoBtn = wireDemo("demo");
-wireDemo("demoHead");
+for (const id of Object.keys(DEMO_VOLUMES) as Array<keyof typeof DEMO_VOLUMES>) {
+  el(id).addEventListener("click", () => void loadDemo(id).catch(() => {}));
+}
 
 /* ---------------- drag and drop ---------------- */
 
@@ -1234,4 +1262,5 @@ body.addEventListener("drop", (e) => {
 });
 
 // Something on screen from the first frame; the user can swap in their own volume.
-demoBtn.click();
+void loadDemo("demo").catch(() => {});
+intro.open();

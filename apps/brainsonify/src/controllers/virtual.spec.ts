@@ -84,7 +84,7 @@ describe("VirtualController", () => {
     expect(surface.mode).toBe("plane");
     press("5");
     expect(surface.mode).toBe("parameter");
-    expect(said.at(-1)).toBe("Knob sets Mapping, Pure tone.");
+    expect(said.at(-1)).toBe("Helm sets Mapping, Pure tone.");
   });
 
   it("walks the parameters and nudges the focused one", () => {

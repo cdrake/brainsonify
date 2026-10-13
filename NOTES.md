@@ -2318,3 +2318,130 @@ Regenerated through the converter: browser/{scene,view,index}.ts, server/tools.t
   published.
 - an agent-driven pass over the new tools against the real page, as
   entry 32 did for the first fourteen.
+
+## Entry 38 — 8 October 2026
+
+Mirrors mono 64d8f40b (docs(nv-mcp): how to connect each agent client to the server).
+
+- `libs/niivue-mcp/docs/connecting-agents.md` is mono's guide for Claude Code, the Claude desktop app, Codex CLI, Gemini CLI, VS Code, Cursor, Windsurf, stdio-only clients through mcp-remote and the TypeScript and Python SDKs, with the inspector check and the common failures. The demo's names are brainsonify's: `bun run mcp` and `bun run dev`, `BRAINSONIFY_MCP_PORT`, the "agent server connected" line under the crosshair buttons, 49 core tools plus brainsonify's four. Mono's line that the package's end-to-end checks were run with `claude -p` is dropped, since that was not done here. Its "rebuild `dist`" failure becomes "restart `bun run mcp`", because the server reads the lib's source when it starts.
+- The library README's desktop-app block is replaced by a pointer to the guide, as mono's is, and `apps/mcp/README.md` points at it too, where mono's demo README does.
+
+The converter from entry 34 was gone (nothing in the repo or the scratchpads), so we rebuilt it: mono's file through `bun:test` → `vitest`, `mock` → `vi.fn`, `.test.ts` → `.spec.ts`, then mono's biome at double quotes, semicolons, width 120. Run on da0559c9, the commit entry 37 mirrored, it reproduces every regenerated file byte for byte; what differs is the blend modes below, the import order in `tools.spec.ts`, the line wrapping in `views.ts`, and the files that were never regenerated (`client.ts`, `http.ts`, `bridge.ts`, `planes.ts`, `regions.ts` and their specs). The two commits after this one went in as a three-way merge (brainsonify's file, the converted da0559c9, the converted target), so the hand-kept differences survive. None conflicted, and the merged tree against the converted 585cf039 shows only those same hand-kept differences.
+
+## Entry 39 — 8 October 2026
+
+Mirrors mono 00acb374 (feat(nv-mcp): name the overlay blend modes in the settings table).
+
+- set_options and get_options take `volumeOverlayAlphaBlend` (max, additive, over) and `volumeOverlayColorBlend` (additive, mean) by name; the tables are exported as OVERLAY_ALPHA_BLENDS and OVERLAY_COLOR_BLENDS.
+- The page is on NiiVue 1.0.0-rc.14, which has neither option. That is not a silent no-op: set_options refuses a setting the instance does not carry ("This page's NiiVue has no … setting"), get_options leaves it out, and capabilities does not list it. They come to life when the page moves to a NiiVue that has them; we have not bumped it.
+
+Copied from the converted da0559c9 (the commit already holds them): settings.ts, index.ts, settings.spec.ts.
+
+## Entry 40 — 8 October 2026
+
+Mirrors mono 585cf039 (fix(nv-mcp): tighten the tool contracts found loose by the agent pass).
+
+- Every tool schema is strict, so an unknown or misspelt argument is an input error naming the key.
+- add_overlay takes `cal_min`, `cal_max`, `colormap_negative`, `cal_min_neg`, `cal_max_neg` and `colorbar`, and refuses a display window on a label overlay.
+- set_view takes slice `none`, which gives the canvas to the signal graph.
+- screenshot waits at most 8 s for bricks and 4 s for a busy backend, then draws what it has.
+- edit_annotations add normalizes polygons to `{outer, holes}`, takes `[x, y]` or `{x, y}` points, and fills label, group and the style NiiVue reads at draw time.
+- set_mesh checks tract and connectome options against the known keys.
+- load_signal shows a hidden graph; set_graph and list_signals say when it is hidden.
+
+Three-way merged through the converter: browser/{marks,meshes,scene,settings,signals,view}.ts and their specs, server/{args,tools,tools-layers,tools-marks}.ts, tools.spec.ts, views.ts. README rows patched by tool name; add_overlay and screenshot by hand, since brainsonify's rows carry their own wording (SynthSeg ids, "Draws the scene"). Tool count unchanged at 53; libs 222 specs, apps/mcp 14; typecheck clean across the five projects.
+
+> _To fill in: whether brainsonify's own four tools (set_sound, list_modes, set_mode, announce) should get strict schemas too._
+
+### next
+
+- mono's controls series (ceea3aab through ce136ce0: control tools, the UIKit surface, the grid layout, the data palette, tract selects) is not mirrored. it is about 4600 lines with a new `uikit/` entry and a vite config change, and mono's working tree is still moving in bindings.ts and data.ts.
+- the root README still says "Eighteen tools" and the library README's file table says "the fourteen core tools"; both are older than entry 34.
+
+---
+
+## Entry 41 — 8 October 2026
+
+### the session intro, a collapsing panel, and the knob becomes the Helm
+
+nothing committed today. this is all sitting in the working tree alongside the
+mirroring work in entries 38 to 40.
+
+**the knob is now the Sonaview Helm.** every spoken string changed: "Knob moves
+back and front." is "Helm moves back and front.", and `describeMode`'s parameter
+sentence is "Helm sets …". the README, TECHNICIAN.md and the panel's hint line
+follow. the code did not: `KnobMode`, the `knobStatus` span, the `knobHint` class
+and a few comments in the new files all still say knob.
+
+> _To fill in: why the knob got a product name now, and whether the code
+> identifiers are meant to follow or deliberately stay "knob"._
+
+**a technician intro over the page.** `intro.ts` is a native `<dialog>`, opened
+modal on every load, with five steps: load the image, fit the headphones, hand
+over the Helm, explain the Helm, start the session. step four is a script in
+quotes to read out loud. Start session turns the sound on, or replays the key if
+it is already on, and closes; Skip just closes; Session steps in the panel
+reopens it. the dialog owns no loading or sound of its own — the page passes
+`load`, `start`, `experiment` and `end` in, so the intro and the panel cannot
+disagree about what is on screen.
+
+two things it does on purpose. it has no inputs or selects, only buttons,
+because the panel specs count form controls in document order against the
+schema. and it stops `keydown` from reaching the window, since the Helm's keys
+listen there and an arrow pressed while the technician reads must not move the
+crosshair behind the dialog; closing blurs whatever had focus for the same
+reason.
+
+**End session takes two taps.** the first arms the button, turns it red and says
+"Tap again to end"; a second within `END_CONFIRM_MS` ends, otherwise it stands
+down. the reset itself is `location.reload()`, so the patient's file, the
+crosshair, sound and any sweep all go, and the condition survives because it
+lives in the address.
+
+> _To fill in: why End session reloads rather than clearing the scan and
+> resetting the state in place._
+
+> _To fill in: why the confirm window is 4 s._
+
+**every load now reports into the intro.** `loadFile` and `loadDemo` say
+"Loading …", then what loaded and whether region names are on, and mark a
+failure; the agent host's `loaded` hook reports too, so a scan an agent put up
+shows in the same line. `wireDemo` is gone — there is one `loadDemo(id)` that
+both the intro's buttons and the panel's call, looped over `DEMO_VOLUMES`
+rather than wired by name. the first frame is `loadDemo("demo")` and then
+`intro.open()`.
+
+**the panel folds away.** `collapse.ts` puts a Hide panel / Show panel button
+over the stage's top-right corner and zeroes the panel's grid column, so the
+stage's ResizeObserver refits the canvas to the whole window. collapsed, the
+panel's contents go to `visibility: hidden` rather than `display: none` or
+`inert`, because either of those would also silence the two live regions inside
+it; visibility can be turned back on for a descendant, and `[role=status]` is.
+the choice is remembered in localStorage per browser, and the instance is
+constructed before the first fit so a tablet remembered as collapsed never
+flashes the panel.
+
+**two loose ends I noticed in the diff.** the panel's note is now "Wear the
+headset" with "bone-conduction" dropped, while the README's opening paragraph
+and EXPERIMENTS.md still have the bone-conduction transducer as the longer-term
+plan. and `apps/brainsonify/package.json` moved `@niivue/niivue` off the pinned
+`1.0.0-rc.14` to `link:@niivue/niivue`, and added `link:@niivue/uikit`.
+
+> _To fill in: whether dropping "bone-conduction" from the panel note is
+> deliberate, given the README and EXPERIMENTS.md still describe the
+> transducer._
+
+> _To fill in: what the two `link:` dependencies point at, whether it is
+> temporary, and whether entry 39's overlay blend settings come to life on
+> whatever NiiVue that is._
+
+> _To fill in: whether the uikit link is the start of mono's controls series
+> that entry 40's next left unmirrored._
+
+none of this has been in front of a listener. the five steps, and the script in
+step four, are written and not tried.
+
+### next
+
+- read step four aloud to someone and see whether the words hold up.
+- decide whether the code follows the rename or keeps saying knob.

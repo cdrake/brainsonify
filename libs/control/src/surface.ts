@@ -83,10 +83,10 @@ export interface SurfaceOptions {
 }
 
 const MODE_SPOKEN: Record<KnobMode, string> = {
-  "left-right": "Knob moves left and right.",
-  "back-front": "Knob moves back and front.",
-  "down-up": "Knob moves down and up.",
-  plane: "Knob moves the cut plane.",
+  "left-right": "Helm moves left and right.",
+  "back-front": "Helm moves back and front.",
+  "down-up": "Helm moves down and up.",
+  plane: "Helm moves the cut plane.",
   parameter: "",
 };
 
@@ -203,7 +203,7 @@ export class ControlSurface {
 
   /** What the knob does right now, as a sentence. */
   describeMode(): string {
-    if (this.currentMode === "parameter") return `Knob sets ${this.reading()}`;
+    if (this.currentMode === "parameter") return `Helm sets ${this.reading()}`;
     return MODE_SPOKEN[this.currentMode];
   }
 
