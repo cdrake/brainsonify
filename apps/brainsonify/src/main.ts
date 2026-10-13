@@ -219,7 +219,7 @@ function activate(experiment: Experiment, pushHistory: boolean): void {
   applyChannels(experiment.channels);
   if (experiment.taps) controls.setTaps(experiment.taps.fastest);
   if (experiment.mode) controls.setMode(experiment.mode);
-  if (experiment.clip) nv.setClipPlane(experiment.clip);
+  if (experiment.clip) cutFacing(experiment.clip);
   // The sweep belongs to the conditions that offer it; a run left going
   // across a switch would keep sounding a condition the visitor has left.
   el("sweepRow").hidden = !experiment.sweep;
@@ -826,6 +826,16 @@ function facePlane(azimuth: number, elevationDeg: number): void {
   nv.elevation = camera.elevation;
 }
 
+/**
+ * Cuts a plane and turns the render to look straight at the face it exposes,
+ * so the cut is never seen edge-on. Turning the plane off leaves the camera
+ * where it is.
+ */
+function cutFacing(plane: readonly [number, number, number]): void {
+  if (plane[0] < PLANE_OFF) facePlane(plane[1], plane[2]);
+  nv.setClipPlane([...plane]);
+}
+
 /** The scene as the control surface sees it: fractions in, words out. */
 const knobScene: KnobScene = {
   moveCrosshair(axis, delta) {
@@ -841,11 +851,9 @@ const knobScene: KnobScene = {
   },
   nextPlane() {
     const next = WHOLE_PLANES[(ringIndex() + 1) % WHOLE_PLANES.length];
-    // A whole plane is cut to expose a face; turn to it, so the face is the
-    // near side and a depth pick over the render lands on it. Turning the
-    // plane off leaves the camera where it is.
-    if (next.plane[0] < PLANE_OFF) facePlane(next.plane[1], next.plane[2]);
-    nv.setClipPlane([...next.plane]);
+    // Facing the cut makes its face the near side, so a depth pick over the
+    // render lands on it.
+    cutFacing(next.plane);
     return next.name;
   },
   describe() {
@@ -1162,7 +1170,7 @@ function refreshRange(): void {
   const vol = nv.volumes[0];
   if (!vol) return;
   fitCanvas();
-  if (active.clip) nv.setClipPlane(active.clip);
+  if (active.clip) cutFacing(active.clip);
 
   let lo = vol.calMin ?? NaN;
   let hi = vol.calMax ?? NaN;
