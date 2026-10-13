@@ -2445,3 +2445,32 @@ step four, are written and not tried.
 
 - read step four aloud to someone and see whether the words hold up.
 - decide whether the code follows the rename or keeps saying knob.
+
+---
+
+## Entry 42 — 13 October 2026
+
+### two ideas for the tutorials: a hearing test, and haptics off a centroid
+
+nothing built yet, these are ideas to come back to.
+
+**a hearing test in the tutorials.** we add a hearing test to the tutorials.
+
+> _To fill in: why, what the test checks (each ear, a pitch range, loudness),
+> where in the tutorial it sits, and whether a result changes the mapping or
+> only tells the technician._
+
+**haptic feedback as we move away from a ROI centroid.** in the tutorials,
+the listener gets haptic feedback as the crosshair moves away from a region's
+centroid.
+
+> _To fill in: why, what gives the feedback (the Helm's panel, the tablet,
+> something worn), how it changes with distance, and whether it is only for
+> the tutorials or for sessions too._
+
+neither has been tried with a listener.
+
+### next
+
+- decide what the hearing test checks.
+- decide what gives the haptic feedback.
