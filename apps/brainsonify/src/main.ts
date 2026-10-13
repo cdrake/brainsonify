@@ -836,6 +836,27 @@ function cutFacing(plane: readonly [number, number, number]): void {
   nv.setClipPlane([...plane]);
 }
 
+/** The cut every session starts on: the coronal midline, the back taken off. */
+const SESSION_CUT: readonly [number, number, number] = [0, 0, 0];
+/**
+ * How far the camera is turned off face-on at the start. Square on, the cut
+ * face looks like one more flat slice; turned, it reads as the 3D render, and
+ * the Helm's next plane squares it up when the listener wants it.
+ */
+const SESSION_TURN = 45;
+
+/**
+ * Cuts the session's starting plane and turns the camera to see it at an
+ * angle. The camera moves first: a turn with the Clip slider up re-cuts the
+ * slider's way, and the cut that follows overrides it.
+ */
+function cutForSession(): void {
+  const camera = cameraForPlane(SESSION_CUT[1], SESSION_CUT[2]);
+  nv.azimuth = camera.azimuth + SESSION_TURN;
+  nv.elevation = camera.elevation;
+  nv.setClipPlane([...SESSION_CUT]);
+}
+
 /** The scene as the control surface sees it: fractions in, words out. */
 const knobScene: KnobScene = {
   moveCrosshair(axis, delta) {
@@ -1195,7 +1216,11 @@ function refreshRange(): void {
  */
 const intro = new TechnicianIntro({
   load: (source, file) => (source === "file" ? (file ? loadFile(file) : Promise.resolve()) : loadDemo(source)),
-  start: () => (sonifier.running ? playKey() : void setSound(true)),
+  start: () => {
+    cutForSession();
+    if (sonifier.running) playKey();
+    else void setSound(true);
+  },
   experiment: () => `${active.number} ${active.name}`,
   // A reload is the whole reset: the patient's file, the crosshair, sound
   // and any sweep all go, and the steps open again for the next patient.

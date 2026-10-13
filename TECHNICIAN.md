@@ -15,7 +15,7 @@ where the plane currently is, and when something has finished loading.
 The page opens on a **Starting a session** screen that walks these steps in
 order: load the image, fit the headphones, hand over the Helm, explain the
 Helm (with a short script to read aloud), and start. **Start session** there
-does the same as **Enable sound** below. **Skip** closes it to set up from the
+cuts the starting plane (below) and then does the same as **Enable sound**. **Skip** closes it to set up from the
 panel instead. **Session steps** in the panel brings it back mid-session.
 
 The page is built for a shared tablet passed from patient to patient, so
@@ -51,10 +51,14 @@ correctly with two ears.
 
 ## Getting oriented on screen
 
-The scan opens already cut to the **medial slice of the coronal plane**: the
-plane straight down the middle, front from back, at the midline. That's the
-starting point every session begins from, so you don't have to set it up by
-hand.
+**Start session** cuts the scan to the **medial slice of the coronal plane**:
+the plane straight down the middle, front from back, at the midline, with the
+back taken off. That's the starting point every session begins from, whatever
+the condition, so you don't have to set it up by hand. The 3D render shows the
+cut face turned 45 degrees rather than square on, so it is plain which tile
+is the render; the Helm's next plane (`n`) or `c` turns to face each whole
+plane straight on. Conditions 09 to 11 also open already cut, square on, before
+the session starts.
 
 The screen shows four tiles: three flat slices and the 3D render, which
 is where the cut face is. They rearrange to fit the window — side by side

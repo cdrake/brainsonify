@@ -20,7 +20,10 @@ export type IntroSource = "demo" | "demoHead" | "file";
 export interface IntroActions {
   /** Loads a demo, or the picked file. Rejects when the load fails. */
   load(source: IntroSource, file?: File): Promise<void>;
-  /** Turns the sound on (or replays the key if it is on already). Runs inside the click, so audio may start. */
+  /**
+   * Cuts the starting plane and turns the sound on (or replays the key if it
+   * is on already). Runs inside the click, so audio may start.
+   */
   start(): void;
   /** The active condition, as the intro names it in the Start step. */
   experiment(): string;
