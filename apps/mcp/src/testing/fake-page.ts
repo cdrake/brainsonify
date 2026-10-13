@@ -10,7 +10,7 @@
  * opened from a `new_tab` address would.
  */
 
-import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type ShownVolume, type View, type VolumeToLoad, type VolumeUpdate } from "niivue-mcp/browser";
+import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type ShownVolume, type View, type VolumeToLoad, type VolumeUpdate } from "@niivue/nv-mcp/browser";
 
 const port = process.env.PAGE_PORT ?? "4242";
 const search = process.env.PAGE_SEARCH;

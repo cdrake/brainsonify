@@ -5,21 +5,22 @@
  * real handlers against the real server without a socket.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { coreHandlers, type View } from "niivue-mcp/browser";
-import { Bridge, CORE_SCHEMAS, buildServer } from "niivue-mcp/server";
+import { coreHandlers, type View } from "@niivue/nv-mcp/browser";
+import { Bridge, CORE_SCHEMAS, buildServer } from "@niivue/nv-mcp/server";
 import { describe, expect, it } from "vitest";
 
 import { brainsonifyHandlers, type SoundHost } from "../../brainsonify/src/controllers/agent";
 import { BRAINSONIFY_SCHEMAS, brainsonify } from "./brainsonify";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const coreDir = resolve(here, "../../../libs/niivue-mcp/src");
+/** The core's source, through the link to mono's `@niivue/nv-mcp`. */
+const coreDir = realpathSync(resolve(here, "../node_modules/@niivue/nv-mcp/src"));
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -56,6 +57,8 @@ describe("the core", () => {
         "load_signal", "list_signals", "set_signal", "remove_signal", "set_graph",
         "edit_drawing", "list_annotations", "edit_annotations", "list_measurements", "edit_measurements",
         "set_viewport", "map_point", "set_slide", "chunk_stats", "save", "load_document",
+        "add_control", "list_controls", "set_control", "remove_control",
+        "list_data", "add_data", "remove_data", "load_data",
       ].sort(),
     );
   });
@@ -73,7 +76,7 @@ describe("the server and the page", () => {
   /** The three the server answers itself; the page never sees them. */
   const serverSide = ["list_tabs", "use_tab", "new_tab"];
 
-  it("offer and answer the same fifty-three tools", async () => {
+  it("offer and answer the same sixty-one tools", async () => {
     const server = buildServer({ bridge: new Bridge(), extensions: [brainsonify] });
     const [clientEnd, serverEnd] = InMemoryTransport.createLinkedPair();
     await server.connect(serverEnd);
@@ -81,7 +84,7 @@ describe("the server and the page", () => {
     await client.connect(clientEnd);
     try {
       const offered = (await client.listTools()).tools.map((tool) => tool.name).sort();
-      expect(offered).toHaveLength(53);
+      expect(offered).toHaveLength(61);
       expect(offered).toEqual([...serverSide, ...Object.keys(pageHandlers)].sort());
       expect(offered).toEqual([...Object.keys(CORE_SCHEMAS), ...Object.keys(BRAINSONIFY_SCHEMAS)].sort());
     } finally {

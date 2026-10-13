@@ -5,7 +5,7 @@
  * of Brainsonify sonification parameters from multiple input sources
  * (keyboard, mouse, hardware controllers), and the control surface that
  * turns one knob and a few buttons into changes to those parameters and
- * to the scene. What an agent can ask lives in `niivue-mcp`.
+ * to the scene. What an agent can ask lives in `@niivue/nv-mcp`.
  */
 
 export { ControlAPI } from "./controller";

@@ -28,6 +28,8 @@ const CORE_TOOLS = [
   "load_signal", "list_signals", "set_signal", "remove_signal", "set_graph",
   "edit_drawing", "list_annotations", "edit_annotations", "list_measurements", "edit_measurements",
   "set_viewport", "map_point", "set_slide", "chunk_stats", "save", "load_document",
+  "add_control", "list_controls", "set_control", "remove_control",
+  "list_data", "add_data", "remove_data", "load_data",
 ];
 const SOUND_TOOLS = Object.keys(BRAINSONIFY_SCHEMAS);
 

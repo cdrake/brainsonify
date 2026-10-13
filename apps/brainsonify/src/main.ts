@@ -2,8 +2,8 @@ import { MULTIPLANAR_TYPE, NiiVue, SHOW_RENDER, SLICE_TYPE, lookupColorMap } fro
 
 import { ControlAPI, ControlSurface, type ControlState, type KnobScene } from "@brainsonify/control";
 import { CONTROL_SCHEMA } from "@brainsonify/control";
-import { PLANE_ANGLES, PLANE_OFF, cameraForPlane, samePlane } from "niivue-mcp";
-import type { NiiVueHost } from "niivue-mcp/browser";
+import { PLANE_ANGLES, PLANE_OFF, cameraForPlane, samePlane } from "@niivue/nv-mcp";
+import type { NiiVueHost } from "@niivue/nv-mcp/browser";
 
 import {
   DEFAULT_BOUNDS,
@@ -899,7 +899,7 @@ async function requireAtlas(): Promise<Atlas> {
 }
 
 /**
- * The scene as an agent sees it, through the NiiVue core in `niivue-mcp`.
+ * The scene as an agent sees it, through the NiiVue core in `@niivue/nv-mcp`.
  *
  * The core moves the crosshair, cuts and turns the camera on its own; these
  * hooks add what only this app knows. Going to a region then does what a

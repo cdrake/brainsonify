@@ -10,7 +10,7 @@
  */
 
 import { CONTROL_SCHEMA } from "@brainsonify/control";
-import { TAB_ARG, type Extension } from "niivue-mcp/server";
+import { TAB_ARG, type Extension } from "@niivue/nv-mcp/server";
 import { z } from "zod";
 
 const MODES = (CONTROL_SCHEMA.mode.enumValues ?? []).map((choice) => choice.value) as [string, ...string[]];

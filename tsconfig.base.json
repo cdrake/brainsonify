@@ -23,15 +23,6 @@
       ],
       "@brainsonify/control": [
         "libs/control/src/index.ts"
-      ],
-      "niivue-mcp": [
-        "libs/niivue-mcp/src/index.ts"
-      ],
-      "niivue-mcp/server": [
-        "libs/niivue-mcp/src/server/index.ts"
-      ],
-      "niivue-mcp/browser": [
-        "libs/niivue-mcp/src/browser/index.ts"
       ]
     }
   },

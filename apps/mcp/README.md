@@ -1,7 +1,7 @@
 # The brainsonify MCP server
 
-`bun run mcp` from the repository root. This is the [niivue-mcp](../../libs/niivue-mcp/README.md)
-core with brainsonify's sound tools registered on it as an extension:
+`bun run mcp` from the repository root. This is the NiiVue MCP core,
+mono's `@niivue/nv-mcp`, with brainsonify's sound tools registered on it as an extension:
 `src/server.ts` names the server and picks the port, `src/brainsonify.ts`
 holds the tools, and `apps/brainsonify/src/controllers/agent.ts` answers
 them in the page.
@@ -9,10 +9,12 @@ them in the page.
 The port is 4242 unless `BRAINSONIFY_MCP_PORT` says otherwise, and the
 page the `new_tab` tool hands out addresses for is
 `http://localhost:4200/?agent` unless `BRAINSONIFY_PAGE` says otherwise.
+[connecting-agents.md](docs/connecting-agents.md)
+says how to attach each agent client to it.
 
 ## The brainsonify extension
 
-Four tools on top of the core's fourteen, for an app that sonifies the voxel
+Four tools on top of the core's fifty-seven, for an app that sonifies the voxel
 under the crosshair and talks to a listener. Each takes the core's `tab`
 too, the id of the tab to ask:
 

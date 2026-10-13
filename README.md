@@ -54,8 +54,15 @@ apps/brainsonify/   Vite app: NiiVue canvas, pointer sampling, control panel
 apps/mcp/           Bun process: the MCP server agents connect to, the NiiVue core plus the sound tools
 libs/sonification/  Framework-free audio core: intensity -> frequency, Web Audio voice
 libs/control/       Control API: the parameter schema, a state store with events and undo, the Helm surface
-libs/niivue-mcp/    The generic NiiVue MCP core: tabs, the core tools, plane math, region matching; knows nothing of brainsonify
 ```
+
+NiiVue, its UI kit and the generic NiiVue MCP core (`@niivue/nv-mcp`: tabs,
+the core tools, plane math, region matching; it knows nothing of brainsonify)
+come from a checkout of the NiiVue mono repository, linked rather than
+installed. In each of mono's `packages/niivue`, `packages/uikit` and
+`packages/nv-mcp`, build and run `bun link`; then `bun install` here. Mono's
+packages are imported from their `dist`, so a change there needs a rebuild
+there before brainsonify sees it.
 
 The split is deliberate: everything in `libs/sonification` is pure TypeScript with
 no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
@@ -81,11 +88,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `libs/control/src/surface.ts` | `ControlSurface`: the Helm, its modes and step sizes, and what it says |
 | `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
-| `libs/niivue-mcp/src/planes.ts`, `regions.ts`, `names.ts` | Shared by both ends: the plane through a point and the camera that faces it, region matching, the AAL spoken names |
-| `libs/niivue-mcp/src/server/bridge.ts` | Knows the connected tabs by id, routes each tool call to the one that answers, and notices a reload |
-| `libs/niivue-mcp/src/server/tools.ts` | The fourteen core tools over the bridge, and the `Extension` hook an app registers more through |
-| `libs/niivue-mcp/src/browser/scene.ts` | Answers the core tools from a NiiVue instance, through the hooks a host page provides |
-| `libs/niivue-mcp/src/browser/client.ts` | The page's socket: says hello with a tab id, answers requests, retries |
+| `@niivue/nv-mcp` (mono `packages/nv-mcp`) | The NiiVue MCP core: the tab bridge and the core tools on the server, the page's socket and the handlers that answer them from a NiiVue instance |
 | `apps/brainsonify/src/controllers/agent.ts` | What brainsonify adds: the sound tools' handlers, wrapped as a controller |
 | `apps/mcp/src/brainsonify.ts` | The brainsonify extension: `set_sound`, `list_modes`, `set_mode`, `announce` registered on the core |
 | `apps/mcp/src/server.ts` | The MCP server: the core plus that extension, over streamable HTTP |
@@ -365,10 +368,10 @@ server holds no anatomy of its own. Each tool call is written to the
 connected tab as one JSON request and answered with one JSON response, and
 with no tab connected the tool fails with a message saying what to open.
 
-The server is the generic NiiVue core in `libs/niivue-mcp` with
-brainsonify's sound tools registered on it; its own
-[README](libs/niivue-mcp/README.md) covers the tools, the tab routing and
-how to embed it in another NiiVue app, and
+The server is the generic NiiVue core, mono's `@niivue/nv-mcp`, with
+brainsonify's sound tools registered on it; its own README in mono's
+`packages/nv-mcp` covers the tools, the tab routing and how to embed it in
+another NiiVue app, and
 [apps/mcp/README.md](apps/mcp/README.md) covers what brainsonify adds.
 
 Each tab says hello with an id it keeps in `sessionStorage`, so a reload

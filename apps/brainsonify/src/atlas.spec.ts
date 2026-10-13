@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DWELL_MS, RegionCallout, labelStats, nearestVoxel, regionName, speakable, spokenName } from "./atlas";
-import { SPOKEN_NAMES } from "niivue-mcp";
+import { SPOKEN_NAMES } from "@niivue/nv-mcp";
 import type { Speech } from "./soundkey";
 
 describe("speakable", () => {
