@@ -29,8 +29,16 @@
       <button id="keyBtn" disabled title="Play the sound key again">Sound key</button>
       <button id="introBtn" type="button" title="Show the steps for starting a session">Session steps</button>
       <button id="endBtn" type="button" title="Clear this patient's scan and start over for the next one">End session</button>
+      <button id="tutorialBtn" type="button" title="Walk the listener and you through every Helm control">Helm tutorial</button>
     </div>
     <p class="keyCaption" id="keyCaption" hidden></p>
+    <div class="tutorial" id="tutorial" hidden>
+      <p id="tutorialStep" role="status"></p>
+      <div class="row">
+        <button id="tutorialSkip" type="button">Skip step</button>
+        <button id="tutorialStop" type="button">Stop tutorial</button>
+      </div>
+    </div>
 
     <h2>Volume</h2>
     <div class="row"><input type="file" id="file" accept=".nii,.nii.gz,.gz"></div>

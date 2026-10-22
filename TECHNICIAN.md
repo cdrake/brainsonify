@@ -213,6 +213,20 @@ size, and the focused parameter's value; glance at it when a listener asks
 what turning will do. The step-size select beside the crosshair buttons is
 for those buttons only; the Helm's step size is set with `s`.
 
+### The Helm tutorial
+
+Before a listener explores on their own, **Helm tutorial** in the panel
+walks you both through every control. Start the session first: the tutorial
+is spoken, so it needs the sound on. It stops the sound key if it is still
+playing, and starts the Helm on left and right.
+
+Each step is said to the listener, and the panel shows you the same step
+with the key you press, or what the listener should do. A step moves on by
+itself once it is done; for a mode, that is your key and then a turn from
+the listener. **Skip step** moves on when a step cannot be done right now,
+and **Stop tutorial** ends it. The keys work as usual throughout, so a wrong
+key does what it always does, and the step waits.
+
 ## Letting an agent drive
 
 An agent connected over MCP can do the region step for you: `go_to_region`

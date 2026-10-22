@@ -45,6 +45,7 @@ import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
 import { PanelCollapse } from "./collapse";
 import { TechnicianIntro } from "./intro";
 import { KeyPlayer, browserSpeech } from "./soundkey";
+import { HelmTutorial } from "./tutorial";
 import { Controls, ExperimentNav, Readout, applyChannels, el, spokenPosition } from "./ui";
 
 /**
@@ -905,7 +906,16 @@ function announce(text: string): void {
   showKnob();
   if (sonifier.running) void knobSpeech.say(text);
 }
-const surface = new ControlSurface({ api, scene: knobScene, announce });
+/** The Helm tutorial; while it runs, the surface's words reach the listener through it. */
+const tutorialBox = el("tutorial");
+const tutorial = new HelmTutorial({
+  say: announce,
+  show: (line) => {
+    tutorialBox.hidden = line === null;
+    if (line) el("tutorialStep").textContent = line;
+  },
+});
+const surface = new ControlSurface({ api, scene: knobScene, announce: (text) => tutorial.heard(text) });
 /** The technician's line: what the knob does now, and what its parameter reads. */
 const showKnob = () => {
   knobStatus.textContent = `${surface.describeMode()} ${surface.describeStep()}`;
@@ -913,7 +923,31 @@ const showKnob = () => {
 showKnob();
 // A numeric nudge is silent, so the line follows the state as well as the voice.
 api.onStateChange(showKnob);
-new VirtualController(surface).attach();
+new VirtualController(surface, window, (intent) => tutorial.intent(intent)).attach();
+
+/** Blurs the button just tapped, so Enter reaches the Helm rather than tapping it again. */
+const letKeysThrough = () => (document.activeElement as HTMLElement | null)?.blur?.();
+el("tutorialBtn").addEventListener("click", () => {
+  letKeysThrough();
+  // The tutorial is spoken, and announce is silent with the sound off.
+  if (!sonifier.running) {
+    tutorialBox.hidden = false;
+    el("tutorialStep").textContent = "Turn the sound on first (Start session): the tutorial is spoken.";
+    return;
+  }
+  // The key would talk under the first steps, and every step is written for
+  // left and right as the starting mode.
+  key.cancel();
+  tutorial.start(() => surface.setMode("left-right"));
+});
+el("tutorialSkip").addEventListener("click", () => {
+  letKeysThrough();
+  tutorial.skip();
+});
+el("tutorialStop").addEventListener("click", () => {
+  letKeysThrough();
+  tutorial.stop();
+});
 
 /* ---------------- agents ---------------- */
 

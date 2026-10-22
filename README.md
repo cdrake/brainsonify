@@ -88,6 +88,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `libs/control/src/surface.ts` | `ControlSurface`: the Helm, its modes and step sizes, and what it says |
 | `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
+| `apps/brainsonify/src/tutorial.ts` | The Helm tutorial: every control in turn, spoken to the listener and shown to the technician |
 | `@niivue/nv-mcp` (mono `packages/nv-mcp`) | The NiiVue MCP core: the tab bridge and the core tools on the server, the page's socket and the handlers that answer them from a NiiVue instance |
 | `apps/brainsonify/src/controllers/agent.ts` | What brainsonify adds: the sound tools' handlers, wrapped as a controller |
 | `apps/mcp/src/brainsonify.ts` | The brainsonify extension: `set_sound`, `list_modes`, `set_mode`, `announce` registered on the core |
@@ -323,6 +324,20 @@ registry that drives the switcher, the default, and the visible controls.
   `index.html` so the two cannot drift. The Helm's step size is separate from
   the step select beside the crosshair buttons: that select belongs to the
   buttons, the Helm's belongs to the Helm.
+- **The Helm tutorial.** The panel's **Helm tutorial** button walks the
+  listener and the technician through every Helm control, one per step, in
+  `TUTORIAL_STEPS` (`src/tutorial.ts`); a spec checks the steps cover every
+  intent in `controllers/keys.ts` once. Each step is said to the listener and
+  shown on the panel with the key the technician presses. A step ends when it
+  is done, not on a Next button: the press or turn it teaches, or for a mode,
+  the mode key and then a turn. The keys behave as always; the tutorial only
+  watches the intents the virtual controller reports after carrying them
+  out. Speaking a line cancels the one before, so while the tutorial runs the
+  surface's announcements are held and said in the same utterance as the
+  next prompt, and anything no step claims is said on its own straight
+  after. It needs sound on, since announcements are silent without it, stops
+  the sound key so the two do not talk over each other, and starts from
+  left/right mode.
 
 ## Controls
 
@@ -343,6 +358,7 @@ registry that drives the switcher, the default, and the visible controls.
 | Rate | Multiplies the whole rhythm, so the same contrast arrives sooner |
 | Taps only | Mutes the tone and leaves the density channel on its own |
 | Sound key | Replays the spoken key to the active condition's sounds; it also plays whenever sound is enabled |
+| Helm tutorial | Walks the listener and technician through every Helm control, spoken step by step; stops the sound key, needs sound on |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
 | Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |
