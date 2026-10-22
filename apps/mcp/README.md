@@ -14,7 +14,7 @@ says how to attach each agent client to it.
 
 ## The brainsonify extension
 
-Four tools on top of the core's fifty-seven, for an app that sonifies the voxel
+Four tools on top of the core's sixty-two, for an app that sonifies the voxel
 under the crosshair and talks to a listener. Each takes the core's `tab`
 too, the id of the tab to ask:
 

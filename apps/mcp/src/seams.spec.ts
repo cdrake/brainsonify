@@ -59,6 +59,7 @@ describe("the core", () => {
         "set_viewport", "map_point", "set_slide", "chunk_stats", "save", "load_document",
         "add_control", "list_controls", "set_control", "remove_control",
         "list_data", "add_data", "remove_data", "load_data",
+        "update_volume_data", "update_mesh_positions", "set_boxes", "animate", "set_instances",
       ].sort(),
     );
   });
@@ -76,7 +77,7 @@ describe("the server and the page", () => {
   /** The three the server answers itself; the page never sees them. */
   const serverSide = ["list_tabs", "use_tab", "new_tab"];
 
-  it("offer and answer the same sixty-one tools", async () => {
+  it("offer and answer the same sixty-six tools", async () => {
     const server = buildServer({ bridge: new Bridge(), extensions: [brainsonify] });
     const [clientEnd, serverEnd] = InMemoryTransport.createLinkedPair();
     await server.connect(serverEnd);
@@ -84,7 +85,7 @@ describe("the server and the page", () => {
     await client.connect(clientEnd);
     try {
       const offered = (await client.listTools()).tools.map((tool) => tool.name).sort();
-      expect(offered).toHaveLength(61);
+      expect(offered).toHaveLength(66);
       expect(offered).toEqual([...serverSide, ...Object.keys(pageHandlers)].sort());
       expect(offered).toEqual([...Object.keys(CORE_SCHEMAS), ...Object.keys(BRAINSONIFY_SCHEMAS)].sort());
     } finally {
