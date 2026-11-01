@@ -10,17 +10,17 @@
  */
 
 import { CONTROL_SCHEMA } from "@brainsonify/control";
-import type { Extension } from "niivue-mcp/server";
+import { TAB_ARG, type Extension } from "@niivue/nv-mcp/server";
 import { z } from "zod";
 
 const MODES = (CONTROL_SCHEMA.mode.enumValues ?? []).map((choice) => choice.value) as [string, ...string[]];
 
 /** The input schema of each brainsonify tool, by name. */
 export const BRAINSONIFY_SCHEMAS = {
-  set_sound: { on: z.boolean().describe("true to start sounding the voxel under the crosshair, false to stop.") },
-  list_modes: {},
-  set_mode: { mode: z.enum(MODES).describe("How the continuous voice is made.") },
-  announce: { text: z.string().min(1).max(500).describe("What to say. Spoken only while sound is on.") },
+  set_sound: { ...TAB_ARG, on: z.boolean().describe("true to start sounding the voxel under the crosshair, false to stop.") },
+  list_modes: { ...TAB_ARG },
+  set_mode: { ...TAB_ARG, mode: z.enum(MODES).describe("How the continuous voice is made.") },
+  announce: { ...TAB_ARG, text: z.string().min(1).max(500).describe("What to say. Spoken only while sound is on.") },
 } as const;
 
 export const brainsonify: Extension = {
@@ -37,8 +37,9 @@ export const brainsonify: Extension = {
           "until they click Enable sound themselves. Reports whether sound is on afterwards.",
         inputSchema: BRAINSONIFY_SCHEMAS.set_sound,
       },
-      async ({ on }) =>
+      async ({ tab, on }) =>
         context.answer("set_sound", { on }, {
+          tab,
           lead: (r) => {
             const now = (r as { sounding?: boolean })?.sounding;
             return now === undefined ? undefined : now ? "Sound on." : "Sound off.";
@@ -56,7 +57,7 @@ export const brainsonify: Extension = {
         inputSchema: BRAINSONIFY_SCHEMAS.list_modes,
         annotations: { readOnlyHint: true },
       },
-      async () => context.answer("list_modes"),
+      async ({ tab }) => context.answer("list_modes", {}, { tab }),
     );
 
     server.registerTool(
@@ -66,7 +67,7 @@ export const brainsonify: Extension = {
         description: "Chooses how the continuous voice is made, as the panel's Mapping control does.",
         inputSchema: BRAINSONIFY_SCHEMAS.set_mode,
       },
-      async ({ mode }) => context.answer("set_mode", { mode }, { lead: () => `Mode: ${mode}.` }),
+      async ({ tab, mode }) => context.answer("set_mode", { mode }, { tab, lead: () => `Mode: ${mode}.` }),
     );
 
     server.registerTool(
@@ -79,7 +80,7 @@ export const brainsonify: Extension = {
           "Use it to tell the listener what is about to happen.",
         inputSchema: BRAINSONIFY_SCHEMAS.announce,
       },
-      async ({ text }) => context.answer("announce", { text }),
+      async ({ tab, text }) => context.answer("announce", { text }, { tab }),
     );
   },
 };

@@ -9,7 +9,7 @@
 
 import type { ControlSurface } from "@brainsonify/control";
 
-import { intentOf, perform, type Controller } from "./keys";
+import { intentOf, perform, type Controller, type Intent } from "./keys";
 
 export class VirtualController implements Controller {
   private readonly onKey = (event: KeyboardEvent) => this.handle(event);
@@ -17,6 +17,8 @@ export class VirtualController implements Controller {
   constructor(
     private readonly surface: ControlSurface,
     private readonly target: EventTarget = window,
+    /** Told each intent once the surface has carried it out, as the tutorial needs. */
+    private readonly onIntent: (intent: Intent) => void = () => {},
   ) {}
 
   attach(): void {
@@ -34,6 +36,7 @@ export class VirtualController implements Controller {
     if (!intent) return;
     event.preventDefault();
     perform(this.surface, intent);
+    this.onIntent(intent);
   }
 }
 

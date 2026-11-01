@@ -2,8 +2,8 @@ import { MULTIPLANAR_TYPE, NiiVue, SHOW_RENDER, SLICE_TYPE, lookupColorMap } fro
 
 import { ControlAPI, ControlSurface, type ControlState, type KnobScene } from "@brainsonify/control";
 import { CONTROL_SCHEMA } from "@brainsonify/control";
-import { PLANE_ANGLES, PLANE_OFF, cameraForPlane, samePlane } from "niivue-mcp";
-import type { NiiVueHost } from "niivue-mcp/browser";
+import { PLANE_ANGLES, PLANE_OFF, cameraForPlane, samePlane } from "@niivue/nv-mcp";
+import type { NiiVueHost } from "@niivue/nv-mcp/browser";
 
 import {
   DEFAULT_BOUNDS,
@@ -29,6 +29,7 @@ import {
 import "./styles.css";
 import { RegionCallout, loadAtlas, type Atlas } from "./atlas";
 import { AgentController, agentUrls, type SoundHost } from "./controllers/agent";
+import { OnScreenHelm } from "./controllers/onscreen";
 import { VirtualController } from "./controllers/virtual";
 import {
   EXPERIMENTS,
@@ -42,7 +43,10 @@ import { type PlanarLayout, planarLayout } from "./layout";
 import { VoxelSampler, type Sample } from "./sampler";
 import { colormapLut, projectToCanvas, vox2mm } from "./geometry";
 import { START, advance, cutFace, facePoint, type Raster } from "./sweep";
+import { PanelCollapse } from "./collapse";
+import { TechnicianIntro } from "./intro";
 import { KeyPlayer, browserSpeech } from "./soundkey";
+import { HelmTutorial } from "./tutorial";
 import { Controls, ExperimentNav, Readout, applyChannels, el, spokenPosition } from "./ui";
 
 /**
@@ -55,7 +59,8 @@ const CLIP_OFF = 2;
 const CLIP_GRAZE = 0.85;
 const CLIP_DEEPEST = -0.45;
 
-const DEMOS = "https://niivue.github.io/niivue-demo-images/";
+// VITE_IMAGES points every image at one local folder, for the offline zip (scripts/package.ts).
+const DEMOS = import.meta.env.VITE_IMAGES ?? "https://niivue.github.io/niivue-demo-images/";
 
 /**
  * MNI152 is skull-stripped, so its opacity only ever spans brain tissue. The
@@ -135,6 +140,8 @@ function fitCanvas(): void {
   nv.resize();
   scheduleOverlayDraw();
 }
+// Before the first fit, so a panel remembered as collapsed never shows.
+new PanelCollapse();
 new ResizeObserver(fitCanvas).observe(stage);
 window.addEventListener("resize", fitCanvas);
 document.addEventListener("visibilitychange", fitCanvas);
@@ -215,7 +222,7 @@ function activate(experiment: Experiment, pushHistory: boolean): void {
   applyChannels(experiment.channels);
   if (experiment.taps) controls.setTaps(experiment.taps.fastest);
   if (experiment.mode) controls.setMode(experiment.mode);
-  if (experiment.clip) nv.setClipPlane(experiment.clip);
+  if (experiment.clip) cutFacing(experiment.clip);
   // The sweep belongs to the conditions that offer it; a run left going
   // across a switch would keep sounding a condition the visitor has left.
   el("sweepRow").hidden = !experiment.sweep;
@@ -822,6 +829,37 @@ function facePlane(azimuth: number, elevationDeg: number): void {
   nv.elevation = camera.elevation;
 }
 
+/**
+ * Cuts a plane and turns the render to look straight at the face it exposes,
+ * so the cut is never seen edge-on. Turning the plane off leaves the camera
+ * where it is.
+ */
+function cutFacing(plane: readonly [number, number, number]): void {
+  if (plane[0] < PLANE_OFF) facePlane(plane[1], plane[2]);
+  nv.setClipPlane([...plane]);
+}
+
+/** The cut every session starts on: the coronal midline, the back taken off. */
+const SESSION_CUT: readonly [number, number, number] = [0, 0, 0];
+/**
+ * How far the camera is turned off face-on at the start. Square on, the cut
+ * face looks like one more flat slice; turned, it reads as the 3D render, and
+ * the Helm's next plane squares it up when the listener wants it.
+ */
+const SESSION_TURN = 45;
+
+/**
+ * Cuts the session's starting plane and turns the camera to see it at an
+ * angle. The camera moves first: a turn with the Clip slider up re-cuts the
+ * slider's way, and the cut that follows overrides it.
+ */
+function cutForSession(): void {
+  const camera = cameraForPlane(SESSION_CUT[1], SESSION_CUT[2]);
+  nv.azimuth = camera.azimuth + SESSION_TURN;
+  nv.elevation = camera.elevation;
+  nv.setClipPlane([...SESSION_CUT]);
+}
+
 /** The scene as the control surface sees it: fractions in, words out. */
 const knobScene: KnobScene = {
   moveCrosshair(axis, delta) {
@@ -837,11 +875,9 @@ const knobScene: KnobScene = {
   },
   nextPlane() {
     const next = WHOLE_PLANES[(ringIndex() + 1) % WHOLE_PLANES.length];
-    // A whole plane is cut to expose a face; turn to it, so the face is the
-    // near side and a depth pick over the render lands on it. Turning the
-    // plane off leaves the camera where it is.
-    if (next.plane[0] < PLANE_OFF) facePlane(next.plane[1], next.plane[2]);
-    nv.setClipPlane([...next.plane]);
+    // Facing the cut makes its face the near side, so a depth pick over the
+    // render lands on it.
+    cutFacing(next.plane);
     return next.name;
   },
   describe() {
@@ -872,15 +908,67 @@ function announce(text: string): void {
   showKnob();
   if (sonifier.running) void knobSpeech.say(text);
 }
-const surface = new ControlSurface({ api, scene: knobScene, announce });
+/** The Helm tutorial; while it runs, the surface's words reach the listener through it. */
+const tutorialBox = el("tutorial");
+const tutorial = new HelmTutorial({
+  say: announce,
+  show: (line) => {
+    tutorialBox.hidden = line === null;
+    if (line) el("tutorialStep").textContent = line;
+  },
+});
+const surface = new ControlSurface({ api, scene: knobScene, announce: (text) => tutorial.heard(text) });
 /** The technician's line: what the knob does now, and what its parameter reads. */
+const knobLine = () => `${surface.describeMode()} ${surface.describeStep()}`;
+const helmBtn = el("helmBtn");
+/** The Helm on screen, for a mouse or a touchscreen; it feeds the surface as the keys do. */
+const helm = new OnScreenHelm({
+  surface,
+  onIntent: (intent) => tutorial.intent(intent),
+  status: knobLine,
+  onToggle: (open) => {
+    helmBtn.classList.toggle("on", open);
+    helmBtn.setAttribute("aria-pressed", String(open));
+  },
+});
 const showKnob = () => {
-  knobStatus.textContent = `${surface.describeMode()} ${surface.describeStep()}`;
+  knobStatus.textContent = knobLine();
+  helm.refresh();
 };
-showKnob();
 // A numeric nudge is silent, so the line follows the state as well as the voice.
 api.onStateChange(showKnob);
-new VirtualController(surface).attach();
+new VirtualController(surface, window, (intent) => tutorial.intent(intent)).attach();
+helm.attach();
+if (new URLSearchParams(location.search).get("helm") === "1") helm.open();
+showKnob();
+
+/** Blurs the button just tapped, so Enter reaches the Helm rather than tapping it again. */
+const letKeysThrough = () => (document.activeElement as HTMLElement | null)?.blur?.();
+el("tutorialBtn").addEventListener("click", () => {
+  letKeysThrough();
+  // The tutorial is spoken, and announce is silent with the sound off.
+  if (!sonifier.running) {
+    tutorialBox.hidden = false;
+    el("tutorialStep").textContent = "Turn the sound on first (Start session): the tutorial is spoken.";
+    return;
+  }
+  // The key would talk under the first steps, and every step is written for
+  // left and right as the starting mode.
+  key.cancel();
+  tutorial.start(() => surface.setMode("left-right"));
+});
+el("tutorialSkip").addEventListener("click", () => {
+  letKeysThrough();
+  tutorial.skip();
+});
+el("tutorialStop").addEventListener("click", () => {
+  letKeysThrough();
+  tutorial.stop();
+});
+el("helmBtn").addEventListener("click", () => {
+  letKeysThrough();
+  helm.toggle();
+});
 
 /* ---------------- agents ---------------- */
 
@@ -895,7 +983,7 @@ async function requireAtlas(): Promise<Atlas> {
 }
 
 /**
- * The scene as an agent sees it, through the NiiVue core in `niivue-mcp`.
+ * The scene as an agent sees it, through the NiiVue core in `@niivue/nv-mcp`.
  *
  * The core moves the crosshair, cuts and turns the camera on its own; these
  * hooks add what only this app knows. Going to a region then does what a
@@ -915,6 +1003,7 @@ const agentHost: NiiVueHost = {
   loaded: ({ mni }) => {
     atlasFits = mni;
     refreshRange();
+    intro.volume(`An agent loaded a scan.${mni ? "" : " Not MNI space, so no region names."}`);
   },
   planeName: cutName,
   extraState: () => ({ atlas: atlas ? (atlasFits ? "ready" : "not an MNI scan") : "not loaded" }),
@@ -1157,7 +1246,7 @@ function refreshRange(): void {
   const vol = nv.volumes[0];
   if (!vol) return;
   fitCanvas();
-  if (active.clip) nv.setClipPlane(active.clip);
+  if (active.clip) cutFacing(active.clip);
 
   let lo = vol.calMin ?? NaN;
   let hi = vol.calMax ?? NaN;
@@ -1176,42 +1265,69 @@ function refreshRange(): void {
   resetBoneMap();
 }
 
+/**
+ * The technician's intro reports what loaded however it was loaded: from its
+ * own buttons, the panel's, a dropped file or an agent.
+ */
+const intro = new TechnicianIntro({
+  load: (source, file) => (source === "file" ? (file ? loadFile(file) : Promise.resolve()) : loadDemo(source)),
+  start: () => {
+    cutForSession();
+    if (sonifier.running) playKey();
+    else void setSound(true);
+  },
+  experiment: () => `${active.number} ${active.name}`,
+  // A reload is the whole reset: the patient's file, the crosshair, sound
+  // and any sweep all go, and the steps open again for the next patient.
+  // The condition is in the address and survives, as the technician's choice.
+  end: () => location.reload(),
+});
+
 async function loadFile(file: File): Promise<void> {
+  intro.volume(`Loading ${file.name}…`);
   try {
-    await nv.loadImage(file);
-  } catch {
-    await nv.loadVolumes([{ url: URL.createObjectURL(file), name: file.name }]);
+    try {
+      await nv.loadImage(file);
+    } catch {
+      await nv.loadVolumes([{ url: URL.createObjectURL(file), name: file.name }]);
+    }
+  } catch (error) {
+    intro.volume(`${file.name} could not be read.`, true);
+    throw error;
   }
   atlasFits = true;
   refreshRange();
+  intro.volume(`Loaded ${file.name}. Region names assume it is in MNI space.`);
 }
 
 el<HTMLInputElement>("file").addEventListener("change", (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
-  if (file) void loadFile(file);
+  if (file) void loadFile(file).catch(() => {});
 });
 
-function wireDemo(id: keyof typeof DEMO_VOLUMES): HTMLButtonElement {
+/** Loads one of the demo volumes, showing progress on its panel button. Rejects when the load fails. */
+async function loadDemo(id: keyof typeof DEMO_VOLUMES): Promise<void> {
   const { label, url, mni } = DEMO_VOLUMES[id];
   const button = el<HTMLButtonElement>(id);
-
-  button.addEventListener("click", async () => {
-    button.textContent = "Loading…";
-    try {
-      await nv.loadVolumes([{ url, colormap: "gray" }]);
-      atlasFits = mni;
-      refreshRange();
-      button.textContent = label;
-    } catch {
-      button.textContent = "Load failed (offline?)";
-    }
-  });
-
-  return button;
+  const name = label.replace(/^Load /, "");
+  button.textContent = "Loading…";
+  intro.volume(`Loading the ${name}…`);
+  try {
+    await nv.loadVolumes([{ url, colormap: "gray" }]);
+  } catch (error) {
+    button.textContent = "Load failed (offline?)";
+    intro.volume(`The ${name} did not load (offline?).`, true);
+    throw error;
+  }
+  atlasFits = mni;
+  refreshRange();
+  button.textContent = label;
+  intro.volume(mni ? `Loaded the ${name}. Region names are on.` : `Loaded the ${name}. Not MNI space, so no region names.`);
 }
 
-const demoBtn = wireDemo("demo");
-wireDemo("demoHead");
+for (const id of Object.keys(DEMO_VOLUMES) as Array<keyof typeof DEMO_VOLUMES>) {
+  el(id).addEventListener("click", () => void loadDemo(id).catch(() => {}));
+}
 
 /* ---------------- drag and drop ---------------- */
 
@@ -1234,4 +1350,5 @@ body.addEventListener("drop", (e) => {
 });
 
 // Something on screen from the first frame; the user can swap in their own volume.
-demoBtn.click();
+void loadDemo("demo").catch(() => {});
+intro.open();

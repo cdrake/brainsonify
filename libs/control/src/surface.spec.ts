@@ -82,9 +82,9 @@ describe("the knob", () => {
 describe("the technician's buttons", () => {
   it("announces each mode as it is set", () => {
     surface.setMode("back-front");
-    expect(said.at(-1)).toBe("Knob moves back and front.");
+    expect(said.at(-1)).toBe("Helm moves back and front.");
     surface.setMode("plane");
-    expect(said.at(-1)).toBe("Knob moves the cut plane.");
+    expect(said.at(-1)).toBe("Helm moves the cut plane.");
   });
 
   it("cycles through every mode and back to the first", () => {
@@ -125,13 +125,13 @@ describe("parameter mode", () => {
   it("opens on the first panel control and names it with its value", () => {
     surface.setMode("parameter");
     expect(surface.focus).toBe(PANEL_ORDER[0]);
-    expect(said.at(-1)).toBe("Knob sets Mapping, Pure tone.");
+    expect(said.at(-1)).toBe("Helm sets Mapping, Pure tone.");
   });
 
   it("focusing a parameter switches to parameter mode", () => {
     surface.setFocus("volume");
     expect(surface.mode).toBe("parameter");
-    expect(said.at(-1)).toBe("Knob sets Volume, 0.40.");
+    expect(said.at(-1)).toBe("Helm sets Volume, 0.40.");
   });
 
   it("walks the panel in order, wrapping at both ends", () => {
@@ -195,6 +195,6 @@ describe("parameter mode", () => {
     surface.setFocus("gate");
     surface.setMode("down-up");
     surface.setMode("parameter");
-    expect(said.at(-1)).toBe("Knob sets Gate, 0.04.");
+    expect(said.at(-1)).toBe("Helm sets Gate, 0.04.");
   });
 });

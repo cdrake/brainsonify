@@ -1,13 +1,13 @@
 /**
  * The agent controller: what brainsonify adds to the NiiVue core's tools.
  *
- * The socket, the hello and the core tools live in `niivue-mcp/browser`;
+ * The socket, the hello and the core tools live in `@niivue/nv-mcp/browser`;
  * this file adds the handlers for the sound, which only this app has, and
  * wraps the client as a controller like the keyboard and the knob, so
  * `main.ts` attaches it the same way.
  */
 
-import { AgentClient, agentUrls, coreHandlers, sceneState, type Handlers, type NiiVueHost } from "niivue-mcp/browser";
+import { AgentClient, agentUrls, coreHandlers, sceneState, type Handlers, type NiiVueHost } from "@niivue/nv-mcp/browser";
 
 import type { Controller } from "./keys";
 

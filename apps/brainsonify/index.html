@@ -11,9 +11,14 @@
     <canvas id="gl"></canvas>
     <canvas id="overlay" aria-hidden="true"></canvas>
     <div id="drop">Drop a NIfTI file</div>
+    <button id="panelToggle" type="button" aria-controls="panel" aria-expanded="true"
+      title="Hide the panel to give the scan the whole window">
+      <span aria-hidden="true" class="panelToggleIcon">&rsaquo;</span>
+      <span class="panelToggleLabel">Hide panel</span>
+    </button>
   </div>
 
-  <aside>
+  <aside id="panel">
     <h1>Brain sonification spike</h1>
     <nav id="experiments" aria-label="Experiments"></nav>
     <p class="sub" id="expSummary">Move the mouse over the image.</p>
@@ -22,8 +27,19 @@
     <div class="row">
       <button id="audioBtn" class="primary">Enable sound</button>
       <button id="keyBtn" disabled title="Play the sound key again">Sound key</button>
+      <button id="introBtn" type="button" title="Show the steps for starting a session">Session steps</button>
+      <button id="endBtn" type="button" title="Clear this patient's scan and start over for the next one">End session</button>
+      <button id="tutorialBtn" type="button" title="Walk the listener and you through every Helm control">Helm tutorial</button>
+      <button id="helmBtn" type="button" aria-pressed="false" title="Show the Helm on screen, to drive it with the mouse or a touchscreen">Virtual Helm</button>
     </div>
     <p class="keyCaption" id="keyCaption" hidden></p>
+    <div class="tutorial" id="tutorial" hidden>
+      <p id="tutorialStep" role="status"></p>
+      <div class="row">
+        <button id="tutorialSkip" type="button">Skip step</button>
+        <button id="tutorialStop" type="button">Stop tutorial</button>
+      </div>
+    </div>
 
     <h2>Volume</h2>
     <div class="row"><input type="file" id="file" accept=".nii,.nii.gz,.gz"></div>
@@ -122,7 +138,7 @@
         to a specific one first.
       </p>
       <p class="note knobHint">
-        <strong>Knob:</strong> <span id="knobStatus"></span><br>
+        <strong>Helm:</strong> <span id="knobStatus"></span><br>
         <kbd>&uarr;</kbd> <kbd>&darr;</kbd> turn, <kbd>Enter</kbd> press and hear where you are.
         <kbd>1</kbd> left/right, <kbd>2</kbd> back/front, <kbd>3</kbd> down/up,
         <kbd>4</kbd> cut plane, <kbd>5</kbd> parameter, <kbd>0</kbd> next mode;
@@ -279,10 +295,86 @@
       T1, which is not.
     </p>
     <p class="note">
-      Wear the bone-conduction headset. Try <code>Filtered noise</code> or
+      Wear the headset. Try <code>Filtered noise</code> or
       <code>White noise</code> if the pure tone feels too abstract.
     </p>
   </aside>
+
+  <!--
+    The technician's checklist for starting a session, shown over the page
+    when a tab first opens. Buttons only: no inputs or selects, since the
+    panel specs count those in document order against the knob's schema.
+  -->
+  <dialog id="intro" aria-labelledby="introTitle" aria-describedby="introLead">
+    <h1 id="introTitle">Starting a session</h1>
+    <p class="introLead" id="introLead">
+      Five steps before the listener starts exploring. The listener cannot see
+      this screen, so read the words in quotes out loud.
+    </p>
+    <ol class="introSteps">
+      <li>
+        <h2>Load the image</h2>
+        <p>
+          The MNI152 demo loads by itself, and region names only work on it or
+          another MNI-space scan. Swap it here, or drop a <code>.nii</code> /
+          <code>.nii.gz</code> file on the page later.
+        </p>
+        <div class="row">
+          <button type="button" data-intro-load="demo">MNI152 demo</button>
+          <button type="button" data-intro-load="demoHead">Head + skull T1</button>
+          <button type="button" data-intro-load="file">Choose a file&hellip;</button>
+        </div>
+        <p class="introStatus" id="introVolume" role="status">Loading the MNI152 demo&hellip;</p>
+      </li>
+      <li>
+        <h2>Fit the headphones</h2>
+        <p>
+          Put the headset on the listener now, both sides seated, before any
+          sound starts. Left and right is one of the channels and only reads
+          with two ears. Start quiet: <strong>Volume</strong> in the panel
+          raises it once they are listening.
+        </p>
+      </li>
+      <li>
+        <h2>Hand over the Helm</h2>
+        <p>
+          The Sonaview Helm is the listener's; its buttons are yours. Until the rotary
+          panel arrives the keyboard stands in for it: <kbd>&uarr;</kbd>
+          <kbd>&darr;</kbd> turn, <kbd>Enter</kbd> presses. Keep the mode keys
+          (<kbd>1</kbd>&ndash;<kbd>5</kbd>, <kbd>s</kbd>, <kbd>n</kbd>,
+          <kbd>Home</kbd>) on your side.
+        </p>
+      </li>
+      <li>
+        <h2>Explain the Helm</h2>
+        <blockquote>
+          &ldquo;Turning the Helm moves you through the scan, and the sound
+          changes with what is under you. I will choose what turning moves, and
+          you will hear it announced each time I change it. Pressing the Helm tells
+          you where you are and never changes anything, so press it whenever
+          you lose track. First you will hear a short key that explains each
+          sound.&rdquo;
+        </blockquote>
+      </li>
+      <li>
+        <h2>Start the session</h2>
+        <p>
+          <strong>Start session</strong> cuts the scan down the middle, front
+          from back, shown at an angle in the 3D render, then turns the sound
+          on and plays the sound key for
+          <span id="introExperiment">this condition</span>. Let it
+          finish before the listener turns or hovers; it stops at the first
+          move. The condition can be changed in the panel afterwards. When
+          the patient is done, <strong>End session</strong> in the panel
+          clears their scan and brings these steps back for the next one.
+        </p>
+      </li>
+    </ol>
+    <div class="row introActions">
+      <button type="button" class="primary" id="introStart">Start session</button>
+      <button type="button" id="introSkip">Skip, set up from the panel</button>
+    </div>
+  </dialog>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

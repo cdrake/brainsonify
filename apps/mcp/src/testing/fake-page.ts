@@ -5,13 +5,16 @@
  * to the server with the real client over a fake NiiVue: a volume 200 mm
  * across centred on the origin, a four-region atlas, a canvas that hands
  * back a fixed PNG, and a sound that remembers whether it is on. Which
- * server, what id and what title come from the environment.
+ * server, what id and what title come from the environment; PAGE_SEARCH
+ * instead of PAGE_ID gives a query string the id is read from, as a page
+ * opened from a `new_tab` address would.
  */
 
-import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type View } from "niivue-mcp/browser";
+import { AgentClient, coreHandlers, sceneState, type AtlasLike, type AtlasRegion, type Handlers, type ShownVolume, type View, type VolumeToLoad, type VolumeUpdate } from "@niivue/nv-mcp/browser";
 
 const port = process.env.PAGE_PORT ?? "4242";
-const id = process.env.PAGE_ID ?? "fake";
+const search = process.env.PAGE_SEARCH;
+const id = search === undefined ? (process.env.PAGE_ID ?? "fake") : undefined;
 const title = process.env.PAGE_TITLE ?? "fake page";
 
 const REGIONS: AtlasRegion[] = [
@@ -34,24 +37,53 @@ const atlas: AtlasLike = {
 // A 1×1 transparent PNG.
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-const crosshairPos = [0.5, 0.5, 0.5];
 let plane: [number, number, number] = [2, 0, 0];
-const volumes: Array<{ name: string }> = [];
+const volumes: ShownVolume[] = [];
+const shown = (volume: VolumeToLoad): ShownVolume => ({
+  name: volume.name ?? volume.url,
+  url: volume.url,
+  ...(volume.colormap === undefined ? {} : { colormap: volume.colormap }),
+  ...(volume.opacity === undefined ? {} : { opacity: volume.opacity }),
+  calMin: 0,
+  calMax: 100,
+  globalMin: 0,
+  globalMax: 255,
+});
+const fetching = async (volume: VolumeToLoad): Promise<void> => {
+  if (volume.url.includes("missing")) throw new Error("404 Not Found");
+};
 const view: View = {
   canvas: { width: 320, height: 240, toDataURL: () => `data:image/png;base64,${PNG}` } as unknown as HTMLCanvasElement,
   volumes,
   azimuth: 110,
   elevation: 15,
-  crosshairPos,
-  getCrosshairPos: () => Array.from(crosshairPos).map((f) => (f - 0.5) * 200),
+  crosshairPos: [0.5, 0.5, 0.5],
+  getCrosshairPos: () => Array.from(view.crosshairPos).map((f) => (f - 0.5) * 200),
   getClipPlaneDepthAziElev: () => plane,
   setClipPlane: (next) => {
     plane = [next[0], next[1], next[2]];
   },
-  loadVolumes: async ([volume]) => {
-    if (volume.url.includes("missing")) throw new Error("404 Not Found");
-    volumes.splice(0, volumes.length, { name: volume.name ?? volume.url });
+  loadVolumes: async (next) => {
+    for (const volume of next) await fetching(volume);
+    volumes.splice(0, volumes.length, ...next.map(shown));
   },
+  addVolume: async (volume) => {
+    if (!("url" in volume)) {
+      volumes.push({ name: volume.name ?? "transformed" });
+      return;
+    }
+    await fetching(volume);
+    volumes.push(shown(volume));
+  },
+  setVolume: async (index: number, update: VolumeUpdate) => {
+    Object.assign(volumes[index], update);
+  },
+  sliceType: 4,
+  multiplanarType: 0,
+  mosaicString: "",
+  showRender: 2,
+  isRadiological: false,
+  isColorbarVisible: false,
   drawScene: () => {},
   model: {
     mm2scene: (mm) => mm.map((v) => v / 200 + 0.5),
@@ -100,9 +132,9 @@ const client = new AgentClient(
   { ...coreHandlers(host), ...sound },
   {
     urls: [`ws://127.0.0.1:${port}/app`],
-    id,
+    ...(id === undefined ? { storage: null, search } : { id }),
     title: () => title,
-    url: () => `http://fake/${id}`,
+    url: () => `http://fake/${id ?? search}`,
     state: () => ({ ...sceneState(host), sounding, mode }),
     onStatus: (connected) => console.log(connected ? "page connected" : "page disconnected"),
   },

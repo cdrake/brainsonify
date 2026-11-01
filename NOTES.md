@@ -1931,3 +1931,743 @@ layer on it.
   list at the bottom of the lib's readme is the checklist.
 - watch an agent drive across a reload and a second tab, and see whether
   the note and the `use_tab` failure read right from that side.
+
+---
+
+## Entry 27 — 25 September 2026
+
+### moving the niivue core into niivue/mono
+
+the fork entry 26 was preparing for happened today, in a worktree of
+niivue/mono: `packages/nv-mcp` is the core as `@niivue/nv-mcp`, and
+`apps/demo-mcp` is the smallest page that answers it, a render view of
+mni152 with a where-am-i line. brainsonify keeps `libs/niivue-mcp` for now
+and its `apps/mcp` extension on top; the plan is that the lib becomes a
+dependency on the package once it is published, so today's job was making
+the two the same code. nothing is committed in either repo yet.
+
+### decisions
+
+- the mono copy follows mono's conventions, not ours: biome, `bun test`,
+  vite with the dev-images plugin serving the demo volumes, an nx
+  `project.json`, a row in the root readme. the point of moving it is that
+  it looks like the other packages there, so the tests were rewritten from
+  vitest to bun:test rather than carrying vitest in.
+- the demo attaches the client before it awaits niivue, and every tool
+  answers "still starting" until the volume is loaded. this came out of a
+  long detour: driving the demo from a script kept saying no tab was
+  connected, and the cause was that the chrome window was covered. a tab
+  the browser isn't drawing gets no animation frames, `attachTo` and the
+  first `loadVolumes` await one, and the client used to attach after them.
+  the readme now says to attach first. brainsonify's page already does,
+  by accident: `nv.attachTo("gl")` isn't awaited there, so the agent
+  controller attaches regardless. the same rule holds for it.
+- `screenshot` refuses while the tab is hidden, in words, rather than
+  returning a black picture. an agent can act on "bring it to the front";
+  it cannot tell a black png from a dark scene.
+- the core's `describe` hook may return a promise. the demo's description
+  looks the atlas up when asked, and with a synchronous hook it returned
+  the previous answer: after `go_to_region` to the insula the reply said
+  thalamus. `where_am_i` and `go_to_point` are async for it.
+- the client gives an address five seconds to open before closing it and
+  moving on (`CONNECT_MS`). before this a socket that neither opened nor
+  refused kept the client on the first address forever; the backoff only
+  ever ran on a close.
+- the "no tab" message is no longer brainsonify's. the core says only that
+  no niivue tab is connected, and the bridge takes a `noTabHint` for the
+  app's own advice; `apps/mcp/src/server.ts` passes the `?agent` sentence
+  that used to be baked into the lib.
+- the fixes went back into `libs/niivue-mcp` by hand, same code in our
+  formatting, with the specs. the two copies were diffed after running
+  both through prettier so only real differences showed.
+
+### ruled out
+
+- running the demo's vite under bun. vite's websocket proxy goes through
+  http-proxy's upgrade path, and under `bunx --bun vite` the upgrade hangs
+  with no error; under node it works. the demo's dev script runs vite
+  under node and the readme says why. building under bun is fine. this
+  doesn't touch brainsonify, whose vite runs through the nx plugin under
+  node already.
+- keeping the demo in mono's github pages list. it needs the server
+  process, so a static copy would only show a page saying no server is
+  reached. the other server-backed demos are left out the same way.
+
+### implementation notes
+
+- the first screenshot through the merged server was a blank png. two
+  causes: the canvas's drawing buffer was still the default size, because
+  niivue hadn't sized it yet, and niivue 1.0's `drawScene` only schedules
+  a frame for the next animation frame, so `toDataURL` in the same task
+  read a buffer nothing had drawn to. the core now calls `resize` when the
+  buffer doesn't fit the box and has the render backend draw on demand
+  before reading back. the earlier "draw and read back in the same task"
+  comment was right about the problem and wrong about the fix.
+- bun:test's fake timers have no async advance, the thing vitest's
+  `advanceTimersByTimeAsync` does, so the bridge tests that wait out a
+  call timeout or the return grace run against real short ones through
+  the bridge's options instead. the client's retry timers are synchronous
+  and stayed on fake timers.
+- the chrome extension can't raise a tab that another window covers. the
+  smoke test's screenshot only passed on the run where the window happened
+  to be in front; the other runs got the new refusal, which is the
+  behaviour wanted, but it means the screenshot tool is the one thing the
+  scripted drive can't verify reliably.
+
+### open questions
+
+- when does `libs/niivue-mcp` become a dependency on `@niivue/nv-mcp`
+  instead of a copy? the moment it is published, presumably, but the aal
+  spoken-name table question from entry 26 still stands.
+- should the demo's "still starting" gate live in the core, as a host
+  hook the page flips, rather than in every page that copies the demo?
+
+### next
+
+- open the mono pull request from the `feat/nv-mcp` worktree once the
+  changes here are committed, and point it at the brainsonify commit that
+  matches.
+- drive the brainsonify page itself from a script with the window in
+  front, to see the screenshot come back with pixels.
+
+## Entry 28 — 28 September 2026
+
+### bringing the mono review back
+
+the second mono commit on `feat/nv-mcp` (review fixes: calls to one tab
+serialized, `add_overlay` through niivue's own `addVolume` over whatever
+the page shows, a fresh niivue's depth -2 plane read as off, the crosshair
+moved through niivue's setter, origin and host guards on the loopback
+server) had come back into `libs/niivue-mcp` by hand, source only. the
+specs still described the old core, so the lib and the app both failed
+typecheck and tests. this session ported the specs and the fake page.
+
+### implementation notes
+
+- the fake page's `getCrosshairPos` closed over the array it was built
+  with; once the core assigns `crosshairPos` a fresh `Float32Array`, it has
+  to read `view.crosshairPos` live, or every move lands at the origin.
+- node's `fetch` treats `Host` as a forbidden header and writes the real
+  one, so the dns-rebinding test passed a rebound request straight through
+  to a 200. under vitest (node) the request goes through `node:http`,
+  which lets the header stand. bun's fetch, which mono's test uses, does
+  not rewrite it.
+- the origin guard is tested with a plain GET to `/app`: a foreign origin
+  is refused with 403 before the upgrade is tried; a loopback one gets 426,
+  which is the server asking for a websocket it was not offered. no socket
+  needed.
+- the mono copy never had the screenshot resize-then-draw spec from entry
+  27; it went there today as a bun:test.
+
+### next
+
+- push `feat/mcp` and open the mono pull request, pointing at this
+  commit as the brainsonify side that matches.
+
+## Entry 29 — 28 September 2026
+
+Codex reviewed the mono branch (renamed `feat/mcp`) and found one real
+thing: duplicating a browser tab copies `sessionStorage`, so the copy
+said hello with the original's id and the bridge replaced the original,
+which stayed open but could no longer be listed or chosen. Fixed on both
+sides today; mono 2ebb0db2 is the commit this one mirrors.
+
+- the hello now carries `reconnect` when the same page comes back on a
+  new socket (server restart, dropped socket). only then does a same-id
+  hello replace a live tab, and with no reset note, since nothing started
+  over. a fresh page whose id a live tab holds is a duplicate: it is
+  given a spare id, the original's with `-2` on the end.
+- every tab is welcomed with the id the server lists it under
+  (`{ welcome: { id } }`). the client takes a spare id, keeps it in
+  storage for its own reloads, and says hello with it from then on.
+  `AgentClient.id` is a getter now, and `ClientOptions.storage` lets a
+  test (or a host) say where the id lives.
+- the e2e spec runs a second fake-page process with the same `PAGE_ID`
+  and drives both; the bridge spec has both sockets live.
+- the bridge specs' fake sockets file the welcome apart from requests
+  (`welcomes` beside `sent`), so the counts in the older specs stand.
+
+### next
+
+- push `feat/mcp` and open the mono pull request, pointing at this
+  commit as the brainsonify side that matches.
+
+## Entry 30 — 28 September 2026
+
+Chris asked whether a prompt could make up a UUID and reuse it in every
+later prompt to say which tab it means, instead of `use_tab`, which is a
+choice held on the server that a later prompt cannot see. Built on both
+sides today; mono 677c803f is the commit this one mirrors.
+
+- every tool a page answers takes an optional `tab`, the id to ask. the
+  bridge's `call` takes it as a third argument and goes to that tab,
+  waiting its usual grace for one mid-reload, and otherwise fails naming
+  the id and listing the tabs. a named call counts as the last one
+  answered but leaves the `use_tab` choice alone.
+- `new_tab` makes up a UUID server-side and returns it with the address
+  that opens the page as that tab: `pageUrl`, a new `startServer` option,
+  with `?tab=<id>` on it. brainsonify's server passes
+  `http://localhost:4200/?agent` (or `BRAINSONIFY_PAGE`).
+- the page takes `?tab=` from its address over `sessionStorage`
+  (`tabFromSearch` in the protocol; `TAB_ID_MAX` 64) and writes it to
+  storage, so a reload and a later address without the parameter still
+  arrive as it. a duplicate of such a page collides on the server as any
+  duplicate does and gets the spare id.
+- extensions spread `TAB_ARG` into their schemas and pass `tab` on
+  `context.answer`'s options (`AnswerOptions`, the old `ReplyShape` plus
+  `tab`). brainsonify's four sound tools do.
+- the fake page takes `PAGE_SEARCH` instead of `PAGE_ID` to read its id
+  from a query string, and the e2e spec's last test opens one from a
+  `new_tab` address and drives it past a chosen tab. it runs last because
+  it leaves `t5` chosen and closed, and the next bare call would wait the
+  return grace. the seams spec counts sixteen tools now, three of them
+  answered by the server itself.
+
+### next
+
+- push `feat/mcp` and open the mono pull request, pointing at this
+  commit as the brainsonify side that matches.
+
+## Entry 31 — 28 September 2026
+
+Chris asked how much of NiiVue's public API the tools reach, and picked
+`set_volume` and `set_view` as the first two to add. Built on both sides
+today; mono d2134523 is the commit this one mirrors.
+
+- `set_volume` changes how one loaded volume is drawn and leaves the
+  rest alone: colormap, opacity, the `cal_min`/`cal_max` window, the
+  frame of a 4D volume, an inverted colormap. `volume` is an index as
+  `where_am_i` lists them or a name (exact first, then a single
+  containing match; two matches refuse and list them); the base without
+  it. Only the fields asked for go to NiiVue's `setVolume`, since it
+  assigns the update onto the volume as it is and an undefined field
+  would wipe one. An empty window, a frame the volume does not have and
+  nothing to set are refused in words.
+- `set_view` sets the layout by name: `slice` (axial, coronal, sagittal,
+  multiplanar, render), `layout` (auto, column, grid, row), `mosaic`,
+  `show_render` (never, always, auto), `radiological`, `colorbar`. The
+  new `views.ts` holds the names against NiiVue 1.0's numbers so the
+  server's schemas and the page's handler agree; `nameFor` answers
+  `other` for a number it does not know. The handler does not announce:
+  main.ts already speaks on NiiVue's `sliceTypeChange`.
+- `View` gains all of this as optional members (`setVolume`,
+  `sliceType`, `multiplanarType`, `mosaicString`, `showRender`,
+  `isRadiological`, `isColorbarVisible`), and `ShownVolume` the window,
+  the span and the frame count, so a fake without them still serves the
+  other tools and the page says what it cannot do. `where_am_i` now
+  lists `volumes` with each one's window and span, and `view` when the
+  page has a layout.
+- the fake page can change a volume and has a layout; the e2e spec
+  drives both tools past it. the seams spec counts eighteen tools now.
+
+## Entry 32 — 28 September 2026
+
+Ran the mono demo (`apps/demo-mcp`) with Claude Code headless against it:
+load the MNI template, go to the left hippocampus, add the AAL atlas as
+an overlay, take a screenshot and say what is under the crosshair. Both
+new tools worked against real NiiVue 1.0. Two things did not, fixed on
+both sides today; mono 8ddec870 is the commit this one mirrors.
+
+- `add_overlay` moved the crosshair. NiiVue keeps it as a fraction of
+  the scene, and a volume with a different bounding box changes the
+  scene, so the fraction that was on the hippocampus landed somewhere
+  else once the atlas was added. The handler reads the crosshair in
+  millimetres before `addVolume` and puts it back through `mm2scene`
+  after. The spec swaps the fake's model for a bigger box inside
+  `addVolume` and checks both the millimetres and the new fraction.
+- `screenshot` carried the PNG twice, once as the image block and once
+  as base64 inside the JSON text, so a 1024-wide shot was close to a
+  megabyte and Claude Code truncated it. `answer()` now leaves the
+  result's `data` and `mimeType` out of the text when a picture goes as
+  an image block; the specs assert the JSON is width and height only.
+- Not acted on: the demo's server hint could name the volumes it serves
+  (the agent guessed a public URL first and got a 404), `labels:
+  freesurfer` on the AAL atlas gives names that do not match its
+  regions, and the demo's base window opens at 40..80.
+
+## Entry 33 — 28 September 2026
+
+The three things entry 32 left alone, and one Codex fixed on the mono
+side in the meantime; mono 36155454 (on top of Codex's d10a3497) is what
+this commit mirrors.
+
+- `add_overlay`'s `labels` took `freesurfer` or nothing, so the AAL atlas
+  was drawn with FreeSurfer's names and the regions did not match. It now
+  also takes the address of a label table JSON the page can fetch (`R`,
+  `G`, `B` and `labels`, the shape NiiVue reads and the shape of
+  niivue.com's `aal.json`). `fetchLabelTable` fetches it before anything
+  is added, so a bad address leaves the scene as it was, checks the
+  arrays are one length, and fills `I` and `A` in as NiiVue's own reader
+  would, so the object satisfies NiiVue's `ColorMap` type for
+  `setColormapLabel`. `where_am_i` lists the address as the volume's
+  labels. The schema went from `z.enum(["freesurfer"])` to a string; the
+  handler still refuses a bare name it does not know, and a name with a
+  `/` in it is an address.
+- The agent guessed a public address for a volume and got a 404 before
+  finding the demo's own. `startServer` takes `instructions`, handed to
+  `McpServer` so a client reads it on connecting. Mono's demo names the
+  volumes its dev server serves; brainsonify's server names the two demo
+  images the page's buttons load and the AAL atlas with its table at
+  niivue.com. `server.spec.ts` checks `getInstructions()` mentions them.
+- Codex's d10a3497 in mono: a `?tab=<id>` page that the server had
+  renamed as a duplicate took the original's id back on reload, because
+  the address won over storage. `tabId` now remembers which address
+  claimed the storage (`niivue-mcp.tab.address`) and, while the address
+  still names it, the stored id wins; a different `?tab` address still
+  claims its id. The two `tabId` specs cover the rename and the new
+  address, and the welcome spec reloads the duplicate. The `tabId` doc
+  comment and the README's tab paragraph say the same.
+- Not a defect: the demo's base window opening at 40..80 is the
+  `mni152.nii.gz` header's own `cal_min`/`cal_max`, and the render is
+  right for it.
+
+## Entry 34 — 28 September 2026
+
+The core grows from 14 tools to 48, one for every public NiiVue API that
+takes and returns serializable state; mono adc3b83f (on top of 36155454)
+is what this commit mirrors. mono's pull request #214 carries it.
+
+- The tools, by group. Volumes: `nudge_crosshair`, `transform_volume`,
+  `remove_volume`, `reorder_volume`, `describe_volume`; `set_volume`
+  takes every drawing field plus the affine and a transform;
+  `set_clip_plane` and `set_camera` take NiiVue's full argument sets;
+  `go_to_point` takes voxels. Settings: `get_options`, `set_options` and
+  `capabilities` over a typed table of NiiVue's options (`settings.ts`)
+  that coerces choices, colours, vectors and bounds; `add_colormap`,
+  `set_font`, `set_custom_layout`. Meshes: `load_mesh`, `list_meshes`,
+  `set_mesh`, `remove_mesh` and the three mesh-layer tools. Signals:
+  `load_signal`, `list_signals`, `set_signal`, `remove_signal`,
+  `set_graph`. Marks: `edit_drawing`, `list_annotations`,
+  `edit_annotations`, `list_measurements`, `edit_measurements`. The
+  canvas and files: `set_viewport`, `map_point`, `set_slide`,
+  `chunk_stats`, `save`, `load_document`.
+- The `View` interface moved to `browser/view.ts` and is typed member by
+  member. Twelve members are required (the old eleven plus `addVolume`);
+  everything else is optional, and a handler whose members the page's
+  NiiVue lacks refuses in words ("This page's NiiVue cannot ...") while
+  every other tool answers. `apps/brainsonify` passes its NiiVue
+  1.0.0-rc.14 as the view unchanged and typechecks; the one fake view in
+  `agent.spec.ts` gained `addVolume`.
+- Two typings were loosened so a real NiiVue is assignable without a
+  cast: the chunk report members return `object` (NiiVue's snapshot
+  interfaces have no index signature), and `volumeTransform` is a record
+  of a method-style signature, so a transform that takes NiiVue's own
+  volume class fits the `ShownVolume` the handler passes.
+- Handlers share parameter readers (`browser/params.ts`) and
+  `pickIndex` (`browser/pick.ts`), so every tool gives the same errors
+  for a missing field, a bad number, an unknown volume. `nameFromUrl`
+  lives in `params.ts` now; `scene.ts` re-exports it.
+- The server side splits the schemas by group (`tools-volumes.ts`,
+  `tools-settings.ts`, `tools-layers.ts`, `tools-marks.ts`,
+  `tools-extras.ts`) with `args.ts` for the shared zod pieces and
+  `context.ts` for the `Extension` and `ToolContext` types, which
+  `server/index.ts` still exports.
+- Tests: `testing/fake-view.ts` is the shared base view, and each
+  handler module has a spec (191 lib tests). `seams.spec.ts` and
+  `server.spec.ts` list the 48 core names and count 52 with the sound
+  tools. mono's `http.test.ts` stays bun-only and is not carried over.
+- The regenerated files (`scene.ts`, `tools.ts`, their specs, the three
+  index files) were produced from mono's by a converter (`.spec.ts`,
+  vitest, biome at double quotes, semicolons, width 120) rather than by
+  hand, so their comment wording is now mono's; the brainsonify-specific
+  phrasings entry 33's files had are gone from those five. The
+  normalized diff (both sides through mono's biome) shows only biome's
+  object-wrapping artifacts, the storage-key names in `client.ts`, and
+  the untouched prose deviations in `http.ts` and `bridge.ts`.
+- The README lists every tool in six tables and says which NiiVue
+  members are left out and why: DOM nodes, canvases, callbacks, loaders,
+  pointer-driven picks and live source objects belong to the page.
+
+## Entry 35 — 28 September 2026
+
+Mirrors mono d6552a3a (fix(nv-mcp): await NiiVue's async mutations, and make a signal replace replace), Codex's review of the 48-tool commit.
+
+- remove_volume, reorder_volume, remove_mesh, set_volume's affine branch and transform_volume's replace branch called NiiVue members that return a promise without awaiting them, so a handler could answer, and the bridge start the next request, before the GPU update landed. View now declares removeVolume, removeAllVolumes, the four moveVolume members, removeMesh and removeAllMeshes as returning a promise, and every handler awaits before drawScene and the answer. reorder_volume binds the move members instead of wrapping optional calls.
+- load_signal's replace went through loadSignals, which appends; it now calls removeAllSignals first (refusing in words without it), then loadSignals so the graph window resets.
+- README: volume transforms are page-registered but exposed through transform_volume and capabilities, not left out.
+- Specs: the signal fake's loadSignals appends as NiiVue's does; mesh remove fakes are async; scene.spec gains remove_volume, reorder_volume, transform_volume and set_volume-affine cases whose fakes finish on a later microtask, so they fail without the awaits (proved by removing them).
+
+Regenerated through the converter: browser/{meshes,scene,signals,view}.ts and the three specs. README patched by hand. Tool count unchanged at 52.
+
+## Entry 36 — 29 September 2026
+
+Mirrors mono de81994c (fix(nv-mcp): put a replacement in before dropping what it replaces), Codex's second pass over the failure paths.
+
+- Three tools destroyed the scene before their replacement had loaded, so a bad address or a failed parse left the page with less than it started with. load_signal's replace cleared the signals, then loaded; it now loads through loadSignals (appends, resets the graph window) and removes the prior signals by index only once the new one is in, so it needs removeSignal rather than removeAllSignals. load_mesh's replace went through NiiVue's loadMeshes, which clears the scene before it fetches; it now adds first and removes the prior meshes after the add succeeds, and View no longer declares loadMeshes since nothing reads it (settings.ts drops it from its key list too). transform_volume's replace removed the source, then added the result; it now adds first.
+- Specs: the replace cases check call order (add, then remove from the highest index down) and the refusal without removeSignal or removeMesh; new cases fail the load and expect the scene untouched and no remove called. Five fail without the fixes (proved by setting the source aside).
+- README: load_mesh's replace "drops the meshes shown once it has loaded".
+
+Regenerated through the converter: browser/{meshes,scene,signals,view,settings}.ts and the three specs. README patched by hand. Tool count unchanged at 52; libs 198 specs, apps/mcp 14.
+
+## Entry 37 — 29 September 2026
+
+Mirrors mono c214946d (feat(nv-mcp): label atlas regions on an exploded chunked volume), the example film's tooling.
+
+- set_volume takes `chunk_grid` (three whole numbers, or null to make the volume one texture again) and `spread` (1 or more; a volume not yet chunked is tiled 3 by 3 by 3 first). describeVolume reports `chunkGrid` and `spread` when the volume is tiled. ShownVolume gains `chunkPlan` and `chunkExplode`; View gains setVolumeChunkGrid, setVolumeChunkExplode, chunkBrickIndexAt, chunkBrickCornersAt, setVolumeBrickOpacity and whenChunkStreamSettles, all optional.
+- New tool set_labels: text labels tied by a line to an atlas region's centroid (its spoken name unless `text` is given) or to a point in mm with its own text. On a tiled volume each label names and outlines its brick (the page gets the corners as `boxMM`) and `dim_others` sets the opacity of every brick holding no label through setVolumeBrickOpacity; every call replaces the labels and the dimming, `clear` takes them down. The page draws them through a new optional `labels` hook on NiiVueHost (PointLabel exported from the browser entry); a page without one declines.
+- screenshot awaits whenChunkStreamSettles before drawing: a chunked volume streams its bricks over the frames after the grid is set, and again after a change that rebuilds them (volumeIllumination on, say), so a frame drawn at once showed part of the volume or none of it.
+- Specs: tiling, spreading and their refusals; labels at centroids and points, brick naming and dimming, brick counting from the plan, clearing, and the refusals (unknown or ambiguous region, a point without text, no hook, dim_others on an untiled volume); the screenshot's settle wait ordered before the draw. Schema specs cover the two new set_volume keys, set_labels' keys, and the refusals of a bad spread, grid or labels value.
+- README: the set_volume row, a set_labels row, the screenshot row, and the `labels` hook in the host example.
+
+Regenerated through the converter: browser/{scene,view,index}.ts, server/tools.ts and their two specs. README patched by hand. Tool count 52 to 53 (seams.spec.ts and server.spec.ts name the new tool); libs 208 specs, apps/mcp 14. The brainsonify page has no `labels` hook yet, so set_labels declines there until one is added.
+
+### next
+
+- the mono pull request #214 is open with this work; brainsonify's
+  `libs/niivue-mcp` becomes a dependency on `@niivue/nv-mcp` once it is
+  published.
+- an agent-driven pass over the new tools against the real page, as
+  entry 32 did for the first fourteen.
+
+## Entry 38 — 8 October 2026
+
+Mirrors mono 64d8f40b (docs(nv-mcp): how to connect each agent client to the server).
+
+- `libs/niivue-mcp/docs/connecting-agents.md` is mono's guide for Claude Code, the Claude desktop app, Codex CLI, Gemini CLI, VS Code, Cursor, Windsurf, stdio-only clients through mcp-remote and the TypeScript and Python SDKs, with the inspector check and the common failures. The demo's names are brainsonify's: `bun run mcp` and `bun run dev`, `BRAINSONIFY_MCP_PORT`, the "agent server connected" line under the crosshair buttons, 49 core tools plus brainsonify's four. Mono's line that the package's end-to-end checks were run with `claude -p` is dropped, since that was not done here. Its "rebuild `dist`" failure becomes "restart `bun run mcp`", because the server reads the lib's source when it starts.
+- The library README's desktop-app block is replaced by a pointer to the guide, as mono's is, and `apps/mcp/README.md` points at it too, where mono's demo README does.
+
+The converter from entry 34 was gone (nothing in the repo or the scratchpads), so we rebuilt it: mono's file through `bun:test` → `vitest`, `mock` → `vi.fn`, `.test.ts` → `.spec.ts`, then mono's biome at double quotes, semicolons, width 120. Run on da0559c9, the commit entry 37 mirrored, it reproduces every regenerated file byte for byte; what differs is the blend modes below, the import order in `tools.spec.ts`, the line wrapping in `views.ts`, and the files that were never regenerated (`client.ts`, `http.ts`, `bridge.ts`, `planes.ts`, `regions.ts` and their specs). The two commits after this one went in as a three-way merge (brainsonify's file, the converted da0559c9, the converted target), so the hand-kept differences survive. None conflicted, and the merged tree against the converted 585cf039 shows only those same hand-kept differences.
+
+## Entry 39 — 8 October 2026
+
+Mirrors mono 00acb374 (feat(nv-mcp): name the overlay blend modes in the settings table).
+
+- set_options and get_options take `volumeOverlayAlphaBlend` (max, additive, over) and `volumeOverlayColorBlend` (additive, mean) by name; the tables are exported as OVERLAY_ALPHA_BLENDS and OVERLAY_COLOR_BLENDS.
+- The page is on NiiVue 1.0.0-rc.14, which has neither option. That is not a silent no-op: set_options refuses a setting the instance does not carry ("This page's NiiVue has no … setting"), get_options leaves it out, and capabilities does not list it. They come to life when the page moves to a NiiVue that has them; we have not bumped it.
+
+Copied from the converted da0559c9 (the commit already holds them): settings.ts, index.ts, settings.spec.ts.
+
+## Entry 40 — 8 October 2026
+
+Mirrors mono 585cf039 (fix(nv-mcp): tighten the tool contracts found loose by the agent pass).
+
+- Every tool schema is strict, so an unknown or misspelt argument is an input error naming the key.
+- add_overlay takes `cal_min`, `cal_max`, `colormap_negative`, `cal_min_neg`, `cal_max_neg` and `colorbar`, and refuses a display window on a label overlay.
+- set_view takes slice `none`, which gives the canvas to the signal graph.
+- screenshot waits at most 8 s for bricks and 4 s for a busy backend, then draws what it has.
+- edit_annotations add normalizes polygons to `{outer, holes}`, takes `[x, y]` or `{x, y}` points, and fills label, group and the style NiiVue reads at draw time.
+- set_mesh checks tract and connectome options against the known keys.
+- load_signal shows a hidden graph; set_graph and list_signals say when it is hidden.
+
+Three-way merged through the converter: browser/{marks,meshes,scene,settings,signals,view}.ts and their specs, server/{args,tools,tools-layers,tools-marks}.ts, tools.spec.ts, views.ts. README rows patched by tool name; add_overlay and screenshot by hand, since brainsonify's rows carry their own wording (SynthSeg ids, "Draws the scene"). Tool count unchanged at 53; libs 222 specs, apps/mcp 14; typecheck clean across the five projects.
+
+> _To fill in: whether brainsonify's own four tools (set_sound, list_modes, set_mode, announce) should get strict schemas too._
+
+### next
+
+- mono's controls series (ceea3aab through ce136ce0: control tools, the UIKit surface, the grid layout, the data palette, tract selects) is not mirrored. it is about 4600 lines with a new `uikit/` entry and a vite config change, and mono's working tree is still moving in bindings.ts and data.ts.
+- the root README still says "Eighteen tools" and the library README's file table says "the fourteen core tools"; both are older than entry 34.
+
+---
+
+## Entry 41 — 8 October 2026
+
+### the session intro, a collapsing panel, and the knob becomes the Helm
+
+nothing committed today. this is all sitting in the working tree alongside the
+mirroring work in entries 38 to 40.
+
+**the knob is now the Sonaview Helm.** every spoken string changed: "Knob moves
+back and front." is "Helm moves back and front.", and `describeMode`'s parameter
+sentence is "Helm sets …". the README, TECHNICIAN.md and the panel's hint line
+follow. the code did not: `KnobMode`, the `knobStatus` span, the `knobHint` class
+and a few comments in the new files all still say knob.
+
+> _To fill in: why the knob got a product name now, and whether the code
+> identifiers are meant to follow or deliberately stay "knob"._
+
+**a technician intro over the page.** `intro.ts` is a native `<dialog>`, opened
+modal on every load, with five steps: load the image, fit the headphones, hand
+over the Helm, explain the Helm, start the session. step four is a script in
+quotes to read out loud. Start session turns the sound on, or replays the key if
+it is already on, and closes; Skip just closes; Session steps in the panel
+reopens it. the dialog owns no loading or sound of its own — the page passes
+`load`, `start`, `experiment` and `end` in, so the intro and the panel cannot
+disagree about what is on screen.
+
+two things it does on purpose. it has no inputs or selects, only buttons,
+because the panel specs count form controls in document order against the
+schema. and it stops `keydown` from reaching the window, since the Helm's keys
+listen there and an arrow pressed while the technician reads must not move the
+crosshair behind the dialog; closing blurs whatever had focus for the same
+reason.
+
+**End session takes two taps.** the first arms the button, turns it red and says
+"Tap again to end"; a second within `END_CONFIRM_MS` ends, otherwise it stands
+down. the reset itself is `location.reload()`, so the patient's file, the
+crosshair, sound and any sweep all go, and the condition survives because it
+lives in the address.
+
+> _To fill in: why End session reloads rather than clearing the scan and
+> resetting the state in place._
+
+> _To fill in: why the confirm window is 4 s._
+
+**every load now reports into the intro.** `loadFile` and `loadDemo` say
+"Loading …", then what loaded and whether region names are on, and mark a
+failure; the agent host's `loaded` hook reports too, so a scan an agent put up
+shows in the same line. `wireDemo` is gone — there is one `loadDemo(id)` that
+both the intro's buttons and the panel's call, looped over `DEMO_VOLUMES`
+rather than wired by name. the first frame is `loadDemo("demo")` and then
+`intro.open()`.
+
+**the panel folds away.** `collapse.ts` puts a Hide panel / Show panel button
+over the stage's top-right corner and zeroes the panel's grid column, so the
+stage's ResizeObserver refits the canvas to the whole window. collapsed, the
+panel's contents go to `visibility: hidden` rather than `display: none` or
+`inert`, because either of those would also silence the two live regions inside
+it; visibility can be turned back on for a descendant, and `[role=status]` is.
+the choice is remembered in localStorage per browser, and the instance is
+constructed before the first fit so a tablet remembered as collapsed never
+flashes the panel.
+
+**two loose ends I noticed in the diff.** the panel's note is now "Wear the
+headset" with "bone-conduction" dropped, while the README's opening paragraph
+and EXPERIMENTS.md still have the bone-conduction transducer as the longer-term
+plan. and `apps/brainsonify/package.json` moved `@niivue/niivue` off the pinned
+`1.0.0-rc.14` to `link:@niivue/niivue`, and added `link:@niivue/uikit`.
+
+> _To fill in: whether dropping "bone-conduction" from the panel note is
+> deliberate, given the README and EXPERIMENTS.md still describe the
+> transducer._
+
+> _To fill in: what the two `link:` dependencies point at, whether it is
+> temporary, and whether entry 39's overlay blend settings come to life on
+> whatever NiiVue that is._
+
+> _To fill in: whether the uikit link is the start of mono's controls series
+> that entry 40's next left unmirrored._
+
+none of this has been in front of a listener. the five steps, and the script in
+step four, are written and not tried.
+
+### next
+
+- read step four aloud to someone and see whether the words hold up.
+- decide whether the code follows the rename or keeps saying knob.
+
+---
+
+## Entry 42 — 13 October 2026
+
+### two ideas for the tutorials: a hearing test, and haptics off a centroid
+
+nothing built yet, these are ideas to come back to.
+
+**a hearing test in the tutorials.** we add a hearing test to the tutorials.
+
+> _To fill in: why, what the test checks (each ear, a pitch range, loudness),
+> where in the tutorial it sits, and whether a result changes the mapping or
+> only tells the technician._
+
+**haptic feedback as we move away from a ROI centroid.** in the tutorials,
+the listener gets haptic feedback as the crosshair moves away from a region's
+centroid.
+
+> _To fill in: why, what gives the feedback (the Helm's panel, the tablet,
+> something worn), how it changes with distance, and whether it is only for
+> the tutorials or for sessions too._
+
+neither has been tried with a listener.
+
+### next
+
+- decide what the hearing test checks.
+- decide what gives the haptic feedback.
+
+---
+
+## Entry 43 — 13 October 2026
+
+### mono's nv-mcp instead of our copy, and every session opens on a cut
+
+**the hand-mirrored core is gone.** `libs/niivue-mcp` is deleted, about 12,200
+lines of it, and brainsonify links mono's `@niivue/nv-mcp` the way it already
+links `@niivue/niivue` and `@niivue/uikit`: `bun link` in mono's
+`packages/nv-mcp`, then `bun install` here. imports move to `@niivue/nv-mcp`
+and its `/browser` and `/server` entries, and the three `niivue-mcp` paths come
+out of `tsconfig.base.json`. this ends the mirroring workflow of entries 38 to
+40 — there is no local copy left to mirror into, and no converter run to keep
+honest.
+
+mono's core carries 57 tools, eight more than the copy's 49: the control tools
+(`add_control`, `list_controls`, `set_control`, `remove_control`) and the data
+tools (`list_data`, `add_data`, `remove_data`, `load_data`). the seams spec
+lists them and counts 61 with brainsonify's four sound tools, and it now reads
+mono's source through the link, with `realpathSync` on
+`node_modules/@niivue/nv-mcp/src`. the page has no control surface yet, so
+`list_controls` says so.
+
+> _To fill in: why we stopped mirroring by hand and linked the package instead
+> — whether it was the 4600-line controls series entry 40 left unmirrored, or
+> the converter being more upkeep than it was worth — and whether the link is
+> the arrangement from here or a stopgap until nv-mcp is published._
+
+> _To fill in: whether the eight new tools are wanted here, or just arrived
+> with the package._
+
+> _To fill in: how the Pages deploy is meant to work now. `deploy.yml` runs
+> `bun install --frozen-lockfile` on a fresh runner, which has no mono checkout
+> for the three `link:` deps to resolve against._
+
+**facing the cut.** conditions 09 to 11 open already cut on the coronal
+midline, but the camera stayed at NiiVue's default side view, so the render
+showed the cut edge-on and the one tile that was supposed to show a cut face
+showed its edge. `cutFacing` turns the camera to the face a plane exposes and
+then cuts. switching condition, loading a volume inside one, and the Helm's
+next plane all go through it; `nextPlane` had the turn-then-cut inline already
+and now calls the same function.
+
+> _To fill in: why the camera turns to meet the conditions' preset cut, rather
+> than the conditions dropping the preset now that Start session cuts anyway._
+
+**every session opens on the coronal midline, turned 45 degrees.** only 09 to
+11 had a preset cut, so on 01 to 08 the render was a whole head and nothing was
+cut. Start session now cuts `SESSION_CUT`, the coronal midline with the back
+taken off, whatever the condition, and sets the camera to
+`cameraForPlane` plus `SESSION_TURN` of 45 degrees. the comment's reason for
+the turn is that square on, a cut face looks like one more flat slice, and
+turned it reads as the render, so the technician can tell which tile is which;
+the Helm's next plane and `c` still square each whole plane up. the camera
+moves before the cut on purpose, since a turn with the Clip slider up re-cuts
+the slider's way and the cut that follows has to override it. the intro's step
+5 and TECHNICIAN.md say what happens.
+
+> _To fill in: why 45 degrees._
+
+> _To fill in: why the cut is on Start session rather than on load._
+
+> _To fill in: why the coronal midline with the back off is the right opening
+> plane for every condition, not just 09 to 11._
+
+none of this has been in front of a technician or a listener. the orientation
+argument for the 45 degree turn is a design reason, not something anyone has
+been observed getting right or wrong.
+
+### next
+
+- work out what the Pages deploy does with the `link:` deps before this goes to
+  `main`. it is on `feat/mcp-port-mono-fixes`, one ahead, so nothing has
+  deployed yet.
+- decide whether conditions 09 to 11 keep their own preset cut.
+
+---
+
+## Entry 44 — 22 October 2026
+
+### feedback: a tutorial quiz, a hearing test, and a slice as music
+
+three suggestions passed on by Chris. nothing built yet.
+
+**a tutorial with a quiz, for both people at the table** (Nick Riccardi). the
+tutorial should build confidence for the navigator and for the technician, not
+only the listener. this extends his suggestion of 13 October: anchor the sound
+key to body landmarks, and have a tutorial that moves to a point and asks
+where it is.
+
+> _To fill in: what the technician is meant to gain confidence in (running the
+> panel, reading the scene, knowing what the listener hears), and whether the
+> quiz is run by the technician, by the Helm, or by an agent through the MCP
+> tools._
+
+**a hearing test** (Makayla King). the same idea as entry 42, now from a
+second person. entry 42's open questions still stand: what it checks, where it
+sits, and whether a result changes the mapping or only tells the technician.
+
+**a slice as music** (Steffen Bollman). represent a whole slice musically
+rather than one voxel at the crosshair. Chris's suggestion for what drives the
+music: a difference between the image and MNI152, so that qualities of the
+music come from how the image departs from the template.
+
+the MNI152 demo and a dropped-in file are already taken as MNI space (the AAL
+lookup relies on this), so a voxelwise difference against MNI152 needs no
+registration for those; the whole-head T1 is not in MNI space and would.
+
+> _To fill in: which qualities of the music the difference drives (key,
+> consonance, tempo, instrument), whether the slice plays as a sweep in time
+> or as a chord, and what the difference is (intensity after normalising,
+> tissue segmentation, a z-score against a population)._
+
+none of this has been tried with a listener.
+
+**a tutorial on the controls comes before the quiz.** Chris's call, the same
+day: before anyone is quizzed, a tutorial walks through exploring the controls.
+
+> _To fill in: why the order matters — whether the quiz would otherwise be
+> testing the controls rather than the sense of place._
+
+**the controls tutorial, built.** `src/tutorial.ts`, a **Helm tutorial**
+button in the panel. three choices, all Chris's:
+
+- the app speaks each step to the listener and the panel shows the
+  technician the same step and the key to press, so both learn together;
+  not a script the technician reads out, and not an agent over MCP.
+- a step waits until it is done, with Skip for the technician, rather than
+  free exploration with a Next button.
+- every Helm control, fourteen steps, in one pass rather than the three axes
+  first and the rest later.
+
+> _To fill in: why each of the three._
+
+the cost that came with speaking it: `browserSpeech().say()` cancels whatever
+is being said, so the surface's own "Helm moves back and front." would be
+cut off by the next prompt. while the tutorial runs it holds what the
+surface says and speaks it in the same utterance as the prompt. this has
+only been run in specs with a fake voice; nobody has heard it on the
+tablet's speech engine, or taken a listener through it.
+
+### next
+
+- decide whether the quiz and the hearing test are one tutorial or two.
+- decide what the MNI152 difference is measured as.
+- run the Helm tutorial on the tablet and listen for lines cut short.
+
+---
+
+## Entry 45 — 26 October 2026
+
+### the Helm on screen, in a window you can drag
+
+**what was built.** a **Virtual Helm** button in the panel opens the Helm as a
+window over the render: the dial, a button per technician key, and the Helm
+line under them. `?helm=1` opens it on load. it is a third input to the same
+surface, next to the keyboard and the CrowPanel, and every gesture goes
+through `perform` the way a key does, so the tutorial hears it too and the
+window never keeps its own mode or step.
+
+the reasons in the task: anyone can drive the app with a mouse or a
+touchscreen without the CrowPanel or the key map, and the prototype has to
+run for someone with only a browser, since ITEC 444 Team Project #3 is graded
+by an instructor who will not have the hardware.
+
+> _To fill in: whether the window is meant for the listener as well, or only
+> for demos and grading, given the listener cannot see the screen._
+
+**the dial.** dragging round it sends one turn per 15 degrees
+(`DETENT_DEGREES`), a wheel notch sends one, and the hub presses. 15 is where
+the task said to start; nobody has tuned it by feel yet. the tick on the dial
+turns with it but means nothing, since the step size still comes from `s`, the
+same as the real knob.
+
+> _To fill in: whether 15 degrees feels right with a mouse and with a finger._
+
+**the window sits on the body, not in the stage.** checked in Chrome: with the
+window over the brain, hovering and turning the dial sent no pointer events
+to the stage, and the canvas next to it still did. so the pointer over the
+window is not sonified as the canvas beneath.
+
+**implementation notes.** the buttons are generated from `KEY_MAP`, but in
+the table's own order `"0"` came first, because JavaScript lists integer-like
+keys before the others. the window lays them out in its own order (1 to 5,
+then next mode, and so on) and takes each key from the table. and a tap on a
+window button never leaves focus on it, since the keyboard controller ignores
+keys while a button has focus; both work at once.
+
+none of this has been tried on the tablet or with a listener.
+
+### next
+
+- tune `DETENT_DEGREES` with a mouse and on a touchscreen.
+- package the build for the instructor (a separate task). the window needs
+  nothing extra in `bun run build`: it is plain DOM, and its styles are in
+  `styles.css`.

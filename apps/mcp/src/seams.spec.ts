@@ -5,21 +5,23 @@
  * real handlers against the real server without a socket.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { coreHandlers, type View } from "niivue-mcp/browser";
-import { Bridge, CORE_SCHEMAS, buildServer } from "niivue-mcp/server";
+import { coreHandlers, type View } from "@niivue/nv-mcp/browser";
+import { Bridge, CORE_SCHEMAS, buildServer } from "@niivue/nv-mcp/server";
 import { describe, expect, it } from "vitest";
 
 import { brainsonifyHandlers, type SoundHost } from "../../brainsonify/src/controllers/agent";
 import { BRAINSONIFY_SCHEMAS, brainsonify } from "./brainsonify";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const coreDir = resolve(here, "../../../libs/niivue-mcp/src");
+/** The core's source, present only when `@niivue/nv-mcp` is linked from mono (npm ships `dist`). */
+const coreSrc = resolve(here, "../node_modules/@niivue/nv-mcp/src");
+const coreDir = existsSync(coreSrc) ? realpathSync(coreSrc) : null;
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -34,7 +36,8 @@ function imports(file: string): string[] {
 }
 
 describe("the core", () => {
-  it("imports nothing from brainsonify and nothing outside its own directory", () => {
+  it.skipIf(!coreDir)("imports nothing from brainsonify and nothing outside its own directory", () => {
+    if (!coreDir) return;
     const offending: string[] = [];
     for (const file of sources(coreDir)) {
       for (const specifier of imports(file)) {
@@ -47,7 +50,19 @@ describe("the core", () => {
 
   it("names a schema for every core tool and no others", () => {
     expect(Object.keys(CORE_SCHEMAS).sort()).toEqual(
-      ["list_tabs", "use_tab", "load_volume", "where_am_i", "list_regions", "go_to_region", "set_clip_plane", "set_camera", "screenshot"].sort(),
+      [
+        "list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region",
+        "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_labels", "set_view", "screenshot",
+        "nudge_crosshair", "transform_volume", "remove_volume", "reorder_volume", "describe_volume",
+        "get_options", "set_options", "capabilities", "add_colormap", "set_font", "set_custom_layout",
+        "load_mesh", "list_meshes", "set_mesh", "remove_mesh", "add_mesh_layer", "set_mesh_layer", "remove_mesh_layer",
+        "load_signal", "list_signals", "set_signal", "remove_signal", "set_graph",
+        "edit_drawing", "list_annotations", "edit_annotations", "list_measurements", "edit_measurements",
+        "set_viewport", "map_point", "set_slide", "chunk_stats", "save", "load_document",
+        "add_control", "list_controls", "set_control", "remove_control",
+        "list_data", "add_data", "remove_data", "load_data",
+        "update_volume_data", "update_mesh_positions", "set_boxes", "animate", "set_instances",
+      ].sort(),
     );
   });
 });
@@ -61,10 +76,10 @@ describe("the server and the page", () => {
     announce: () => {},
   };
   const pageHandlers = { ...coreHandlers({ view: {} as View }), ...brainsonifyHandlers(sound) };
-  /** The two the bridge answers itself; the page never sees them. */
-  const serverSide = ["list_tabs", "use_tab"];
+  /** The three the server answers itself; the page never sees them. */
+  const serverSide = ["list_tabs", "use_tab", "new_tab"];
 
-  it("offer and answer the same thirteen tools", async () => {
+  it("offer and answer the same sixty-six tools", async () => {
     const server = buildServer({ bridge: new Bridge(), extensions: [brainsonify] });
     const [clientEnd, serverEnd] = InMemoryTransport.createLinkedPair();
     await server.connect(serverEnd);
@@ -72,7 +87,7 @@ describe("the server and the page", () => {
     await client.connect(clientEnd);
     try {
       const offered = (await client.listTools()).tools.map((tool) => tool.name).sort();
-      expect(offered).toHaveLength(13);
+      expect(offered).toHaveLength(66);
       expect(offered).toEqual([...serverSide, ...Object.keys(pageHandlers)].sort());
       expect(offered).toEqual([...Object.keys(CORE_SCHEMAS), ...Object.keys(BRAINSONIFY_SCHEMAS)].sort());
     } finally {

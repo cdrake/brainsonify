@@ -5,6 +5,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { request as httpRequest } from "node:http";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -18,7 +19,19 @@ import { BRAINSONIFY_SCHEMAS } from "./brainsonify";
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
 
-const CORE_TOOLS = ["list_tabs", "use_tab", "load_volume", "where_am_i", "list_regions", "go_to_region", "set_clip_plane", "set_camera", "screenshot"];
+const CORE_TOOLS = [
+  "list_tabs", "use_tab", "new_tab", "load_volume", "add_overlay", "where_am_i", "list_regions", "go_to_region",
+  "go_to_point", "set_clip_plane", "set_camera", "set_volume", "set_labels", "set_view", "screenshot",
+  "nudge_crosshair", "transform_volume", "remove_volume", "reorder_volume", "describe_volume",
+  "get_options", "set_options", "capabilities", "add_colormap", "set_font", "set_custom_layout",
+  "load_mesh", "list_meshes", "set_mesh", "remove_mesh", "add_mesh_layer", "set_mesh_layer", "remove_mesh_layer",
+  "load_signal", "list_signals", "set_signal", "remove_signal", "set_graph",
+  "edit_drawing", "list_annotations", "edit_annotations", "list_measurements", "edit_measurements",
+  "set_viewport", "map_point", "set_slide", "chunk_stats", "save", "load_document",
+  "add_control", "list_controls", "set_control", "remove_control",
+  "list_data", "add_data", "remove_data", "load_data",
+  "update_volume_data", "update_mesh_positions", "set_boxes", "animate", "set_instances",
+];
 const SOUND_TOOLS = Object.keys(BRAINSONIFY_SCHEMAS);
 
 async function freePort(): Promise<number> {
@@ -87,7 +100,7 @@ describe("the brainsonify MCP server, end to end", () => {
 
   beforeAll(async () => {
     port = await freePort();
-    server = run("src/server.ts", { BRAINSONIFY_MCP_PORT: String(port) });
+    server = run("src/server.ts", { BRAINSONIFY_MCP_PORT: String(port), BRAINSONIFY_PAGE: "http://localhost:4200/?agent" });
     await until("the server", async () => (await fetch(`http://127.0.0.1:${port}/`)).ok);
     client = new Client({ name: "integration", version: "0" });
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)));
@@ -97,6 +110,11 @@ describe("the brainsonify MCP server, end to end", () => {
     await client?.close().catch(() => {});
     for (const page of pages.values()) page.kill();
     server?.kill();
+  });
+
+  it("tells a connecting agent what the page can load", () => {
+    expect(client.getInstructions()).toMatch(/mni152\.nii\.gz/);
+    expect(client.getInstructions()).toMatch(/aal\.json/);
   });
 
   it("lists the core tools and the sound tools", async () => {
@@ -126,6 +144,15 @@ describe("the brainsonify MCP server, end to end", () => {
     expect(failed.isError).toBe(true);
     expect(text(failed)).toMatch(/could not be loaded: 404/);
 
+    const overlaid = await call("add_overlay", { url: "https://example.test/zstat.nii.gz", colormap: "red" });
+    expect(overlaid.isError).toBeUndefined();
+    expect(json(overlaid)).toMatchObject({
+      volumes: [
+        { index: 0, name: "mni152.nii.gz" },
+        { index: 1, name: "zstat.nii.gz", colormap: "red", opacity: 0.7 },
+      ],
+    });
+
     const regions = json(await call("list_regions", { query: "insula" })) as unknown as Array<{ label: string }>;
     expect(regions.map((r) => r.label)).toEqual(["Insula_L", "Insula_R"]);
 
@@ -149,12 +176,30 @@ describe("the brainsonify MCP server, end to end", () => {
     const turned = json(await call("set_camera", { azimuth: 45, elevation: -20 }));
     expect(turned).toMatchObject({ camera: { azimuth: 45, elevation: -20 } });
 
+    const drawn = await call("set_volume", { volume: "zstat", opacity: 0.4, cal_min: 20 });
+    expect(drawn.isError).toBeUndefined();
+    expect(text(drawn)).toMatch(/^Changed zstat\.nii\.gz\./);
+    expect(json(drawn)).toMatchObject({ volume: { index: 1, name: "zstat.nii.gz", colormap: "red", opacity: 0.4, calMin: 20, calMax: 100, globalMin: 0, globalMax: 255 } });
+    const empty = await call("set_volume", { volume: "zstat", cal_max: 10 });
+    expect(empty.isError).toBe(true);
+    expect(text(empty)).toMatch(/cal_min \(20\) must not be above cal_max \(10\)/);
+
+    const laid = await call("set_view", { slice: "multiplanar", layout: "grid", colorbar: true });
+    expect(laid.isError).toBeUndefined();
+    expect(text(laid)).toMatch(/^View: multiplanar, grid layout\./);
+    expect(json(laid)).toMatchObject({ view: { slice: "multiplanar", layout: "grid", showRender: "auto", radiological: false, colorbar: true } });
+    expect(json(await call("where_am_i"))).toMatchObject({ volumes: [{ index: 0 }, { index: 1, opacity: 0.4 }], view: { slice: "multiplanar", colorbar: true } });
+
+    const point = json(await call("go_to_point", { mm: [10, 20, 30], plane: "anterior" }));
+    expect(point).toMatchObject({ landed: { mm: mm(10, 20, 30), frac: [0.55, 0.6, 0.65] }, plane: { name: "anterior" } });
+
     const shot = await call("screenshot", { max_width: 800 });
     const content = shot.content as Array<{ type: string; mimeType?: string; data?: string }>;
     expect(content.map((c) => c.type)).toEqual(["text", "image"]);
     expect(content[1].mimeType).toBe("image/png");
     expect(content[1].data?.startsWith("iVBORw0KGgo")).toBe(true);
     expect(json(shot)).toMatchObject({ width: 320, height: 240 });
+    expect(json(shot)).not.toHaveProperty("data");
 
     expect(json(await call("set_sound", { on: true }))).toEqual({ sounding: true });
     expect(text(await call("set_sound", { on: true }))).toMatch(/^Sound on\./);
@@ -192,6 +237,58 @@ describe("the brainsonify MCP server, end to end", () => {
     expect(text(gone)).toMatch(/chosen with use_tab \(t2\) is no longer connected/);
   }, 30000);
 
+  it("answers calls to one tab in the order they were made, one at a time", async () => {
+    await openPage("t2", "second tab");
+    const load = call("load_volume", { url: "https://example.test/mni152.nii.gz" });
+    const go = call("go_to_region", { region: "left insula", plane: "left" });
+    const here = call("where_am_i");
+    const [loaded, went, where] = await Promise.all([load, go, here]);
+    expect(loaded.isError).toBeUndefined();
+    expect(went.isError).toBeUndefined();
+    expect(json(where)).toMatchObject({ volume: "mni152.nii.gz", crosshair: { mm: mm(-36, 6, 2) }, plane: { name: "left" } });
+    await closePage("t2");
+  }, 30000);
+
+  it("refuses the socket to a page from a foreign origin and takes one from loopback", async () => {
+    // A plain GET is not an upgrade, so an allowed origin gets 426 rather
+    // than a socket; a refused one never gets that far.
+    const status = async (origin: string) => (await fetch(`http://127.0.0.1:${port}/app`, { headers: { origin } })).status;
+    expect(await status("https://evil.example")).toBe(403);
+    expect(await status("http://localhost:8091")).toBe(426);
+    expect(await status("http://[::1]:5173")).toBe(426);
+    expect(await status(`http://127.0.0.1:${port}`)).toBe(426);
+  });
+
+  it("refuses an MCP request whose Host header does not name this server", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
+    // Through node:http, not fetch: fetch treats Host as a forbidden header
+    // and writes the real one, which is what a DNS-rebinding request lacks.
+    const post = (host: string) =>
+      new Promise<{ status: number; text: string }>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: "127.0.0.1",
+            port,
+            path: "/mcp",
+            method: "POST",
+            headers: { host, "content-type": "application/json", accept: "application/json, text/event-stream", "content-length": Buffer.byteLength(body) },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (chunk: Buffer) => chunks.push(chunk));
+            res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on("error", reject);
+        req.end(body);
+      });
+    const rebound = await post("niivue.attacker.example");
+    expect(rebound.status).toBe(403);
+    expect(rebound.text).toMatch(/Invalid Host header/);
+    const own = await post(`localhost:${port}`);
+    expect(own.status).toBe(200);
+  });
+
   it("re-binds a reloaded tab by id and reports the reset once", async () => {
     await openPage("t3", "third tab");
     await call("load_volume", { url: "https://example.test/mni152.nii.gz" });
@@ -209,5 +306,54 @@ describe("the brainsonify MCP server, end to end", () => {
     expect(json(after)).toMatchObject({ tab: { id: "t3" }, volume: null, reloaded: { before: { volume: "mni152.nii.gz", sounding: true }, after: { volume: null } } });
     expect(text(await call("where_am_i"))).not.toMatch(/^Note/);
     await closePage("t3");
+  }, 30000);
+
+  it("gives a duplicated tab its own id and keeps the original answering", async () => {
+    await openPage("t4", "fourth tab");
+    expect(json(await call("where_am_i"))).toMatchObject({ tab: { id: "t4" } });
+    // A duplicate: a fresh page whose copied sessionStorage says t4.
+    const copy = run("src/testing/fake-page.ts", { PAGE_PORT: String(port), PAGE_ID: "t4", PAGE_TITLE: "fourth tab" });
+    try {
+      await until("the copy to be welcomed", async () => (await tabs()).some((tab) => tab.id === "t4-2"));
+      expect(await tabs()).toMatchObject([
+        { id: "t4", title: "fourth tab", bound: true },
+        { id: "t4-2", title: "fourth tab", bound: false },
+      ]);
+      expect(json(await call("where_am_i"))).toMatchObject({ tab: { id: "t4" } });
+      await call("use_tab", { id: "t4-2" });
+      const answer = await call("where_am_i");
+      expect(text(answer)).not.toMatch(/^Note/);
+      expect(json(answer)).toMatchObject({ tab: { id: "t4-2" } });
+    } finally {
+      copy.kill();
+    }
+    await closePage("t4");
+    await until("the copy to go", async () => (await tabs()).length === 0);
+  }, 30000);
+
+  it("reaches a tab named by new_tab and opened from its address, past whatever is chosen", async () => {
+    await openPage("t5", "fifth tab");
+    await call("use_tab", { id: "t5" });
+    const made = json(await call("new_tab")) as { id: string; url: string };
+    expect(made.url).toBe(`http://localhost:4200/?agent=&tab=${made.id}`);
+    const gone = await call("where_am_i", { tab: made.id });
+    expect(gone.isError).toBe(true);
+    expect(text(gone)).toMatch(new RegExp(`^No connected tab has the id "${made.id}"\\. Connected: t5`));
+    // The person opens the address: the page takes its id from the query string.
+    const search = new URL(made.url).search;
+    pages.set(made.id, run("src/testing/fake-page.ts", { PAGE_PORT: String(port), PAGE_SEARCH: search, PAGE_TITLE: "named tab" }));
+    await until(`tab ${made.id}`, async () => (await tabs()).some((tab) => tab.id === made.id));
+    const reached = await call("where_am_i", { tab: made.id });
+    expect(json(reached)).toMatchObject({ tab: { id: made.id, title: "named tab" }, sounding: false });
+    // Named calls do not move the choice.
+    expect(json(await call("where_am_i"))).toMatchObject({ tab: { id: "t5" } });
+    const sounded = await call("set_sound", { on: true, tab: made.id });
+    expect(sounded.isError).toBeUndefined();
+    expect(json(await call("where_am_i", { tab: made.id }))).toMatchObject({ sounding: true });
+    expect(json(await call("where_am_i"))).toMatchObject({ sounding: false });
+    await closePage(made.id);
+    await closePage("t5");
+    // The choice of t5 stands until a bare call finds it gone, which this
+    // test does not make; it runs last so no other test inherits the wait.
   }, 30000);
 });

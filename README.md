@@ -21,12 +21,100 @@ atlas registered to the same space.
 
 ## Getting started
 
-Requires [Bun](https://bun.sh) 1.2+.
+Requires [Bun](https://bun.sh) 1.2+, git, and a desktop Chrome, Edge or
+Safari (WebGL2 and Web Audio; the spoken parts sound best in Chrome).
+Nothing else needs installing: NiiVue comes from npm and the demo volumes
+are fetched from `niivue.github.io` at runtime, so the first load needs a
+network connection.
 
 ```bash
+git clone https://github.com/cdrake/brainsonify.git
+cd brainsonify
 bun install
 bun run dev        # http://localhost:4200
 ```
+
+Open http://localhost:4200, click through **Starting a session** (or
+**Skip**), click **Enable sound**, and move the pointer over the brain.
+[TECHNICIAN.md](TECHNICIAN.md) is the guide for running a session with a
+listener.
+
+### A zip that runs without any of this
+
+```bash
+bun run package    # -> dist/package/brainsonify.zip
+```
+
+builds one zip (about 100 MB) for someone with no Bun, git or network: the
+production page, the four images it loads (the MNI152 and head T1 volumes,
+the AAL atlas and its labels, downloaded at package time and pointed at by
+`VITE_IMAGES`), and a launcher compiled with `bun build --compile` for
+Apple silicon and Intel Macs and for Windows (`apps/mcp/src/launcher.ts`).
+The launcher serves the page on http://127.0.0.1:4200, runs the MCP server
+on :4242, and opens the browser. The zip's `README.txt`
+(`scripts/package-README.txt`) tells the user which file to double-click and
+how to get past the unsigned-app warning on first run. Packaging needs the
+`zip` command, so run it on macOS or Linux.
+
+### Letting an agent drive it
+
+Run the MCP server in a second terminal, then open the page with `?agent`
+so it connects:
+
+```bash
+bun run mcp        # http://127.0.0.1:4242/mcp; status page at http://127.0.0.1:4242/
+# browser: http://localhost:4200/?agent
+claude mcp add --transport http niivue http://127.0.0.1:4242/mcp
+```
+
+Keep the page's tab in front; a background tab gets no animation frames.
+[apps/mcp/docs/connecting-agents.md](apps/mcp/docs/connecting-agents.md)
+covers other clients and what to check when a call fails.
+
+### NiiVue versions
+
+`@niivue/niivue`, `@niivue/uikit` and `@niivue/nv-mcp` are pinned to exact
+release candidates in `apps/brainsonify/package.json` and
+`apps/mcp/package.json`. The three are released together from the NiiVue
+[mono repository](https://github.com/niivue/mono) and each pins the others
+as an exact peer, so move them as a set: the versions published together
+under one mono release tag (`git tag --list 'niivue@*'` in mono). Pre-1.0
+releases change API between candidates, so a caret range would break a fresh
+install the day a new candidate lands.
+
+### Developing against a NiiVue checkout
+
+To change NiiVue and see it in brainsonify, clone mono next to this repository
+and link its packages in place of the npm ones. Check out the tag matching the
+pinned versions, or a newer commit if you are moving brainsonify forward:
+
+```bash
+git clone https://github.com/niivue/mono.git niivue
+cd niivue
+git checkout niivue@1.0.0-rc.63
+bun install
+for p in niivue uikit nv-mcp; do (cd packages/$p && bun run build && bun link); done
+
+cd ../brainsonify
+sed -i.bak -E 's#"(@niivue/(niivue|uikit|nv-mcp))": "[^"]+"#"\1": "link:\1"#' apps/*/package.json
+rm apps/*/package.json.bak
+bun install
+bun run dev -- --force
+```
+
+brainsonify imports mono's packages from their `dist`, so rebuild the package
+in mono after a change there. `bun link <package>` run inside an app does not
+work in this workspace; switching the specifiers to `link:` is the way. Don't
+commit the `link:` specifiers or the lockfile they produce; CI installs with
+`--frozen-lockfile` on a machine with no checkout. To go back to npm:
+
+```bash
+git checkout -- apps/brainsonify/package.json apps/mcp/package.json bun.lock
+bun install
+```
+
+When the linked work is released, set the pins to the new versions and run
+`bun install` to update the lockfile.
 
 Vite caches pre-bundled dependencies in `node_modules/.vite`. When switching
 between branches that pin different NiiVue versions it can keep serving the
@@ -53,9 +141,13 @@ cache hit rather than a rebuild.
 apps/brainsonify/   Vite app: NiiVue canvas, pointer sampling, control panel
 apps/mcp/           Bun process: the MCP server agents connect to, the NiiVue core plus the sound tools
 libs/sonification/  Framework-free audio core: intensity -> frequency, Web Audio voice
-libs/control/       Control API: the parameter schema, a state store with events and undo, the knob surface
-libs/niivue-mcp/    The generic NiiVue MCP core: tabs, the core tools, plane math, region matching; knows nothing of brainsonify
+libs/control/       Control API: the parameter schema, a state store with events and undo, the Helm surface
 ```
+
+NiiVue, its UI kit and the generic NiiVue MCP core (`@niivue/nv-mcp`: tabs,
+the core tools, plane math, region matching; it knows nothing of brainsonify)
+come from the NiiVue mono repository, installed from npm at pinned versions
+(see [NiiVue versions](#niivue-versions)).
 
 The split is deliberate: everything in `libs/sonification` is pure TypeScript with
 no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
@@ -78,14 +170,12 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `apps/brainsonify/src/region-names.ts` | The spoken name of every AAL region in anatomical English, `left inferior frontal gyrus, triangular part`; a label not in the table gets a name generated from its parts |
 | `libs/control/src/schema.ts` | The panel's parameters: range, step, default and spoken name for each |
 | `libs/control/src/controller.ts` | `ControlAPI`: a validated state store with change events and undo |
-| `libs/control/src/surface.ts` | `ControlSurface`: one knob, its modes and step sizes, and what it says |
+| `libs/control/src/surface.ts` | `ControlSurface`: the Helm, its modes and step sizes, and what it says |
 | `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
-| `libs/niivue-mcp/src/planes.ts`, `regions.ts`, `names.ts` | Shared by both ends: the plane through a point and the camera that faces it, region matching, the AAL spoken names |
-| `libs/niivue-mcp/src/server/bridge.ts` | Knows the connected tabs by id, routes each tool call to the one that answers, and notices a reload |
-| `libs/niivue-mcp/src/server/tools.ts` | The nine core tools over the bridge, and the `Extension` hook an app registers more through |
-| `libs/niivue-mcp/src/browser/scene.ts` | Answers the core tools from a NiiVue instance, through the hooks a host page provides |
-| `libs/niivue-mcp/src/browser/client.ts` | The page's socket: says hello with a tab id, answers requests, retries |
+| `apps/brainsonify/src/controllers/onscreen.ts` | The virtual Helm: the dial and the technician's buttons in a draggable window, driving the surface with the mouse or a touchscreen |
+| `apps/brainsonify/src/tutorial.ts` | The Helm tutorial: every control in turn, spoken to the listener and shown to the technician |
+| `@niivue/nv-mcp` (mono `packages/nv-mcp`) | The NiiVue MCP core: the tab bridge and the core tools on the server, the page's socket and the handlers that answer them from a NiiVue instance |
 | `apps/brainsonify/src/controllers/agent.ts` | What brainsonify adds: the sound tools' handlers, wrapped as a controller |
 | `apps/mcp/src/brainsonify.ts` | The brainsonify extension: `set_sound`, `list_modes`, `set_mode`, `announce` registered on the core |
 | `apps/mcp/src/server.ts` | The MCP server: the core plus that extension, over streamable HTTP |
@@ -287,8 +377,8 @@ registry that drives the switcher, the default, and the visible controls.
   explores at. The taps get the same treatment, since 1800 Hz sits near the peak
   of the ear's sensitivity and a tap at full scale was some 13 dB louder than a
   low tone at full scale.
-- **The knob.** The app is built for two people at once: a listener who turns
-  one knob and hears the result, and a technician who presses buttons that
+- **The Sonaview Helm.** The app is built for two people at once: a listener who turns
+  one hand-held device, the Sonaview Helm (the Helm for short), and hears the result, and a technician who presses buttons that
   change what turning does. `ControlSurface` in `libs/control` is that
   arrangement with nothing physical in it. A turn moves the crosshair along
   one axis, slides the cut plane along its own axis (the wheel's move over
@@ -298,15 +388,15 @@ registry that drives the switcher, the default, and the visible controls.
   the focused parameter in the panel's order, center the crosshair, or jump to
   the next whole plane in the same cycle as `c`, read back from the scene so
   the two stay in step; either one also turns the render camera to face the
-  new cut, since the face is only on the near side from there. Pressing the knob never changes anything: it says
+  new cut, since the face is only on the near side from there. Pressing the Helm never changes anything: it says
   where the crosshair is, region first when the atlas fits, or what the
   focused parameter reads. A shared device needs one gesture the listener can
   make freely, and that is it. Every button press is announced into the
   crosshair live region and, while sound is on, out loud, since a listener
-  otherwise has no way to know the knob now does something else; numeric
+  otherwise has no way to know the Helm now does something else; numeric
   nudges are silent, because the sound is the feedback. NiiVue's own keys
   over the canvas are announced the same way: `v` says the view it changed
-  to, and `c` names the plane it cut, as the knob does. So does the Clip
+  to, and `c` names the plane it cut, as the Helm does. So does the Clip
   slider, but only when it turns the cut on or off, not while it is dragged.
   The virtual controller
   is a keyboard: `controllers/keys.ts` is the whole protocol, chosen around the
@@ -314,12 +404,43 @@ registry that drives the switcher, the default, and the visible controls.
   presenting itself as a Bluetooth keyboard sends the same keys
   ([docs/control/CROWPANEL.md](docs/control/CROWPANEL.md)). The panel and the
   control API hold the same values and each follows the other: a slider
-  reaches the API through the panel's change listener, the knob reaches the
+  reaches the API through the panel's change listener, the Helm reaches the
   sliders through the API's, and a value already held is not written again,
   so neither direction loops. `panel.spec.ts` checks the schema against
-  `index.html` so the two cannot drift. The knob's step size is separate from
+  `index.html` so the two cannot drift. The Helm's step size is separate from
   the step select beside the crosshair buttons: that select belongs to the
-  buttons, the knob's belongs to the knob.
+  buttons, the Helm's belongs to the Helm.
+- **The Helm tutorial.** The panel's **Helm tutorial** button walks the
+  listener and the technician through every Helm control, one per step, in
+  `TUTORIAL_STEPS` (`src/tutorial.ts`); a spec checks the steps cover every
+  intent in `controllers/keys.ts` once. Each step is said to the listener and
+  shown on the panel with the key the technician presses. A step ends when it
+  is done, not on a Next button: the press or turn it teaches, or for a mode,
+  the mode key and then a turn. The keys behave as always; the tutorial only
+  watches the intents the virtual controller reports after carrying them
+  out. Speaking a line cancels the one before, so while the tutorial runs the
+  surface's announcements are held and said in the same utterance as the
+  next prompt, and anything no step claims is said on its own straight
+  after. It needs sound on, since announcements are silent without it, stops
+  the sound key so the two do not talk over each other, and starts from
+  left/right mode.
+- **The virtual Helm.** The panel's **Virtual Helm** button opens the Helm
+  on screen, in a window that floats over the render and drags by its title
+  bar: a dial the listener turns and presses, and a button for each of the
+  technician's keys, each showing its key. It is for anyone with a mouse or
+  a touchscreen and no device or key map. Dragging round the dial sends one
+  turn per 15 degrees (`DETENT_DEGREES`), a wheel notch over it sends one, and
+  the hub presses; the tick on the dial is only for the eye, since the step
+  size still comes from `s`. The buttons are generated from `KEY_MAP`, so a
+  change to the table changes the window, and the current mode's button is
+  lit. Every gesture goes through `perform`, as a key does, and is reported
+  to the tutorial the same way, so the window keeps no mode or step of its
+  own; its status line is the panel's Helm line. A tap never leaves the
+  focus on one of its buttons, so the keyboard keeps working beside it. The
+  window sits on the body, outside the stage, so the pointer over it is not
+  sampled as the canvas beneath. Its position and whether it is open are
+  kept in `localStorage`, and it opens on load with `?helm=1` in the
+  address.
 
 ## Controls
 
@@ -340,12 +461,14 @@ registry that drives the switcher, the default, and the visible controls.
 | Rate | Multiplies the whole rhythm, so the same contrast arrives sooner |
 | Taps only | Mutes the tone and leaves the density channel on its own |
 | Sound key | Replays the spoken key to the active condition's sounds; it also plays whenever sound is enabled |
+| Helm tutorial | Walks the listener and technician through every Helm control, spoken step by step; stops the sound key, needs sound on |
+| Virtual Helm | Shows or hides the Helm on screen: a dial to drag round, scroll or press, and the technician's buttons; `?helm=1` opens it on load |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
 | Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |
 | Line / Lines / Rest | The sweep's pace: seconds per line, lines to a face, and the silence between lines, up to 3 s; each sweep condition sets its own on entry |
 | Lines run | Which cardinal direction each line is read in: left to right, right to left, top to bottom, bottom to top; rows always step top down and columns left to right |
-| Knob | `↑` `↓` turn, `Enter` press and hear where you are; `1`–`5` pick what a turn moves (left/right, back/front, down/up, cut plane, parameter), `0` the next mode; `[` `]` the parameter, `s` the step size, `Home` centers, `n` the next whole plane. Works anywhere on the page outside a form control |
+| Helm | `↑` `↓` turn, `Enter` press and hear where you are; `1`–`5` pick what a turn moves (left/right, back/front, down/up, cut plane, parameter), `0` the next mode; `[` `]` the parameter, `s` the step size, `Home` centers, `n` the next whole plane. Works anywhere on the page outside a form control |
 
 Drop a `.nii` / `.nii.gz` anywhere on the page to load your own volume. Two
 demo volumes are fetched from `niivue.github.io` at runtime and are not stored
@@ -365,16 +488,19 @@ server holds no anatomy of its own. Each tool call is written to the
 connected tab as one JSON request and answered with one JSON response, and
 with no tab connected the tool fails with a message saying what to open.
 
-The server is the generic NiiVue core in `libs/niivue-mcp` with
-brainsonify's sound tools registered on it; its own
-[README](libs/niivue-mcp/README.md) covers the tools, the tab routing and
-how to embed it in another NiiVue app, and
+The server is the generic NiiVue core, mono's `@niivue/nv-mcp`, with
+brainsonify's sound tools registered on it; its own README in mono's
+`packages/nv-mcp` covers the tools, the tab routing and how to embed it in
+another NiiVue app, and
 [apps/mcp/README.md](apps/mcp/README.md) covers what brainsonify adds.
 
 Each tab says hello with an id it keeps in `sessionStorage`, so a reload
 comes back as the same tab and a second window as a new one. One tab
 answers on its own; with several open the agent is told to pick one with
-`use_tab`, and `where_am_i` says which tab answered. When the tab an agent
+`use_tab`, or names one with `tab` on the call, and `where_am_i` says
+which tab answered. An agent that wants a tab of its own asks `new_tab`
+for an address with `?tab=<id>` on it, and a page opened from it answers
+to that id for the rest of the conversation. When the tab an agent
 is driving reloads, the next reply opens with a note saying so and what
 the crosshair, plane and sound were before, since the scene has started
 over. The line under the crosshair buttons shows the tab's id next to
@@ -394,10 +520,11 @@ the two are started in does not matter. The console gets one line when the
 server is reached and one when the retry settles without it; the browser's
 own line per refused attempt is not the app's.
 
-Thirteen tools. From the core: `list_tabs`, `use_tab`, `load_volume`,
-`where_am_i`, `list_regions`, `go_to_region`, `set_clip_plane`,
-`set_camera` and `screenshot`. From brainsonify: `set_sound`, `list_modes`,
-`set_mode` and `announce`. The three a technician leans on:
+Eighteen tools. From the core: `list_tabs`, `use_tab`, `new_tab`, `load_volume`,
+`add_overlay`, `where_am_i`, `list_regions`, `go_to_region`, `go_to_point`,
+`set_clip_plane`, `set_camera`, `set_volume`, `set_view` and `screenshot`. From brainsonify:
+`set_sound`, `list_modes`, `set_mode` and `announce`. The three a
+technician leans on:
 
 | Tool | What it does |
 |---|---|
@@ -435,7 +562,7 @@ scalp rather than on the face. The turn comes first because it fires
 Clip slider made of that. The reply carries the camera angles as well as
 the plane's. The voxel under
 the crosshair is then sampled the way a crosshair button samples it, and the
-place is announced through the same path as the knob: into the live region,
+place is announced through the same path as the Helm: into the live region,
 and out loud while sound is on. Navigation needs the loaded scan to be in
 MNI space; on the whole-head T1 the tool declines rather than name regions
 that are not there. The **Clip** slider still ties the plane to the camera
