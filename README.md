@@ -45,13 +45,16 @@ listener.
 bun run package    # -> dist/package/brainsonify.zip
 ```
 
-builds one zip (about 100 MB) for someone with no Bun, git or network: the
+builds one zip (180 to 250 MB; 179 MB on macOS, 252 MB from a Linux build)
+for someone with no Bun, git or network: the
 production page, the four images it loads (the MNI152 and head T1 volumes,
 the AAL atlas and its labels, downloaded at package time and pointed at by
 `VITE_IMAGES`), and a launcher compiled with `bun build --compile` for
-Apple silicon and Intel Macs and for Windows (`apps/mcp/src/launcher.ts`).
-The launcher serves the page on http://127.0.0.1:4200, runs the MCP server
-on :4242, and opens the browser. The zip's `README.txt`
+Apple silicon and Intel Macs, Windows, and Linux x64 and arm64 (glibc)
+(`apps/mcp/src/launcher.ts`). The launchers are most of the size, 64 to
+118 MB each. The launcher serves the page on http://127.0.0.1:4200, relays
+the page's `/agent` socket to the MCP server on :4242 as the Vite proxy does
+in development, and opens the browser with the Virtual Helm showing. The zip's `README.txt`
 (`scripts/package-README.txt`) tells the user which file to double-click and
 how to get past the unsigned-app warning on first run. Packaging needs the
 `zip` command, so run it on macOS or Linux.
