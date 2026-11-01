@@ -41,5 +41,12 @@ console.log(
   `\nbrainsonify is running at ${SITE}\nAgents connect to http://127.0.0.1:4242/mcp\n` +
     "Leave this window open while you use it; close it to quit.\n",
 );
-const open = process.platform === "win32" ? ["cmd", "/c", "start", "", SITE] : ["open", SITE];
-Bun.spawn(open, { stdout: "ignore", stderr: "ignore" });
+const open =
+  process.platform === "win32" ? ["cmd", "/c", "start", "", SITE]
+  : process.platform === "darwin" ? ["open", SITE]
+  : ["xdg-open", SITE];
+try {
+  Bun.spawn(open, { stdout: "ignore", stderr: "ignore" });
+} catch {
+  // No opener (a Linux box without xdg-open): the address printed above is enough.
+}

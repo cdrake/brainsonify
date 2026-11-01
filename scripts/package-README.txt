@@ -24,6 +24,15 @@ Use Chrome or Edge if you can (Safari works too), and wear headphones.
    (Not sure which Mac you have? Apple menu > About This Mac. "Chip: Apple
    M..." means Apple silicon; "Processor: Intel" means Intel.)
 
+   Linux: run it from a terminal instead, inside the unzipped folder:
+
+       ./brainsonify-linux-x64        (most PCs; "uname -m" says x86_64)
+       ./brainsonify-linux-arm64      (ARM, e.g. a Raspberry Pi 64-bit; aarch64)
+
+   If it says "Permission denied", run  chmod +x brainsonify-linux-*  first.
+   On a machine without a desktop, open the address it prints from a
+   browser on that machine.
+
 3. A terminal window opens and shows:
 
      brainsonify is running at http://127.0.0.1:4200/?agent&helm=1
