@@ -2474,3 +2474,200 @@ neither has been tried with a listener.
 
 - decide what the hearing test checks.
 - decide what gives the haptic feedback.
+
+---
+
+## Entry 43 — 13 October 2026
+
+### mono's nv-mcp instead of our copy, and every session opens on a cut
+
+**the hand-mirrored core is gone.** `libs/niivue-mcp` is deleted, about 12,200
+lines of it, and brainsonify links mono's `@niivue/nv-mcp` the way it already
+links `@niivue/niivue` and `@niivue/uikit`: `bun link` in mono's
+`packages/nv-mcp`, then `bun install` here. imports move to `@niivue/nv-mcp`
+and its `/browser` and `/server` entries, and the three `niivue-mcp` paths come
+out of `tsconfig.base.json`. this ends the mirroring workflow of entries 38 to
+40 — there is no local copy left to mirror into, and no converter run to keep
+honest.
+
+mono's core carries 57 tools, eight more than the copy's 49: the control tools
+(`add_control`, `list_controls`, `set_control`, `remove_control`) and the data
+tools (`list_data`, `add_data`, `remove_data`, `load_data`). the seams spec
+lists them and counts 61 with brainsonify's four sound tools, and it now reads
+mono's source through the link, with `realpathSync` on
+`node_modules/@niivue/nv-mcp/src`. the page has no control surface yet, so
+`list_controls` says so.
+
+> _To fill in: why we stopped mirroring by hand and linked the package instead
+> — whether it was the 4600-line controls series entry 40 left unmirrored, or
+> the converter being more upkeep than it was worth — and whether the link is
+> the arrangement from here or a stopgap until nv-mcp is published._
+
+> _To fill in: whether the eight new tools are wanted here, or just arrived
+> with the package._
+
+> _To fill in: how the Pages deploy is meant to work now. `deploy.yml` runs
+> `bun install --frozen-lockfile` on a fresh runner, which has no mono checkout
+> for the three `link:` deps to resolve against._
+
+**facing the cut.** conditions 09 to 11 open already cut on the coronal
+midline, but the camera stayed at NiiVue's default side view, so the render
+showed the cut edge-on and the one tile that was supposed to show a cut face
+showed its edge. `cutFacing` turns the camera to the face a plane exposes and
+then cuts. switching condition, loading a volume inside one, and the Helm's
+next plane all go through it; `nextPlane` had the turn-then-cut inline already
+and now calls the same function.
+
+> _To fill in: why the camera turns to meet the conditions' preset cut, rather
+> than the conditions dropping the preset now that Start session cuts anyway._
+
+**every session opens on the coronal midline, turned 45 degrees.** only 09 to
+11 had a preset cut, so on 01 to 08 the render was a whole head and nothing was
+cut. Start session now cuts `SESSION_CUT`, the coronal midline with the back
+taken off, whatever the condition, and sets the camera to
+`cameraForPlane` plus `SESSION_TURN` of 45 degrees. the comment's reason for
+the turn is that square on, a cut face looks like one more flat slice, and
+turned it reads as the render, so the technician can tell which tile is which;
+the Helm's next plane and `c` still square each whole plane up. the camera
+moves before the cut on purpose, since a turn with the Clip slider up re-cuts
+the slider's way and the cut that follows has to override it. the intro's step
+5 and TECHNICIAN.md say what happens.
+
+> _To fill in: why 45 degrees._
+
+> _To fill in: why the cut is on Start session rather than on load._
+
+> _To fill in: why the coronal midline with the back off is the right opening
+> plane for every condition, not just 09 to 11._
+
+none of this has been in front of a technician or a listener. the orientation
+argument for the 45 degree turn is a design reason, not something anyone has
+been observed getting right or wrong.
+
+### next
+
+- work out what the Pages deploy does with the `link:` deps before this goes to
+  `main`. it is on `feat/mcp-port-mono-fixes`, one ahead, so nothing has
+  deployed yet.
+- decide whether conditions 09 to 11 keep their own preset cut.
+
+---
+
+## Entry 44 — 22 October 2026
+
+### feedback: a tutorial quiz, a hearing test, and a slice as music
+
+three suggestions passed on by Chris. nothing built yet.
+
+**a tutorial with a quiz, for both people at the table** (Nick Riccardi). the
+tutorial should build confidence for the navigator and for the technician, not
+only the listener. this extends his suggestion of 13 October: anchor the sound
+key to body landmarks, and have a tutorial that moves to a point and asks
+where it is.
+
+> _To fill in: what the technician is meant to gain confidence in (running the
+> panel, reading the scene, knowing what the listener hears), and whether the
+> quiz is run by the technician, by the Helm, or by an agent through the MCP
+> tools._
+
+**a hearing test** (Makayla King). the same idea as entry 42, now from a
+second person. entry 42's open questions still stand: what it checks, where it
+sits, and whether a result changes the mapping or only tells the technician.
+
+**a slice as music** (Steffen Bollman). represent a whole slice musically
+rather than one voxel at the crosshair. Chris's suggestion for what drives the
+music: a difference between the image and MNI152, so that qualities of the
+music come from how the image departs from the template.
+
+the MNI152 demo and a dropped-in file are already taken as MNI space (the AAL
+lookup relies on this), so a voxelwise difference against MNI152 needs no
+registration for those; the whole-head T1 is not in MNI space and would.
+
+> _To fill in: which qualities of the music the difference drives (key,
+> consonance, tempo, instrument), whether the slice plays as a sweep in time
+> or as a chord, and what the difference is (intensity after normalising,
+> tissue segmentation, a z-score against a population)._
+
+none of this has been tried with a listener.
+
+**a tutorial on the controls comes before the quiz.** Chris's call, the same
+day: before anyone is quizzed, a tutorial walks through exploring the controls.
+
+> _To fill in: why the order matters — whether the quiz would otherwise be
+> testing the controls rather than the sense of place._
+
+**the controls tutorial, built.** `src/tutorial.ts`, a **Helm tutorial**
+button in the panel. three choices, all Chris's:
+
+- the app speaks each step to the listener and the panel shows the
+  technician the same step and the key to press, so both learn together;
+  not a script the technician reads out, and not an agent over MCP.
+- a step waits until it is done, with Skip for the technician, rather than
+  free exploration with a Next button.
+- every Helm control, fourteen steps, in one pass rather than the three axes
+  first and the rest later.
+
+> _To fill in: why each of the three._
+
+the cost that came with speaking it: `browserSpeech().say()` cancels whatever
+is being said, so the surface's own "Helm moves back and front." would be
+cut off by the next prompt. while the tutorial runs it holds what the
+surface says and speaks it in the same utterance as the prompt. this has
+only been run in specs with a fake voice; nobody has heard it on the
+tablet's speech engine, or taken a listener through it.
+
+### next
+
+- decide whether the quiz and the hearing test are one tutorial or two.
+- decide what the MNI152 difference is measured as.
+- run the Helm tutorial on the tablet and listen for lines cut short.
+
+---
+
+## Entry 45 — 26 October 2026
+
+### the Helm on screen, in a window you can drag
+
+**what was built.** a **Virtual Helm** button in the panel opens the Helm as a
+window over the render: the dial, a button per technician key, and the Helm
+line under them. `?helm=1` opens it on load. it is a third input to the same
+surface, next to the keyboard and the CrowPanel, and every gesture goes
+through `perform` the way a key does, so the tutorial hears it too and the
+window never keeps its own mode or step.
+
+the reasons in the task: anyone can drive the app with a mouse or a
+touchscreen without the CrowPanel or the key map, and the prototype has to
+run for someone with only a browser, since ITEC 444 Team Project #3 is graded
+by an instructor who will not have the hardware.
+
+> _To fill in: whether the window is meant for the listener as well, or only
+> for demos and grading, given the listener cannot see the screen._
+
+**the dial.** dragging round it sends one turn per 15 degrees
+(`DETENT_DEGREES`), a wheel notch sends one, and the hub presses. 15 is where
+the task said to start; nobody has tuned it by feel yet. the tick on the dial
+turns with it but means nothing, since the step size still comes from `s`, the
+same as the real knob.
+
+> _To fill in: whether 15 degrees feels right with a mouse and with a finger._
+
+**the window sits on the body, not in the stage.** checked in Chrome: with the
+window over the brain, hovering and turning the dial sent no pointer events
+to the stage, and the canvas next to it still did. so the pointer over the
+window is not sonified as the canvas beneath.
+
+**implementation notes.** the buttons are generated from `KEY_MAP`, but in
+the table's own order `"0"` came first, because JavaScript lists integer-like
+keys before the others. the window lays them out in its own order (1 to 5,
+then next mode, and so on) and takes each key from the table. and a tap on a
+window button never leaves focus on it, since the keyboard controller ignores
+keys while a button has focus; both work at once.
+
+none of this has been tried on the tablet or with a listener.
+
+### next
+
+- tune `DETENT_DEGREES` with a mouse and on a touchscreen.
+- package the build for the instructor (a separate task). the window needs
+  nothing extra in `bun run build`: it is plain DOM, and its styles are in
+  `styles.css`.
