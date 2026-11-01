@@ -21,12 +21,100 @@ atlas registered to the same space.
 
 ## Getting started
 
-Requires [Bun](https://bun.sh) 1.2+.
+Requires [Bun](https://bun.sh) 1.2+, git, and a desktop Chrome, Edge or
+Safari (WebGL2 and Web Audio; the spoken parts sound best in Chrome).
+Nothing else needs installing: NiiVue comes from npm and the demo volumes
+are fetched from `niivue.github.io` at runtime, so the first load needs a
+network connection.
 
 ```bash
+git clone https://github.com/cdrake/brainsonify.git
+cd brainsonify
 bun install
 bun run dev        # http://localhost:4200
 ```
+
+Open http://localhost:4200, click through **Starting a session** (or
+**Skip**), click **Enable sound**, and move the pointer over the brain.
+[TECHNICIAN.md](TECHNICIAN.md) is the guide for running a session with a
+listener.
+
+### A zip that runs without any of this
+
+```bash
+bun run package    # -> dist/package/brainsonify.zip
+```
+
+builds one zip (about 100 MB) for someone with no Bun, git or network: the
+production page, the four images it loads (the MNI152 and head T1 volumes,
+the AAL atlas and its labels, downloaded at package time and pointed at by
+`VITE_IMAGES`), and a launcher compiled with `bun build --compile` for
+Apple silicon and Intel Macs and for Windows (`apps/mcp/src/launcher.ts`).
+The launcher serves the page on http://127.0.0.1:4200, runs the MCP server
+on :4242, and opens the browser. The zip's `README.txt`
+(`scripts/package-README.txt`) tells the user which file to double-click and
+how to get past the unsigned-app warning on first run. Packaging needs the
+`zip` command, so run it on macOS or Linux.
+
+### Letting an agent drive it
+
+Run the MCP server in a second terminal, then open the page with `?agent`
+so it connects:
+
+```bash
+bun run mcp        # http://127.0.0.1:4242/mcp; status page at http://127.0.0.1:4242/
+# browser: http://localhost:4200/?agent
+claude mcp add --transport http niivue http://127.0.0.1:4242/mcp
+```
+
+Keep the page's tab in front; a background tab gets no animation frames.
+[apps/mcp/docs/connecting-agents.md](apps/mcp/docs/connecting-agents.md)
+covers other clients and what to check when a call fails.
+
+### NiiVue versions
+
+`@niivue/niivue`, `@niivue/uikit` and `@niivue/nv-mcp` are pinned to exact
+release candidates in `apps/brainsonify/package.json` and
+`apps/mcp/package.json`. The three are released together from the NiiVue
+[mono repository](https://github.com/niivue/mono) and each pins the others
+as an exact peer, so move them as a set: the versions published together
+under one mono release tag (`git tag --list 'niivue@*'` in mono). Pre-1.0
+releases change API between candidates, so a caret range would break a fresh
+install the day a new candidate lands.
+
+### Developing against a NiiVue checkout
+
+To change NiiVue and see it in brainsonify, clone mono next to this repository
+and link its packages in place of the npm ones. Check out the tag matching the
+pinned versions, or a newer commit if you are moving brainsonify forward:
+
+```bash
+git clone https://github.com/niivue/mono.git niivue
+cd niivue
+git checkout niivue@1.0.0-rc.63
+bun install
+for p in niivue uikit nv-mcp; do (cd packages/$p && bun run build && bun link); done
+
+cd ../brainsonify
+sed -i.bak -E 's#"(@niivue/(niivue|uikit|nv-mcp))": "[^"]+"#"\1": "link:\1"#' apps/*/package.json
+rm apps/*/package.json.bak
+bun install
+bun run dev -- --force
+```
+
+brainsonify imports mono's packages from their `dist`, so rebuild the package
+in mono after a change there. `bun link <package>` run inside an app does not
+work in this workspace; switching the specifiers to `link:` is the way. Don't
+commit the `link:` specifiers or the lockfile they produce; CI installs with
+`--frozen-lockfile` on a machine with no checkout. To go back to npm:
+
+```bash
+git checkout -- apps/brainsonify/package.json apps/mcp/package.json bun.lock
+bun install
+```
+
+When the linked work is released, set the pins to the new versions and run
+`bun install` to update the lockfile.
 
 Vite caches pre-bundled dependencies in `node_modules/.vite`. When switching
 between branches that pin different NiiVue versions it can keep serving the
@@ -58,11 +146,8 @@ libs/control/       Control API: the parameter schema, a state store with events
 
 NiiVue, its UI kit and the generic NiiVue MCP core (`@niivue/nv-mcp`: tabs,
 the core tools, plane math, region matching; it knows nothing of brainsonify)
-come from a checkout of the NiiVue mono repository, linked rather than
-installed. In each of mono's `packages/niivue`, `packages/uikit` and
-`packages/nv-mcp`, build and run `bun link`; then `bun install` here. Mono's
-packages are imported from their `dist`, so a change there needs a rebuild
-there before brainsonify sees it.
+come from the NiiVue mono repository, installed from npm at pinned versions
+(see [NiiVue versions](#niivue-versions)).
 
 The split is deliberate: everything in `libs/sonification` is pure TypeScript with
 no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
@@ -88,6 +173,7 @@ no DOM or NiiVue dependency, which is what makes the mapping unit-testable.
 | `libs/control/src/surface.ts` | `ControlSurface`: the Helm, its modes and step sizes, and what it says |
 | `apps/brainsonify/src/controllers/keys.ts` | The key protocol: which key sends which intent to the surface |
 | `apps/brainsonify/src/controllers/virtual.ts` | The virtual controller: a keyboard driving the surface |
+| `apps/brainsonify/src/controllers/onscreen.ts` | The virtual Helm: the dial and the technician's buttons in a draggable window, driving the surface with the mouse or a touchscreen |
 | `apps/brainsonify/src/tutorial.ts` | The Helm tutorial: every control in turn, spoken to the listener and shown to the technician |
 | `@niivue/nv-mcp` (mono `packages/nv-mcp`) | The NiiVue MCP core: the tab bridge and the core tools on the server, the page's socket and the handlers that answer them from a NiiVue instance |
 | `apps/brainsonify/src/controllers/agent.ts` | What brainsonify adds: the sound tools' handlers, wrapped as a controller |
@@ -338,6 +424,23 @@ registry that drives the switcher, the default, and the visible controls.
   after. It needs sound on, since announcements are silent without it, stops
   the sound key so the two do not talk over each other, and starts from
   left/right mode.
+- **The virtual Helm.** The panel's **Virtual Helm** button opens the Helm
+  on screen, in a window that floats over the render and drags by its title
+  bar: a dial the listener turns and presses, and a button for each of the
+  technician's keys, each showing its key. It is for anyone with a mouse or
+  a touchscreen and no device or key map. Dragging round the dial sends one
+  turn per 15 degrees (`DETENT_DEGREES`), a wheel notch over it sends one, and
+  the hub presses; the tick on the dial is only for the eye, since the step
+  size still comes from `s`. The buttons are generated from `KEY_MAP`, so a
+  change to the table changes the window, and the current mode's button is
+  lit. Every gesture goes through `perform`, as a key does, and is reported
+  to the tutorial the same way, so the window keeps no mode or step of its
+  own; its status line is the panel's Helm line. A tap never leaves the
+  focus on one of its buttons, so the keyboard keeps working beside it. The
+  window sits on the body, outside the stage, so the pointer over it is not
+  sampled as the canvas beneath. Its position and whether it is open are
+  kept in `localStorage`, and it opens on load with `?helm=1` in the
+  address.
 
 ## Controls
 
@@ -359,6 +462,7 @@ registry that drives the switcher, the default, and the visible controls.
 | Taps only | Mutes the tone and leaves the density channel on its own |
 | Sound key | Replays the spoken key to the active condition's sounds; it also plays whenever sound is enabled |
 | Helm tutorial | Walks the listener and technician through every Helm control, spoken step by step; stops the sound key, needs sound on |
+| Virtual Helm | Shows or hides the Helm on screen: a dial to drag round, scroll or press, and the technician's buttons; `?helm=1` opens it on load |
 | Glide | Smoothing time on frequency changes |
 | Sonify the 3D render | Enables depth picking on the render tile |
 | Start radar sweep | Reads the cut face on its own, left to right and top to bottom, looping; shown only by a condition that offers it |

@@ -22,8 +22,8 @@ import type { Speech } from "./soundkey";
  */
 export const ATLAS = {
   name: "AAL",
-  volume: "https://niivue.com/demos/images/aal.nii.gz",
-  labels: "https://niivue.com/demos/images/aal.json",
+  volume: `${import.meta.env.VITE_IMAGES ?? "https://niivue.com/demos/images/"}aal.nii.gz`,
+  labels: `${import.meta.env.VITE_IMAGES ?? "https://niivue.com/demos/images/"}aal.json`,
 } as const;
 
 /**

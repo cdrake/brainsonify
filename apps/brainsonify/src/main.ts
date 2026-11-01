@@ -59,7 +59,8 @@ const CLIP_OFF = 2;
 const CLIP_GRAZE = 0.85;
 const CLIP_DEEPEST = -0.45;
 
-const DEMOS = "https://niivue.github.io/niivue-demo-images/";
+// VITE_IMAGES points every image at one local folder, for the offline zip (scripts/package.ts).
+const DEMOS = import.meta.env.VITE_IMAGES ?? "https://niivue.github.io/niivue-demo-images/";
 
 /**
  * MNI152 is skull-stripped, so its opacity only ever spans brain tissue. The

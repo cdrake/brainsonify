@@ -5,7 +5,7 @@
  * real handlers against the real server without a socket.
  */
 
-import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,8 +19,9 @@ import { brainsonifyHandlers, type SoundHost } from "../../brainsonify/src/contr
 import { BRAINSONIFY_SCHEMAS, brainsonify } from "./brainsonify";
 
 const here = dirname(fileURLToPath(import.meta.url));
-/** The core's source, through the link to mono's `@niivue/nv-mcp`. */
-const coreDir = realpathSync(resolve(here, "../node_modules/@niivue/nv-mcp/src"));
+/** The core's source, present only when `@niivue/nv-mcp` is linked from mono (npm ships `dist`). */
+const coreSrc = resolve(here, "../node_modules/@niivue/nv-mcp/src");
+const coreDir = existsSync(coreSrc) ? realpathSync(coreSrc) : null;
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -35,7 +36,8 @@ function imports(file: string): string[] {
 }
 
 describe("the core", () => {
-  it("imports nothing from brainsonify and nothing outside its own directory", () => {
+  it.skipIf(!coreDir)("imports nothing from brainsonify and nothing outside its own directory", () => {
+    if (!coreDir) return;
     const offending: string[] = [];
     for (const file of sources(coreDir)) {
       for (const specifier of imports(file)) {

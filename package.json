@@ -15,7 +15,8 @@
     "mcp": "nx serve mcp",
     "test": "nx run-many -t test",
     "typecheck": "nx run-many -t typecheck",
-    "graph": "nx graph"
+    "graph": "nx graph",
+    "package": "bun scripts/package.ts"
   },
   "devDependencies": {
     "@nx/js": "23.1.2",

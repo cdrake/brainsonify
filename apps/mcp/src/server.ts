@@ -13,8 +13,9 @@ import { brainsonify } from "./brainsonify";
 const PAGE = process.env.BRAINSONIFY_PAGE ?? "http://localhost:4200/?agent";
 
 // What the page can load, which the tools cannot know: NiiVue's demo images.
-const DEMOS = "https://niivue.github.io/niivue-demo-images/";
-const ATLAS = "https://niivue.com/demos/images/";
+// BRAINSONIFY_IMAGES is the one local folder the offline zip serves them all from.
+const DEMOS = process.env.BRAINSONIFY_IMAGES ?? "https://niivue.github.io/niivue-demo-images/";
+const ATLAS = process.env.BRAINSONIFY_IMAGES ?? "https://niivue.com/demos/images/";
 
 startServer({
   name: "brainsonify",

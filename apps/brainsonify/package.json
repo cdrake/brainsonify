@@ -5,9 +5,9 @@
   "type": "module",
   "dependencies": {
     "@brainsonify/sonification": "workspace:*",
-    "@niivue/niivue": "link:@niivue/niivue",
-    "@niivue/nv-mcp": "link:@niivue/nv-mcp",
-    "@niivue/uikit": "link:@niivue/uikit",
+    "@niivue/niivue": "1.0.0-rc.63",
+    "@niivue/nv-mcp": "1.0.0-rc.45",
+    "@niivue/uikit": "1.0.0-rc.54",
     "nifti-reader-js": "^0.8.0"
   }
 }
