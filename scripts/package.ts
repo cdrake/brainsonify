@@ -1,6 +1,6 @@
 /**
  * Builds dist/package/brainsonify.zip: the app, its four images and a
- * launcher for macOS (Apple silicon and Intel) and Windows, so it runs
+ * launcher for macOS (Apple silicon and Intel), Windows and Linux, so it runs
  * with nothing installed and no network. `bun run package`.
  *
  * The images are downloaded here, into the gitignored dist/, rather than
@@ -24,6 +24,8 @@ const TARGETS = [
   ["bun-darwin-arm64", "brainsonify-mac-apple-silicon"],
   ["bun-darwin-x64", "brainsonify-mac-intel"],
   ["bun-windows-x64", "brainsonify-windows.exe"],
+  ["bun-linux-x64", "brainsonify-linux-x64"],
+  ["bun-linux-arm64", "brainsonify-linux-arm64"],
 ];
 
 await rm(OUT, { recursive: true, force: true });
