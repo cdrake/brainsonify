@@ -2671,3 +2671,86 @@ none of this has been tried on the tablet or with a listener.
 - package the build for the instructor (a separate task). the window needs
   nothing extra in `bun run build`: it is plain DOM, and its styles are in
   `styles.css`.
+
+---
+
+## Entry 46 — 1 November 2026
+
+### a zip that runs with nothing installed, and NiiVue off npm
+
+**what was built.** three things, all in service of handing the prototype to
+someone who has none of our setup.
+
+the NiiVue packages come from npm now instead of `link:` into a local mono
+checkout: `@niivue/niivue` 1.0.0-rc.63, `@niivue/uikit` 1.0.0-rc.54 and
+`@niivue/nv-mcp` 1.0.0-rc.45, which the commit message says is mono tag
+`niivue@1.0.0-rc.63`. so a fresh clone installs and runs. the README got a
+getting-started-from-a-clone section, a note on the pins, and how to go back
+to developing against a local mono checkout.
+
+`bun run package` (`scripts/package.ts`) builds `dist/package/brainsonify.zip`:
+the built page, the four images it loads, a `README.txt` for whoever opens it,
+and compiled launchers for Apple silicon, Intel macs and Windows. the launcher
+is `apps/mcp/src/launcher.ts`: it serves the `app/` folder beside the
+executable on 127.0.0.1:4200, starts the MCP server, and opens
+`/?agent` in the browser.
+
+the images are pointed at one folder by `VITE_IMAGES` in the page
+(`main.ts`, `atlas.ts`) and `BRAINSONIFY_IMAGES` in the MCP server, both
+falling back to the niivue.github.io and niivue.com URLs. they are downloaded
+at package time into the gitignored `dist/`, so nothing new is in the repo.
+
+> _To fill in: why a zip at all, given `main` already deploys to GitHub Pages
+> and the instructor could just open a URL. offline? the MCP server? not
+> trusting the Pages build on the day?_
+
+> _To fill in: why a compiled Bun launcher serving on 127.0.0.1 rather than
+> shipping the built page to be opened as a file._
+
+> _To fill in: why the launcher starts the MCP server too, and opens the page
+> at `/?agent`, when whoever is grading it will most likely just use the mouse._
+
+> _To fill in: why pin to the npm rc versions now rather than keep `link:` and
+> a documented mono checkout, and why those three versions. is rc.63 just
+> what mono was on, or does something need it?_
+
+> _To fill in: why mac arm64, mac x64 and windows x64, and no linux._
+
+**the seams check now skips itself.** the test that reads nv-mcp's source to
+prove the core imports nothing from brainsonify only has source to read when
+nv-mcp is linked from mono; npm ships `dist`. so it is `it.skipIf(!coreDir)`.
+
+> _To fill in: whether that check is meant to still run anywhere now that the
+> default install has no source for it, or whether it is only for when mono is
+> linked._
+
+**implementation notes.** two things cost time and are worth not rediscovering.
+`Bun.write` of a streamed `Response` hung on the second download, so
+`package.ts` buffers each image with `arrayBuffer()` first; the comment says
+Bun 1.3.13. and the nx build runs with `--skip-nx-cache` because Nx does not
+see `VITE_IMAGES`, so a cached build would hand back the page with the remote
+URLs in it.
+
+the launcher resolves `app/` from `dirname(process.execPath)` rather than the
+working directory, because a Finder double-click starts in the home folder,
+and it refuses any path that climbs out of `app/`.
+
+**unvalidated.** the `README.txt` walks through the unsigned-app warnings on
+both platforms and the "address already in use" case, which reads like it was
+written against what actually happened.
+
+> _To fill in: whether the zip was unzipped and run on a machine without bun
+> on it, and whether the Windows launcher was run at all._
+
+### open questions
+
+- does the offline zip stay a supported way to run this, or was it for one
+  handoff? if it stays, something has to notice when the pinned NiiVue moves.
+- the four images are the MNI152, chris_t1 and the AAL volume and labels. is
+  that the set someone with no network should have?
+
+### next
+
+- run the zip on a clean mac and on Windows.
+- still open from entry 45: tune `DETENT_DEGREES` with a mouse and on a
+  touchscreen.
