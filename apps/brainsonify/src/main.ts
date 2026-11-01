@@ -29,6 +29,7 @@ import {
 import "./styles.css";
 import { RegionCallout, loadAtlas, type Atlas } from "./atlas";
 import { AgentController, agentUrls, type SoundHost } from "./controllers/agent";
+import { OnScreenHelm } from "./controllers/onscreen";
 import { VirtualController } from "./controllers/virtual";
 import {
   EXPERIMENTS,
@@ -917,13 +918,28 @@ const tutorial = new HelmTutorial({
 });
 const surface = new ControlSurface({ api, scene: knobScene, announce: (text) => tutorial.heard(text) });
 /** The technician's line: what the knob does now, and what its parameter reads. */
+const knobLine = () => `${surface.describeMode()} ${surface.describeStep()}`;
+const helmBtn = el("helmBtn");
+/** The Helm on screen, for a mouse or a touchscreen; it feeds the surface as the keys do. */
+const helm = new OnScreenHelm({
+  surface,
+  onIntent: (intent) => tutorial.intent(intent),
+  status: knobLine,
+  onToggle: (open) => {
+    helmBtn.classList.toggle("on", open);
+    helmBtn.setAttribute("aria-pressed", String(open));
+  },
+});
 const showKnob = () => {
-  knobStatus.textContent = `${surface.describeMode()} ${surface.describeStep()}`;
+  knobStatus.textContent = knobLine();
+  helm.refresh();
 };
-showKnob();
 // A numeric nudge is silent, so the line follows the state as well as the voice.
 api.onStateChange(showKnob);
 new VirtualController(surface, window, (intent) => tutorial.intent(intent)).attach();
+helm.attach();
+if (new URLSearchParams(location.search).get("helm") === "1") helm.open();
+showKnob();
 
 /** Blurs the button just tapped, so Enter reaches the Helm rather than tapping it again. */
 const letKeysThrough = () => (document.activeElement as HTMLElement | null)?.blur?.();
@@ -947,6 +963,10 @@ el("tutorialSkip").addEventListener("click", () => {
 el("tutorialStop").addEventListener("click", () => {
   letKeysThrough();
   tutorial.stop();
+});
+el("helmBtn").addEventListener("click", () => {
+  letKeysThrough();
+  helm.toggle();
 });
 
 /* ---------------- agents ---------------- */

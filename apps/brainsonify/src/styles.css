@@ -298,3 +298,77 @@ kbd {
   border-radius: 4px;
   background: #1b2029;
 }
+
+/* ---------------- virtual Helm ---------------- */
+
+/* Fixed, so it floats over the stage instead of taking a cell in the body's grid. */
+.helm {
+  position: fixed;
+  z-index: 20;
+  width: 236px;
+  background: #14171c;
+  border: 1px solid #2e3644;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.helm__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 4px 11px;
+  border-bottom: 1px solid #232830;
+  font-size: 12px;
+  font-weight: 600;
+  color: #aab3bf;
+  cursor: grab;
+  touch-action: none;
+}
+.helm__bar:active { cursor: grabbing; }
+.helm__close { padding: 1px 8px; font-size: 15px; line-height: 1.2; background: transparent; border-color: transparent; }
+.helm__dial { position: relative; width: 132px; height: 132px; margin: 12px auto 10px; }
+.helm__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #2a3140, #181c23 70%);
+  border: 2px solid #2e3644;
+  cursor: grab;
+  touch-action: none;
+}
+.helm__ring:focus-visible { outline: 2px solid #6db3f2; outline-offset: 2px; }
+/* A full-size layer that rotates, with the mark drawn at its top. */
+.helm__tick { position: absolute; inset: 0; pointer-events: none; }
+.helm__tick::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: #6db3f2;
+}
+.helm__hub {
+  position: absolute;
+  inset: 36px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 12px;
+  background: #202631;
+}
+.helm__buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 0 9px; }
+.helm__buttons button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  font-size: 11.5px;
+  text-align: left;
+}
+.helm__buttons button[aria-pressed=true] { background: #1e6fd9; border-color: #1e6fd9; }
+.helm kbd { font: 10.5px ui-monospace, monospace; color: #8b94a0; }
+.helm__buttons button[aria-pressed=true] kbd { color: #d6e6fb; }
+.helm__status { margin: 9px; font-size: 11.5px; line-height: 1.35; color: #aab3bf; min-height: 2.7em; }

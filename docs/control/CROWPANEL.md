@@ -44,6 +44,10 @@ keyboard next to the panel serves as well, since the app cannot tell the two
 apart. Each detent should send exactly one key press; the app's step size is
 set with `s`, not by how far the knob turns.
 
+The on-screen Helm (`controllers/onscreen.ts`, the panel's **Virtual Helm**)
+is a third input beside the keyboard and the panel, sending the same intents
+to the same `ControlSurface` from a mouse or a touchscreen.
+
 The keys were chosen around the ones NiiVue reads on a focused canvas (h, j,
 k, l, m, c, v, u, d, left and right arrows), so a key never does two things
 depending on where the focus is. Changing the table changes the protocol for
