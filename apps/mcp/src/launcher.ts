@@ -35,6 +35,11 @@ process.env.BRAINSONIFY_PAGE = PAGE;
 process.env.BRAINSONIFY_IMAGES = `${ORIGIN}/data/`;
 await import("./server");
 
-console.log(`\nbrainsonify is running at ${PAGE}\nLeave this window open while you use it; close it to quit.\n`);
-const open = process.platform === "win32" ? ["cmd", "/c", "start", "", PAGE] : ["open", PAGE];
+// The browser gets the Virtual Helm open; PAGE stays plain for the agent's new_tab.
+const SITE = `${PAGE}&helm=1`;
+console.log(
+  `\nbrainsonify is running at ${SITE}\nAgents connect to http://127.0.0.1:4242/mcp\n` +
+    "Leave this window open while you use it; close it to quit.\n",
+);
+const open = process.platform === "win32" ? ["cmd", "/c", "start", "", SITE] : ["open", SITE];
 Bun.spawn(open, { stdout: "ignore", stderr: "ignore" });
