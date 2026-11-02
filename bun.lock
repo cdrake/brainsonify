@@ -9,6 +9,7 @@
         "@nx/vite": "23.1.2",
         "@nx/vitest": "23.1.2",
         "@types/node": "^22.10.0",
+        "fflate": "0.8.3",
         "jsdom": "^25.0.1",
         "nx": "23.1.2",
         "typescript": "^5.9.2",
