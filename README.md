@@ -56,8 +56,28 @@ Apple silicon and Intel Macs, Windows, and Linux x64 and arm64 (glibc)
 the page's `/agent` socket to the MCP server on :4242 as the Vite proxy does
 in development, and opens the browser with the Virtual Helm showing. The zip's `README.txt`
 (`scripts/package-README.txt`) tells the user which file to double-click and
-how to get past the unsigned-app warning on first run. Packaging needs the
-`zip` command, so run it on macOS or Linux.
+how to get past the unsigned-app warning on first run. It packages on macOS,
+Linux or Windows; on Windows, `scripts\package-windows.ps1` also installs Bun
+when it is missing:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package-windows.ps1
+```
+
+To sign and notarize the Mac launchers so Macs open them without the
+warning, package on a Mac with a Developer ID Application certificate in the
+keychain. Store notary credentials once (it asks for an app-specific password
+from appleid.apple.com), then package with both variables set:
+
+```bash
+xcrun notarytool store-credentials notary --apple-id <you> --team-id <TEAMID>
+MAC_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" NOTARY_PROFILE=notary bun run package
+```
+
+Signing uses the hardened runtime with the JIT entitlements in
+`scripts/entitlements.plist`. A bare executable can't be stapled, so the
+first launch on each Mac checks the ticket online; offline, that Mac still
+shows the warning. Windows and Linux stay unsigned.
 
 ### Letting an agent drive it
 

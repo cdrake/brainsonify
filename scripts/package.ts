@@ -4,10 +4,15 @@
  * with nothing installed and no network. `bun run package`.
  *
  * The images are downloaded here, into the gitignored dist/, rather than
- * kept in the repository.
+ * kept in the repository. Runs on macOS, Linux or Windows.
+ *
+ * Mac signing, both optional (see README):
+ *   MAC_SIGN_IDENTITY  a "Developer ID Application: ..." keychain identity; signs the Mac launchers
+ *   NOTARY_PROFILE     a `xcrun notarytool store-credentials` profile; notarizes the signed zip
  */
 
 import { $ } from "bun";
+import { zipSync, type Zippable } from "fflate";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -46,8 +51,32 @@ for (const [target, name] of TARGETS) {
   await $`bun build --compile --minify --target=${target} apps/mcp/src/launcher.ts --outfile ${join(STAGE, name)}`.cwd(ROOT);
 }
 
+const { MAC_SIGN_IDENTITY, NOTARY_PROFILE } = process.env;
+if (MAC_SIGN_IDENTITY) {
+  for (const [target, name] of TARGETS) {
+    if (!target.includes("darwin")) continue;
+    // Hardened runtime, as notarization requires; the entitlements let Bun's JIT run under it.
+    await $`codesign --force --timestamp --options runtime --entitlements scripts/entitlements.plist --sign ${MAC_SIGN_IDENTITY} ${join(STAGE, name)}`.cwd(ROOT);
+    await $`codesign --verify --strict ${join(STAGE, name)}`;
+  }
+}
+
 await cp(join(ROOT, "scripts/package-README.txt"), join(STAGE, "README.txt"));
 
-// shortcut: needs the zip command, so package on macOS or Linux, not Windows.
-await $`zip -qry brainsonify.zip brainsonify`.cwd(OUT);
+// Zipped here rather than by a zip command, so Windows can package too; the Unix modes keep the
+// Mac and Linux launchers executable however the zip was made.
+const launchers = new Set(TARGETS.map(([, name]) => name));
+const entries: Zippable = {};
+for await (const file of new Bun.Glob("**/*").scan({ cwd: STAGE })) {
+  const path = file.replaceAll("\\", "/");
+  const mode = launchers.has(path) ? 0o100755 : 0o100644;
+  entries[`brainsonify/${path}`] = [await Bun.file(join(STAGE, file)).bytes(), { os: 3, attrs: mode * 0x10000 }];
+}
+await Bun.write(join(OUT, "brainsonify.zip"), zipSync(entries));
+
+if (NOTARY_PROFILE) {
+  if (!MAC_SIGN_IDENTITY) throw new Error("NOTARY_PROFILE needs MAC_SIGN_IDENTITY: Apple notarizes signed code only.");
+  // A bare executable cannot be stapled, so Gatekeeper looks the ticket up online on first launch.
+  await $`xcrun notarytool submit brainsonify.zip --keychain-profile ${NOTARY_PROFILE} --wait`.cwd(OUT);
+}
 console.log(`\n${join(OUT, "brainsonify.zip")}`);
